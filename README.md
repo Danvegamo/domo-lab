@@ -54,7 +54,7 @@ TouchDesigner de un constructor. Lo que se afirma sobre orientaciones y
 00_TouchDesigner/       el sistema de señal
   build_domo.py           constructor de /project1/DOMO (idempotente, conserva la configuración)
   domo_lab.toe, DOMO.tox  el resultado guardado; abrir y usar
-  shaders/                costura del 360, patrón de prueba, pantalla plana
+  shaders/                costura del 360, giro esférico del lienzo, patrón de prueba, pantalla plana
   video_dome/             el sistema de pantallas para video plano (corona, salas, anillos, cilindro)
     web/estudio_pantallas.html   estudio WebGL para mover pantallas con el mouse
 01_Blender/             generar_sala_domo.py y el .blend
@@ -73,8 +73,8 @@ Spout), Blender 4 solo si se quiere regenerar la sala.
 
 1. Abre `00_TouchDesigner/domo_lab.toe`. En `/project1/DOMO`, página *Domo*,
    deja `Fuente` en *Patrón de prueba* para calibrar, o elige un módulo y pon
-   el archivo en la página del módulo (`IN_360`, `IN_180`) o en
-   `IN_169/VIDEO_DOME` para video plano.
+   el archivo en su página de la raíz: *360*, *180* o *16:9*. Solo suena el
+   audio del video que está al aire.
 2. Abre la sala con `03_Unreal/abrir_proyecto.ps1`. La cúpula muestra lo que
    llegue por Spout con el nombre `TD_Domo_Lab`. Si la cúpula se queda negra,
    revisa la lista de comprobación de [03_Puente_Spout.md](04_Docs/03_Puente_Spout.md).
@@ -88,6 +88,10 @@ Spout), Blender 4 solo si se quiere regenerar la sala.
   frente cae en +X, el lado opuesto a la zona de control.
 - En el Projection TOP, el giro en azimut no se hace con las rotaciones: es un
   corrimiento horizontal del lienzo. La inclinación va como `rx = 90 − Pitch`.
+- La costura de un 360 es un meridiano de polo a polo: girar en azimut solo la
+  cambia de lugar y siempre sube hasta el cénit. Para sacarla de la cúpula hay
+  que girar la esfera (página *360*: `Rpitch` 90, o `Rroll` 90 con `Rpitch` 30),
+  medido con el patrón.
 - El receptor Spout de Unreal solo lee texturas de 8 bits. Con 16-bit float se
   queda con el último frame que pudo leer y no avisa.
 - Unreal en segundo plano frena el editor; para ver la señal en vivo hay que

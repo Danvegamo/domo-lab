@@ -19,6 +19,7 @@ de pantallas; el archivo `.toe` es el resultado de correrlo y de guardar.
 ```
 00_TouchDesigner/build_domo.py              el constructor de DOMO
 00_TouchDesigner/shaders/costura.frag       fundido de la costura de un 360
+00_TouchDesigner/shaders/orientar.frag      giro esférico del lienzo (Yaw, Pitch, Roll) antes del domemaster
 00_TouchDesigner/shaders/patron.frag        el patrón de prueba del lienzo
 00_TouchDesigner/shaders/pantalla169.frag   una pantalla plana sobre el lienzo (disponible, ya no está en la red)
 00_TouchDesigner/video_dome/                el sistema de pantallas (VIDEO_DOME), ver sección 5.3
@@ -50,11 +51,11 @@ funcionar. El script solo hace falta para reconstruirlo o cambiarlo.
 ## 2. Estructura
 
 ```
-DOMO                          COMP raíz, atajo parent.DOMO, páginas Domo, 16:9, Mapping y Salidas
-  IN_360                      video 360 equirectangular (+ costura opcional)
-  IN_180                      domemaster fisheye, VR180 mono o VR180 lado a lado
-  IN_169                      video plano sobre pantallas en la cúpula (VIDEO_DOME adentro)
-  AUDIO                       audio del video, de un archivo o de la entrada; EQ, retardo, limitador
+DOMO                          COMP raíz, atajo parent.DOMO, páginas Domo, 360, 180, 16:9, Mapping y Salidas
+  IN_360                      video 360 equirectangular (+ costura opcional, + giro esférico)
+  IN_180                      domemaster fisheye, VR180 mono o VR180 lado a lado (+ giro esférico)
+  IN_169                      video plano sobre pantallas en la cúpula (VIDEO_DOME adentro, + Pitch y Roll)
+  AUDIO                       sigue a la fuente al aire (solo suena ese video), o un archivo, o la entrada
   patron                      el patrón de prueba, cuarta entrada de la mezcla
   mezcla -> equi              la fuente elegida, como lienzo equirectangular 2:1
   giro                        Yaw, como corrimiento horizontal del lienzo
@@ -144,6 +145,49 @@ Para encontrarla: encender `Costura` y `Costuraguia`, mover `Costurapos` hasta
 que la línea roja caiga sobre la costura del video, ajustar ancho y desenfoque,
 y apagar la guía.
 
+**Sacar la costura de la cúpula.** Fundirla no siempre alcanza, y la otra
+salida es no mostrarla. La costura de un 360 es la columna `u = 0` del lienzo,
+es decir, un meridiano que va del nadir al cénit por detrás. Un corrimiento en
+`u` (el `Yaw` de siempre) solo la cambia de azimut: sigue subiendo hasta el
+cénit y en un domo de 180 grados se ve siempre, desde el borde hasta el centro
+del domemaster. Para sacarla hay que girar la esfera entera. Eso hace el GLSL
+TOP `orientar` (`shaders/orientar.frag`), justo antes de `negro_y_salida`:
+cada píxel de salida calcula su dirección, la devuelve con la rotación inversa
+y lee el lienzo de entrada en esa dirección. Es un remapeo equirectangular →
+equirectangular, no un corrimiento. `Yaw` gira alrededor del eje vertical,
+`Pitch` alrededor del eje izquierda-derecha (positivo lleva el frente hacia el
+cénit, igual que el `Pitch` de la página Domo) y `Roll` alrededor del eje del
+frente; el orden es Roll, luego Pitch, luego Yaw. Con los tres en cero, el
+Switch `orientado` deja pasar el lienzo sin tocarlo y el GLSL no cocina. Lee
+con `textureLod` en el nivel 0, porque con mipmaps el salto de `u` de 1 a 0
+dejaría una línea gris de un píxel.
+
+Medido el 18 de septiembre de 2026 con el patrón como video del 360 (`Patron`
+encendido) y `Vercostura` pintando la costura en rojo, contando los píxeles de
+costura que llegan al domemaster de 2048 × 2048:
+
+| Orientación | Píxeles de costura en la cúpula |
+|---|---|
+| sin girar | 40 669 |
+| `Yaw` 90 | 40 669 (solo cambia de azimut) |
+| `Pitch` 45, `Yaw` 180 | 13 218 |
+| `Pitch` 60 | 6 362 |
+| `Pitch` 90 | 0 |
+| `Roll` 90, `Pitch` 30 | 0 |
+
+Con `Pitch` 90 el frente del video sube al cénit y la costura queda entera bajo
+el horizonte, del horizonte de atrás al de adelante pasando por el nadir. Con
+`Roll` 90 y `Pitch` 30 los polos del video quedan a los lados, sobre el
+horizonte, y la costura cuelga por detrás, bajo la cúpula. Las dos opciones
+cambian lo que es "arriba" en el video; sirven sobre todo para material sin
+horizonte marcado (pintura, abstracto, partículas). Para una grabación con
+horizonte, lo que se puede hacer es llevarla lo más atrás posible con `Yaw` y,
+si hace falta, fundirla con `Costura`.
+
+![La costura sin girar: la línea roja sube desde atrás hasta el cénit](../05_Preview/pruebas/td_360_costura_sin_rotar.png)
+![Con Pitch 90 la costura no llega al domemaster](../05_Preview/pruebas/td_360_rotado.png)
+![El lienzo girado: la costura queda en la mitad inferior](../05_Preview/pruebas/td_360_rotado_equirect.png)
+
 | Parámetro (página Video360) | Qué hace |
 |---|---|
 | `Activo` | apagado, el módulo entrega negro y no cocina |
@@ -155,7 +199,13 @@ y apagar la guía.
 | `Costurablur` | radio del desenfoque horizontal (hasta 0.1) |
 | `Costuraoffsety` | corrimiento vertical del lado derecho (±0.05) |
 | `Costuraganancia` | ganancia del lado derecho (0.5 a 1.5) |
-| `Costuraguia` | pinta la costura en rojo para ubicarla |
+| `Costuraguia` | pinta la costura en rojo para ubicarla (dentro del fundido) |
+| `Yaw`, `Pitch`, `Roll` | página Orientacion: giro esférico del lienzo, en grados |
+| `Patron` | reemplaza el video por el patrón de prueba de DOMO, para apuntar sin video |
+| `Vercostura` | pinta de rojo la costura del archivo (`Costurapos`) donde cae después de girar |
+
+Todo esto se maneja desde la **página 360 de la raíz** (ver la sección 6); los
+parámetros del módulo quedan en modo Bind contra ella.
 
 ### 5.2 IN_180: domemaster o VR180
 
@@ -176,6 +226,11 @@ Tres formatos de archivo, elegidos con `Formato`:
 | `Archivo` | archivo 180 (domemaster o VR180) |
 | `Play`, `Velocidad` | reproducir y velocidad |
 | `Formato` | `domemaster`, `vr180`, `vr180sbs` |
+| `Yaw`, `Pitch`, `Roll` | página Orientacion: el mismo giro esférico que el 360, con su propio `orientar` |
+
+Se maneja desde la **página 180 de la raíz**. Para llevar un VR180 a la cúpula,
+`Mpitch` en esa página lo inclina solo a él, mientras que el `Pitch` de la
+página Domo mueve todas las fuentes.
 
 ### 5.3 IN_169: video plano sobre pantallas en la cúpula (VIDEO_DOME)
 
@@ -229,14 +284,41 @@ película a un montaje y funden entre ellos mientras corre.
 **Se maneja desde la página 16:9 de DOMO.** Lo que importa del video plano está
 en la raíz, al mismo nivel que los selectores de 360 y 180, y no hace falta
 entrar a `IN_169/VIDEO_DOME` para el trabajo de todos los días. La página tiene
-cuatro bloques:
+seis bloques:
 
 | Bloque | Parámetros de DOMO | Van a |
 |---|---|---|
 | Fuente | `Vactivo`, `Vfuente` (archivo / ndi / spout), `Vmoviefile`, `Vndinombre`, `Vspoutnombre`, `Vplay` | `IN_169.Activo` y `Fuente`, `Moviefile`, `Ndinombre`, `Spoutnombre`, `Play` de VIDEO_DOME |
-| Montaje | `Vtemplate`, `Vyawglobal` | `Template`, `Yawglobal` |
+| Montaje | `Vtemplate` | `Template` |
+| Domo interno | `Vyawglobal`, `Vdpitch`, `Vdroll`, `Vdomefov`, `Vflipx` | `Yawglobal`, `IN_169.Pitch` y `IN_169.Roll`, `Domefov`, `Flipx` |
 | Pantalla elegida | `Vscreen`, `Vsmode` (forma: plana, curva, banda, túnel, cilindro), `Vsyaw`, `Vspitch`, `Vshfov`, `Vsautovfov`, `Vsvfov`, `Vsrep`, `Vsrepspan`, `Vsblend` | `Screen`, `Smode`, `Syaw`, `Spitch`, `Shfov`, `Sautovfov`, `Svfov`, `Srep`, `Srepspan`, `Sblend` |
 | Fondo | `Vbg`, `Vbgblur`, `Vbgbright`, `Vbgsat`, `Vbgzoom`, `Vbgtile`, `Vbgyaw`, `Vbgfollow` | `Bg`, `Bgblur`, `Bgbright`, `Bgsat`, `Bgzoom`, `Bgtile`, `Bgyaw`, `Bgfollow` |
+| Guías | `Vguides`, `Vguidealpha`, `Vviewfov`, `Vviewpitch`, `Vviewyaw`, `Vviews`, `Vpreview` | `Guides`, `Guidealpha`, `Viewfov`, `Viewpitch`, `Viewyaw`, `Views`, `Preview` |
+
+**El domo interno, desde afuera.** VIDEO_DOME dibuja su propio domemaster, con
+su propia orientación, y esa vista ahora se sigue y se ajusta desde la página
+16:9 sin entrar al COMP. `Vyawglobal` gira todo el montaje en azimut (el
+shader `dome_map` lo recibe en `uView.w`, y el fondo lo sigue con
+`Vbgfollow`). `Vdpitch` y `Vdroll` inclinan y ruedan el domo interno entero:
+`dome_map` no tiene inclinación propia, así que se aplican en `IN_169` con el
+mismo `orientar` del 360, sobre el lienzo que sale de VIDEO_DOME y antes de
+`domo`. `Vdomefov` es el FOV con el que VIDEO_DOME dibuja (180 es media
+esfera); con `Fovauto` apagado y `Fovcontenido` en 230 en la página Mapping,
+subirlo a 230 hace que las pantallas bajo el horizonte también lleguen.
+`orientar` corta a negro lo que queda por debajo de `90 − Domefov/2` de
+elevación, porque ahí el Projection TOP estiraba el borde del círculo en rayas.
+`Vguides` pinta sobre la salida la rejilla de VIDEO_DOME: anillos de
+elevación, radios de azimut, el contorno de cada pantalla y los círculos de
+mirada del público (`Vviewfov` es el campo de una mirada, `Vviewpitch` su
+elevación, `Vviewyaw` su azimut y `Vviews` cuántos puntos de vista se reparten
+en la vuelta). Como la rejilla va dentro del domemaster de VIDEO_DOME, gira y
+se inclina con él: es la manera de ver dónde quedó el domo interno respecto de
+la sala. Probado el 18 de septiembre de 2026: con `Vdpitch` 20 y la rejilla
+encendida, el círculo del domo interno se ve inclinado en `out_domo`; mover
+`Viewpitch` dentro de VIDEO_DOME actualiza `Vviewpitch` arriba, y los valores
+sobreviven a una reconstrucción.
+
+![El domo interno inclinado 20 grados con la rejilla encendida](../05_Preview/pruebas/td_169_tracking.png)
 
 Los parámetros de abajo están en modo **Bind** contra los de arriba
 (`parent.DOMO.par.Vtemplate`, etc.), y el bind funciona en los dos sentidos:
@@ -317,9 +399,28 @@ repositorio; si no está, la red se construye sin él.
 
 ### 5.4 AUDIO: la cadena de sonido
 
-`Fuente` elige entre el audio del video que está al aire (sigue a
-`DOMO.Fuente`: el `video` de IN_360, el de IN_180 o el `movie1` de VIDEO_DOME;
-con el patrón al aire vuelve al de IN_360), un archivo aparte
+Por defecto (`Fuente = video`) el sonido **sigue a la fuente al aire** y solo
+suena el video que está en `DOMO.Fuente`. Hay un Audio Movie CHOP por módulo,
+atado a su Movie File In para que el audio vaya sincronizado con ese video
+aunque cambie la velocidad: `de_360` (`IN_360/video`), `de_180` (`IN_180/video`)
+y `de_169`, que es un Select CHOP de `VIDEO_DOME/audio_gain` (el Audio Movie de
+`movie1` por `Volume` y `Audio` de VIDEO_DOME). El Switch CHOP `al_aire` elige
+uno de los tres o `silencio` (un Constant CHOP en cero); como un Switch solo
+cocina la entrada que usa, los módulos que no están al aire no decodifican
+audio. Da silencio con el patrón al aire, con el módulo al aire apagado
+(`Activo`) o con el 16:9 recibiendo por NDI o Spout, porque en ese caso
+`movie1` no es lo que se ve.
+
+Antes sonaban dos cosas a la vez: `AUDIO` y el `audio_out` propio de
+VIDEO_DOME, que tocaba la película del 16:9 aunque la fuente al aire fuera el
+patrón o el 360. El constructor ahora deja ese `audio_out` apagado (su
+`active` en constante `False`); `audio_movie` y `audio_gain` siguen vivos para
+alimentar a `de_169`. Probado el 18 de septiembre de 2026 recorriendo las
+cuatro fuentes: solo el CHOP del módulo al aire cocina en cada cuadro, `salida`
+solo tiene señal con el 16:9 al aire (el 360 de prueba no traía audio), y con
+el patrón es silencio.
+
+La otra opción de `Fuente` sigue igual: un archivo aparte
 (Audio File In) o la entrada de audio del equipo (Audio Device In). Luego
 ganancia (Math CHOP), EQ paramétrico de tres bandas (100 Hz, 1 kHz, 8 kHz),
 retardo en milisegundos para cuadrar con la imagen y un limitador (Audio
@@ -329,7 +430,7 @@ defecto y por `out1`, que es lo que graban `grabar` y `ndi_domo`.
 | Parámetro (página Audio) | Qué hace |
 |---|---|
 | `Activo` | apaga la salida al dispositivo y las fuentes de archivo y entrada |
-| `Fuente` | `video`, `archivo`, `entrada` |
+| `Fuente` | `video` (sigue a la fuente al aire), `archivo`, `entrada` |
 | `Archivo` | archivo de audio |
 | `Ganancia` | 0 a 4 |
 | `Graves`, `Medios`, `Agudos` | ±12 dB en 100 Hz, 1 kHz y 8 kHz |
@@ -405,7 +506,21 @@ Parámetros del COMP raíz:
 | `Pitch` | inclinar el contenido hacia el cénit (±90) |
 | `Res` | lado del domemaster: `r1024` (ensayo), `r2048` (tiempo real, por defecto), `r4096` (grabar) |
 | `Ancho` | ancho del lienzo equirectangular (4096 por defecto; el alto es la mitad) |
-| `Version` | solo lectura, la versión del constructor (1.1, 18 sep 2026) |
+| `Version` | solo lectura, la versión del constructor (1.2, 18 sep 2026) |
+
+| Página 360 | Van a (modo Bind en IN_360) |
+|---|---|
+| `Ractivo`, `Rarchivo`, `Rplay`, `Rvelocidad` | `Activo`, `Archivo`, `Play`, `Velocidad` |
+| `Ryaw`, `Rpitch`, `Rroll` | `Yaw`, `Pitch`, `Roll`: el giro esférico del lienzo (sección 5.1) |
+| `Rpatron`, `Rvercostura`, `Rcosturapos`, `Rcostura` | `Patron`, `Vercostura`, `Costurapos`, `Costura` |
+
+| Página 180 | Van a (modo Bind en IN_180) |
+|---|---|
+| `Mactivo`, `Marchivo`, `Mplay`, `Mformato` | `Activo`, `Archivo`, `Play`, `Formato` |
+| `Myaw`, `Mpitch`, `Mroll` | `Yaw`, `Pitch`, `Roll` |
+
+La página 16:9 está en la sección 5.3. El `Yaw` y el `Pitch` de la página Domo
+siguen existiendo y se aplican después, a todas las fuentes por igual.
 
 | Página Mapping | Qué hace |
 |---|---|
@@ -514,6 +629,19 @@ queda en el centro del domemaster y la costura del lienzo va a parar detrás.
 - **Los Annotate COMP de VIDEO_DOME se perdían.** `build_video_dome.py` los
   creaba con nombre y con `utility` encendido, y desaparecían solos. Ahora se
   crean sin nombre, sin `utility`, y se renombran al final, como en `caja()`.
+- **La costura de un 360 no se saca con Yaw.** Es un meridiano de polo a polo:
+  en azimut solo se mueve, y siempre llega al cénit. Hace falta un giro
+  esférico (`Rpitch`, `Rroll`; sección 5.1).
+- **VIDEO_DOME tenía su propia salida de audio.** Su `audio_out` sonaba
+  siempre, esté o no el 16:9 al aire. Dentro de DOMO queda apagado y el único
+  sonido sale de `AUDIO/salida` (sección 5.4).
+- **Qué lado manda al reconstruir.** Un parámetro en modo Bind no se guarda
+  como constante, así que el módulo renace con su valor por defecto. Para los
+  de VIDEO_DOME manda abajo (el constructor guarda y restaura VIDEO_DOME
+  aparte); para los de IN_360, IN_180 e IN_169 manda la página de la raíz, y
+  solo la primera vez se sube el valor del módulo. Los parámetros de solo
+  lectura (`Version`, `Donde`) ya no se restauran, para que muestren la
+  versión del constructor que corrió.
 - **Resolución.** El domemaster viene en 2048 porque 4096 con todas las capas
   de VIDEO_DOME encendidas llena la memoria de la GPU. Subir `Res` solo para
   grabar.
@@ -544,7 +672,8 @@ por `out1`. El patrón que siguen los tres existentes:
    que debe abarcar, incluidos `negro`, `activo` y `out1`.
 5. Conectarlo a la mezcla: una entrada más en `mezcla` (`wire(D.op('IN_NUEVO'),
    mez, n)`) y una opción más en el menú `Fuente` de la página Domo, en el
-   mismo índice. Si el módulo trae audio de un video, sumar su Movie File In a
-   la lista que evalúa `AUDIO/del_video`, que indexa por `Fuente.menuIndex`.
+   mismo índice. Si el módulo trae audio de un video, sumarle un Audio Movie
+   CHOP en `AUDIO`, conectarlo a `al_aire` en ese índice (el silencio va
+   último) y agregar el caso a la expresión de `al_aire.index`.
 6. Agregar el nuevo COMP a la lista de la caja `nota_modulos` y volver a correr
    el constructor: la configuración de los módulos existentes se conserva sola.
