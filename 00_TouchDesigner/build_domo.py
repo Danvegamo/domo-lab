@@ -16,7 +16,7 @@ Estructura que deja:
     DOMO                      COMP raiz, atajo `parent.DOMO`, paginas Domo, 360, 180, 16:9, Mapping y Salidas
       IN_360                  video 360 equirectangular (+ costura opcional, + giro esferico Yaw/Pitch/Roll)
       IN_180                  domemaster fisheye, VR180 mono o VR180 lado a lado (+ giro esferico)
-      IN_169                  video plano sobre pantallas en la cupula (VIDEO_DOME adentro)
+      IN_169                  video plano sobre pantallas en la cupula (VIDEO_DOME adentro, + Pitch/Roll)
       AUDIO                   sigue a la fuente al aire (solo suena ese video), o un archivo, o la entrada
       mezcla -> equi          la fuente elegida, como lienzo equirectangular 2:1
       domo -> out_domo        el domemaster fisheye con el FOV del modelo de sala
@@ -490,7 +490,13 @@ lienzo(a_equi)
 wire(sel_vd, a_equi)
 giro169 = mk(M, transformTOP, 'al_frente', 700, 0, tunit='fraction', extend='repeat', tx=-0.25)
 wire(a_equi, giro169)
-negro_y_salida(M, giro169, 900)
+# El domo interno de VIDEO_DOME se inclina y se rueda entero aqui (Pitch,
+# Roll; pagina 16:9 de DOMO, Vdpitch y Vdroll). Su azimut es Yawglobal, que
+# VIDEO_DOME ya aplica adentro y que el fondo sigue con Bgfollow.
+pagina_orientacion(M, 'Orientacion', con_yaw=False)
+nodos_or169, orient169 = orientador(M, giro169, 900, yaw='0',
+                                   corte="90 - op('VIDEO_DOME').par.Domefov / 2")
+negro_y_salida(M, orient169, 1300)
 
 caja(M, 'nota', 'IN_169: video plano sobre pantallas en la cupula',
      'VIDEO_DOME es el sistema de pantallas de Domo_Pantallas: el shader recorre el domemaster y '
@@ -498,10 +504,12 @@ caja(M, 'nota', 'IN_169: video plano sobre pantallas en la cupula',
      'estan los templates (una al frente, sala de 4, corona cosida, anillos, cilindro, mosaico), '
      'el fondo desenfocado, el editor con el mouse y las versiones guardadas. Lo principal '
      '(template, fuente, pantallas, fondo) se maneja desde la pagina 16:9 de DOMO. Su domemaster '
-     '(frente abajo) se pasa al lienzo equirectangular igual que para_unreal. El audio de '
+     '(frente abajo) se pasa al lienzo equirectangular igual que para_unreal. orientar inclina '
+     '(Pitch) y rueda (Roll) el domo interno entero; el giro en azimut es Yawglobal. El audio de '
      'movie1 no sale por el audio_out de VIDEO_DOME (apagado aqui): lo toma DOMO/AUDIO solo cuando '
      'el 16:9 esta al aire.',
-     [vd, sel_vd, a_equi, giro169, M.op('negro'), M.op('activo'), M.op('out1')], (0.22, 0.17, 0.13))
+     [vd, sel_vd, a_equi, giro169] + nodos_or169 +
+     [M.op('negro'), M.op('activo'), M.op('out1')], (0.22, 0.17, 0.13))
 
 # ------------------------------- paginas 360, 180 y 16:9 en la raiz DOMO
 #
@@ -548,7 +556,12 @@ V169 = [
     ('Vspoutnombre', VD, 'Spoutnombre', 'Sender Spout (nombre)'),
     ('Vplay', VD, 'Play', 'Reproducir'),
     ('Vtemplate', VD, 'Template', 'Template (se aplica al elegirlo, pisa la tabla)'),
-    ('Vyawglobal', VD, 'Yawglobal', 'Girar todo el montaje (grados)'),
+    # el domo interno de VIDEO_DOME, visto y movido desde afuera
+    ('Vyawglobal', VD, 'Yawglobal', 'Girar todo el montaje (azimut, grados)'),
+    ('Vdpitch', 'IN_169', 'Pitch', 'Inclinar el domo interno: el frente hacia el cenit (grados)'),
+    ('Vdroll', 'IN_169', 'Roll', 'Rodar el domo interno sobre el eje del frente (grados)'),
+    ('Vdomefov', VD, 'Domefov', 'FOV del domo interno (grados; 180 = media esfera)'),
+    ('Vflipx', VD, 'Flipx', 'Espejo horizontal del domo interno'),
     ('Vscreen', VD, 'Screen', 'Pantalla que se edita (fila de la tabla)'),
     ('Vsmode', VD, 'Smode', 'Forma / curvatura'),
     ('Vsyaw', VD, 'Syaw', 'Azimut (grados)'),
@@ -567,13 +580,22 @@ V169 = [
     ('Vbgtile', VD, 'Bgtile', 'Fondo: repeticiones del envolvente'),
     ('Vbgyaw', VD, 'Bgyaw', 'Fondo: girar (grados)'),
     ('Vbgfollow', VD, 'Bgfollow', 'Fondo: sigue el giro global'),
+    ('Vguides', VD, 'Guides', 'Ver la rejilla y las miradas del publico'),
+    ('Vguidealpha', VD, 'Guidealpha', 'Opacidad de la rejilla'),
+    ('Vviewfov', VD, 'Viewfov', 'Campo de una mirada (grados)'),
+    ('Vviewpitch', VD, 'Viewpitch', 'Elevacion de la mirada (grados)'),
+    ('Vviewyaw', VD, 'Viewyaw', 'Azimut de la mirada (grados)'),
+    ('Vviews', VD, 'Views', 'Puntos de vista del publico'),
+    ('Vpreview', VD, 'Preview', 'Simulador de domo (mirar desde adentro)'),
 ]
 PAGINAS = [
     ('360', P360, {'Ractivo': 'Video', 'Ryaw': 'Orientacion de la esfera (antes del domemaster)',
                    'Rpatron': 'Costura'}),
     ('180', P180, {'Mactivo': 'Video', 'Myaw': 'Orientacion (antes del domemaster)'}),
     ('16:9', V169, {'Vactivo': 'Fuente', 'Vtemplate': 'Montaje',
-                    'Vscreen': 'Pantalla elegida', 'Vbg': 'Fondo'}),
+                    'Vyawglobal': 'Domo interno (orientacion y FOV)',
+                    'Vscreen': 'Pantalla elegida', 'Vbg': 'Fondo',
+                    'Vguides': 'Guias: seguir el domo interno desde afuera'}),
 ]
 
 
@@ -849,7 +871,11 @@ caja(D, 'nota_169', 'Pagina 16:9: el video plano desde aqui',
      'copias en anillo y el arco que ocupan (la separacion). Fondo: modo, desenfoque, brillo, zoom. '
      'Esos pars de IN_169/VIDEO_DOME estan en modo Bind contra estos, en los dos sentidos: lo que '
      'se mueve aqui se mueve alla y viceversa, y reconstruir DOMO lo conserva. Lo fino (recortes, '
-     'espejo, animacion, momentos, versiones, editor con el mouse) sigue en VIDEO_DOME.',
+     'espejo, animacion, momentos, versiones, editor con el mouse) sigue en VIDEO_DOME. Domo interno: '
+     'Yawglobal gira, Vdpitch inclina y Vdroll rueda todo el montaje (antes del domemaster, como la '
+     'pagina 360), Vdomefov es el FOV con que VIDEO_DOME dibuja (subirlo a 230 acompana a Mapping con '
+     'Fovauto apagado). Guias: Vguides pinta sobre la salida la rejilla y los circulos de mirada del '
+     'publico (Vviewfov, Vviewpitch, Vviewyaw, Vviews) para seguir el domo interno desde afuera.',
      [], (0.26, 0.19, 0.12), rect=(-1200, -150, -720, 450))
 
 # ------------------------------------------------- reescribir la configuracion
