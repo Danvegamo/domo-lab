@@ -172,11 +172,16 @@ Mallas del FBX (todas con nombres `SM_*`, una capa UV):
 | `SM_LucesPaso` | sí | sí | `M_LedPaso` (emisivo) |
 | `SM_Puerta_01`, `SM_Puerta_02` | sí | sí | `M_Puerta` |
 
-Los materiales de las salas frontales son colores de trabajo pensados para que
-cada pieza se distinga en Unreal aunque la única luz sea la de la cúpula: piso
-oscuro azulado, grada gris medio, barandas de metal claro, butacas rojo tela,
-muro casi negro (como la pared de un domo real, que no debe reflejar la
-proyección) y LED ámbar emisivo. No llevan texturas horneadas.
+Los materiales que escribe el JSON son colores de trabajo: piso oscuro
+azulado, grada gris medio, barandas de metal claro, butacas rojo tela, muro
+casi negro (como la pared de un domo real, que no debe reflejar la proyección)
+y LED ámbar emisivo. En Unreal, desde el 18 de septiembre de 2026, cada uno se
+vuelve una instancia del material triplanar `M_SalaPBR` con textura propia
+(alfombra en piso y grada, fieltro en el muro, metal cepillado en las
+barandas, tela en las butacas, pintura en las puertas) y ese color como tinte
+([02_Sala_Unreal.md](02_Sala_Unreal.md), sección 11). Las dos salas llevan
+además una señal de salida sobre cada puerta y la ventana de la cabina de
+proyección en la pared del fondo.
 
 En los renders aparecen también unos maniquíes de 1,75 m (objeto
 `REF_Personas`) para leer la escala. Están en el `.blend` pero no se exportan
@@ -319,16 +324,20 @@ la sala del planetario con la cúpula recortada.
 
 ## 8. Qué falta
 
-- **Verificación visual en Unreal** de los niveles `DomoVR_45` y `DomoVR_90`
-  con TouchDesigner en `domo180` y el patrón. La geometría, la UV y la
-  posición del ojo están verificadas en el FBX y en el log de importación, y
-  los renders de Blender muestran el patrón bien orientado; falta abrir el
-  editor y mirar.
+- **Verificación visual en Unreal: hecha** el 18 de septiembre de 2026, con
+  TouchDesigner en `domo180`, el patrón y *3gracias* por Spout. Las vistas
+  `vista_general_perspectiva_45.png`, `vista_desde_butaca_45.png`,
+  `vista_general_perspectiva_90.png` y `vista_de_pie_90.png` son desde esa
+  fecha capturas de Unreal con el patrón (antes eran renders de Blender; si se
+  vuelve a correr el generador de Blender, las sobrescribe con los suyos). El
+  cuadro blanco del frente queda al frente en las dos salas y la marca magenta
+  del cénit, hacia el frente, como en los renders de Blender.
 - **Datos de Maloka sin confirmar**: la inclinación (27° es deducida), el tipo
   de butaca, el paso entre filas y la posición de la cabina. La gradería es la
   típica de una sala IMAX Dome, no un levantamiento de la sala real.
-- **Cabina de proyección**: la pared de fondo de las dos salas está lista para
-  recibirla, pero no se modeló.
+- **Cabina de proyección**: solo está la ventana, en Unreal
+  (`realismo_sala.py`); el volumen de la cabina detrás de la pared no se
+  modeló.
 - **Menú de TouchDesigner**: `domo45` y `domo90` siguen describiendo los
   casquetes viejos. Habría que renombrarlos o agregar una nota en el COMP
   para que no se usen con estas salas.

@@ -188,6 +188,25 @@ void ADomeMediaController::BeginPlay()
 		MediaSound->Start();
 	}
 
+	// La fuente: en el editor (Play) la del actor, Spout; fuera del editor
+	// (build, -game) FuenteFueraDelEditor, Media; -DomoFuente= pisa las dos.
+	FString FuenteCmd;
+	if (FParse::Value(FCommandLine::Get(), TEXT("DomoFuente="), FuenteCmd))
+	{
+		Fuente = FuenteCmd.Equals(TEXT("Spout"), ESearchCase::IgnoreCase) ? EDomeFuente::Spout : EDomeFuente::Media;
+	}
+	else if (!GIsEditor)
+	{
+		Fuente = FuenteFueraDelEditor;
+	}
+	UE_LOG(LogDomoMedia, Display, TEXT("Fuente al arrancar: %s"), Fuente == EDomeFuente::Media ? TEXT("Media") : TEXT("Spout"));
+
+	FString Preset;
+	if (FParse::Value(FCommandLine::Get(), TEXT("DomoPreset="), Preset))
+	{
+		AplicarPreset(Preset);
+	}
+
 	Inicializar();
 	ConfigurarTeclado();
 
@@ -204,6 +223,45 @@ void ADomeMediaController::BeginPlay()
 			UE_LOG(LogDomoMedia, Warning, TEXT("No se pudo leer el guion %s"), *RutaGuion);
 		}
 	}
+}
+
+bool ADomeMediaController::AplicarPreset(const FString& Nombre)
+{
+	// Los valores de "VR" son los de fabrica del proyecto (DefaultEngine.ini);
+	// "Render" sube la resolucion interna (TSR la reconstruye a la salida), usa
+	// hit lighting en Lumen (reflejos de la cupula en el metal y el barniz con
+	// el material real, no con la cache de superficie) y afina el muestreo.
+	// Ver 04_Docs/02_Sala_Unreal.md, seccion "Presets VR y Render".
+	struct FValor { const TCHAR* CVar; const TCHAR* VR; const TCHAR* Render; };
+	static const FValor Tabla[] = {
+		{ TEXT("r.ScreenPercentage"), TEXT("100"), TEXT("200") },
+		{ TEXT("r.TSR.History.ScreenPercentage"), TEXT("100"), TEXT("200") },
+		{ TEXT("r.Lumen.HardwareRayTracing.LightingMode"), TEXT("0"), TEXT("2") },
+		{ TEXT("r.Lumen.Reflections.DownsampleFactor"), TEXT("2"), TEXT("1") },
+		{ TEXT("r.Lumen.Reflections.MaxRoughnessToTrace"), TEXT("0.4"), TEXT("0.6") },
+		{ TEXT("r.Lumen.ScreenProbeGather.DownsampleFactor"), TEXT("16"), TEXT("8") },
+		{ TEXT("r.Lumen.ScreenProbeGather.TracingOctahedronResolution"), TEXT("8"), TEXT("12") },
+		{ TEXT("r.SkyLight.RealTimeReflectionCapture.TimeSlice"), TEXT("0"), TEXT("0") },
+	};
+	const bool bRender = Nombre.Equals(TEXT("Render"), ESearchCase::IgnoreCase);
+	if (!bRender && !Nombre.Equals(TEXT("VR"), ESearchCase::IgnoreCase))
+	{
+		UE_LOG(LogDomoMedia, Warning, TEXT("Preset desconocido '%s' (VR o Render)."), *Nombre);
+		return false;
+	}
+	for (const FValor& V : Tabla)
+	{
+		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(V.CVar))
+		{
+			Var->Set(bRender ? V.Render : V.VR, ECVF_SetByConsole);
+		}
+		else
+		{
+			UE_LOG(LogDomoMedia, Warning, TEXT("Preset %s: no existe %s en esta version del motor."), *Nombre, V.CVar);
+		}
+	}
+	UE_LOG(LogDomoMedia, Display, TEXT("Preset de calidad: %s"), bRender ? TEXT("Render") : TEXT("VR"));
+	return true;
 }
 
 void ADomeMediaController::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -994,6 +1052,12 @@ namespace
 				if (A.Num() == 0) { C.ToggleFuente(); }
 				else { C.SetFuente(A[0].Equals(TEXT("Spout"), ESearchCase::IgnoreCase) ? EDomeFuente::Spout : EDomeFuente::Media); }
 			});
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdPreset(TEXT("domo.Preset"), TEXT("domo.Preset VR|Render: calidad liviana para el visor o de captura."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& A, UWorld*)
+		{
+			ADomeMediaController::AplicarPreset(A.Num() > 0 ? A[0] : FString(TEXT("VR")));
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdRecargar(TEXT("domo.Recargar"), TEXT("Vuelve a leer la playlist."),

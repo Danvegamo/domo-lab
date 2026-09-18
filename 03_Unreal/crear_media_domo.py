@@ -59,10 +59,12 @@ RC_PATH = CARPETA_MEDIA + "/RC_Domo"
 NIVELES = ["/Game/Maps/DomoVR_45", "/Game/Maps/DomoVR_90", "/Game/Maps/DomoVR"]
 NIVEL_RC = "/Game/Maps/DomoVR"
 
-# Fuente con la que arranca cada nivel. "Media" es la version standalone; con
-# "Spout" los niveles se comportan como antes (TouchDesigner en vivo) y el
-# video se enciende con la tecla S, domo.Fuente Media o Remote Control.
-FUENTE_INICIAL = "Media"
+# Fuente guardada en cada nivel, la que usa el editor: "Spout" (TouchDesigner
+# en vivo, el flujo de trabajo de siempre). El build empaquetado y -game
+# arrancan en Media igual (FuenteFueraDelEditor en el controlador, o
+# -DomoFuente=Spout|Media). Desde el 18 sep 2026; antes los niveles se
+# guardaban en Media y el editor tambien arrancaba ahi.
+FUENTE_INICIAL = "Spout"
 
 PLAYLIST_EJEMPLO = os.path.join(SCRIPT_DIR, "Movies_ejemplo", "playlist.json")
 PLAYLIST_PROYECTO = os.path.join(PROYECTO_DIR, "Content", "Movies", "playlist.json")

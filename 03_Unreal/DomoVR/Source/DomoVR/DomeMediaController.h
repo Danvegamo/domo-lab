@@ -187,9 +187,19 @@ public:
 
 	// --- Operacion ------------------------------------------------------------
 
-	/** Spout (TouchDesigner en vivo) o Media (la playlist). Se cambia en vivo. */
+	/** Spout (TouchDesigner en vivo) o Media (la playlist). Se cambia en vivo.
+	 *  Es la fuente del editor (y de Play en el editor): los niveles se guardan
+	 *  en Spout. Fuera del editor (build empaquetado, -game) manda
+	 *  FuenteFueraDelEditor, y -DomoFuente=Spout|Media pisa a las dos. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
-	EDomeFuente Fuente = EDomeFuente::Media;
+	EDomeFuente Fuente = EDomeFuente::Spout;
+
+	/** Fuente con la que arranca el build empaquetado (y -game): Media, la
+	 *  version sin TouchDesigner. Se cambia con
+	 *  [/Script/DomoVR.DomeMediaController] FuenteFueraDelEditor=Spout en
+	 *  Config/DefaultGame.ini (o en el Game.ini del build). */
+	UPROPERTY(Config, EditAnywhere, Category = "Domo")
+	EDomeFuente FuenteFueraDelEditor = EDomeFuente::Media;
 
 	/** Playlist, relativa a Content/ (en el build, <build>/DomoVR/Content/). La
 	 *  sobreescriben, en este orden: -DomoPlaylist=<ruta> en la linea de
@@ -294,6 +304,12 @@ public:
 	/** Linea de estado para el log y la pantalla. */
 	UFUNCTION(BlueprintPure, Category = "Domo")
 	FString DescribirEstado() const;
+
+	/** Preset de calidad: "VR" (liviano, el de fabrica del proyecto) o
+	 *  "Render" (capturas: 200 % de resolucion con TSR, Lumen con hit
+	 *  lighting). Tambien domo.Preset y -DomoPreset=Render. */
+	UFUNCTION(BlueprintCallable, Category = "Domo")
+	static bool AplicarPreset(const FString& Nombre);
 
 	//~ Begin AActor interface
 	virtual void Tick(float DeltaSeconds) override;

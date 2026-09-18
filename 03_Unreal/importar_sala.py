@@ -42,13 +42,14 @@ desde dentro del editor abierto (ventana de Python / botonera), no headless.
 
 Contrato de entrada (ver 04_Docs/Unreal_sala_domo.md):
     Archivo:     02_Export/sala_domo.fbx
-    Texturas:    02_Export/texturas/*.png (color base, rugosidad, normal;
-                 2048x2048) para M_Piso, M_Muro, M_Butaca, M_Tarima y
-                 M_Puerta. M_Domo no lleva textura horneada.
+    Texturas:    03_Unreal/Texturas_PBR/*.png (generar_texturas_pbr.py),
+                 tileables, aplicadas en metros por M_SalaPBR (ver
+                 realismo_sala.py). Los mapas horneados de 02_Export/texturas
+                 ya no se usan desde el 18 sep 2026.
     Objetos:     SM_Domo, SM_Muro, SM_Piso, SM_Tarima, SM_Control,
                  SM_Butacas_01 .. SM_Butacas_06, SM_Puerta_01 .. SM_Puerta_04
-    Materiales:  M_Domo, M_Muro, M_Piso, M_Butaca, M_Tarima, M_Control,
-                 M_Puerta
+    Materiales:  M_Domo (cupula) + instancias MI_Muro, MI_Piso, MI_Butaca,
+                 MI_Tarima, MI_Control, MI_Puerta, MI_Madera de M_SalaPBR
     Escala:      1 m Blender = 100 uu Unreal (el FBX ya viene en esa escala)
     Domo:        cilindro de 11.5 m de radio, piso plano (sin grada)
     Tarima:      cilindro central de 3 m de diametro x 1 m de alto, en el
@@ -83,7 +84,14 @@ críptico.
 """
 
 import os
+import sys
 import unreal
+
+# Materiales PBR, Nanite y detalles (senales de salida, luces de pasillo,
+# cabina): viven en realismo_sala.py, que tambien se puede correr solo.
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import realismo_sala as realismo  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +121,6 @@ ES_MEDIA_ESFERA = abs(FOV_DOMO - 180.0) < 1e-6
 SUFIJO_MODELO = "" if ES_MEDIA_ESFERA else "_{:g}".format(FOV_DOMO)
 
 FBX_PATH = os.path.join(DOMO_ROOT_DIR, "02_Export", "sala_domo{}.fbx".format(SUFIJO_MODELO))
-TEXTURAS_DIR = os.path.join(DOMO_ROOT_DIR, "02_Export", "texturas")
 
 # Salas frontales (DOMO_FOV = 45 o 90, desde el 18 sep 2026): el 45 es el cine
 # domo inclinado tipo Maloka con grada y 314 butacas, el 90 la sala de pie con
@@ -172,31 +179,15 @@ MATERIAL_POR_MALLA = {
     "SM_Control": "M_Control",
 }
 
-# Colores/rugosidad de respaldo cuando no hay textura horneada disponible
-# (o hasta que 02_Export/texturas/ tenga el mapa correspondiente). Formato:
-# nombre_material -> (color_rgb, roughness).
-FALLBACK_MATERIALES = {
-    "M_Muro": ((0.02, 0.02, 0.02), 0.95),
-    "M_Piso": ((0.015, 0.015, 0.015), 0.95),
-    "M_Butaca": ((0.05, 0.05, 0.055), 0.9),
-    "M_Madera": ((0.30, 0.17, 0.08), 0.6),
-    "M_Tarima": ((0.05, 0.05, 0.055), 0.6),
-    "M_Control": ((0.04, 0.04, 0.045), 0.5),
-    "M_Puerta": ((0.06, 0.045, 0.03), 0.55),
-}
-
-# Nanite: decision unica, valida para toda la sala (ver 04_Docs/Unreal_sala_domo.md,
-# seccion "Nanite: encendido o apagado"). La escena de hoy son 43 294
-# triangulos en total -- Nanite no aporta nada a ese conteo y solo suma
-# costo (streaming, DDC, el propio indicador de uso que hay que mantener al
-# dia en cada material). Se deja APAGADO para la geometria actual. El dia
-# que entre el escaneo por fotogrametria del planetario real (RealityCapture,
-# geometria de verdad pesada), esta es la UNICA linea que hay que voltear a
-# True: build_nanite en la importacion y el indicador de uso en los
-# materiales se derivan los dos de esta misma constante, para que no vuelvan
-# a quedar desincronizados como paso la primera vez (materiales creados sin
-# el indicador de uso, mientras las mallas si tenian Nanite activo).
-USAR_NANITE = False
+# Nanite (desde el 18 sep 2026, encargo de realismo): encendido en todas las
+# mallas estaticas SALVO la cupula (SM_Domo), cuyo material de cielo lo
+# captura el SkyLight por la ruta clasica. No se pide en la importacion
+# (build_nanite): se aplica malla por malla despues, con
+# realismo_sala.aplicar_nanite, que tambien fija el fallback completo para el
+# trazado de rayos. Los materiales base (M_SalaPBR, M_SalaEmisivo, M_Domo,
+# M_DomoMedia) llevan el indicador de uso Nanite puesto; antes faltaba y el
+# juego avisaba "missing usage flag Nanite" en M_Muro, M_Piso, ...
+USAR_NANITE = True
 
 # Escala de la sala (planetario tipo Bogota). Todo en centimetros (uu de
 # Unreal). La sala NO tiene ningun volumen exterior (el sector de control
@@ -253,15 +244,9 @@ PARAMETRO_TEXTURA_DOMO = "SpoutTexture"
 # que se pueda subir o bajar despues sin recompilar el material.
 PARAMETRO_INTENSIDAD_DOMO = "EmissiveIntensity"
 INTENSIDAD_DOMO_INICIAL = 1.0
-
-# Sinonimos de nombre de archivo para reconocer cada tipo de mapa PBR sin
-# depender de una convencion de nombres exacta (todavia no la conocemos:
-# los mapas los esta horneando el otro agente en paralelo).
-SINONIMOS_TIPO_MAPA = {
-    "basecolor": ["basecolor", "base_color", "albedo", "diffuse", "color"],
-    "roughness": ["roughness", "rough", "rugosidad"],
-    "normal": ["normal", "nrm", "norm"],
-}
+# 1 = voltear la U de la cupula para que la imagen de TouchDesigner no se vea
+# espejada (ver _material_domo_emisivo).
+ESPEJO_U_INICIAL = 1.0
 
 resumen = {
     "mallas_importadas": [],
@@ -409,11 +394,9 @@ def importar_fbx():
     # escala de origen los afectaria a todos, mientras que esto solo cambia
     # como IMPORTA Unreal, sin tocar el archivo de origen.
     sm_data.set_editor_property("convert_scene_unit", True)
-    # Ver USAR_NANITE mas arriba: hoy la escena entera son 43 294 triangulos
-    # (no lo justifica), asi que queda apagado. Si algun dia entra geometria
-    # pesada de verdad (fotogrametria), esta llamada y la de los materiales
-    # (crear_materiales) se prenden juntas con esa misma constante.
-    sm_data.set_editor_property("build_nanite", USAR_NANITE)
+    # Nanite no se pide aqui: se aplica despues malla por malla
+    # (realismo.aplicar_nanite), porque la cupula tiene que quedar sin Nanite.
+    sm_data.set_editor_property("build_nanite", False)
 
     task = unreal.AssetImportTask()
     task.set_editor_property("filename", FBX_PATH)
@@ -470,6 +453,9 @@ def importar_fbx():
     if ES_SALA_FRONTAL:
         for mesh in mallas.values():
             _colision_compleja(mesh)
+    if USAR_NANITE:
+        con_nanite = [n for n, mesh in sorted(mallas.items()) if realismo.aplicar_nanite(mesh, n)]
+        log("Nanite encendido en {} mallas (la cupula queda sin Nanite).".format(len(con_nanite)))
 
     faltantes = [n for n in NOMBRES_MALLAS_ESPERADAS if n not in mallas]
     if faltantes:
@@ -523,182 +509,16 @@ def _nombre_canonico_de_malla(nombre_real):
 
 
 # ---------------------------------------------------------------------------
-# Paso 2: texturas PBR horneadas
+# Paso 2 y 3: texturas y materiales
 # ---------------------------------------------------------------------------
-
-def _buscar_textura(nombre_material, tipo):
-    """Busca en TEXTURAS_DIR un archivo cuyo nombre calce con el material
-    (sin el prefijo M_) y con algun sinonimo del tipo de mapa pedido.
-    Devuelve la ruta completa o None si no hay match (todavia no sabemos la
-    convencion de nombres exacta que va a usar el otro agente)."""
-    if not os.path.isdir(TEXTURAS_DIR):
-        return None
-
-    token_material = nombre_material.replace("M_", "").lower()
-    sinonimos = SINONIMOS_TIPO_MAPA[tipo]
-
-    candidatos = []
-    for nombre_archivo in os.listdir(TEXTURAS_DIR):
-        base, ext = os.path.splitext(nombre_archivo)
-        if ext.lower() not in (".png", ".tga", ".jpg", ".jpeg"):
-            continue
-        base_lower = base.lower()
-        if token_material in base_lower and any(s in base_lower for s in sinonimos):
-            candidatos.append(nombre_archivo)
-
-    if not candidatos:
-        return None
-    if len(candidatos) > 1:
-        aviso(
-            "Mas de un archivo de textura calza con material={} tipo={}: "
-            "{}. Se usa el primero.".format(nombre_material, tipo, sorted(candidatos))
-        )
-    return os.path.join(TEXTURAS_DIR, sorted(candidatos)[0])
-
-
-def _importar_textura(ruta_archivo, nombre_asset, tipo):
-    """Importa un PNG/TGA como Texture2D en CONTENT_TEXTURES, idempotente,
-    y deja la textura configurada segun su tipo:
-      - basecolor: color normal (sRGB encendido, compresion por defecto).
-      - roughness: lineal, sin sRGB (TC_Masks) -- es un mapa de datos, no de
-        color; usar sRGB aqui es el error clasico que arruina los valores.
-      - normal: marcado como Normalmap (TC_Normalmap), tambien sin sRGB.
-    """
-    ruta_asset = _ruta_completa(CONTENT_TEXTURES, nombre_asset)
-    _borrar_si_existe(ruta_asset)
-
-    task = unreal.AssetImportTask()
-    task.set_editor_property("filename", ruta_archivo)
-    task.set_editor_property("destination_path", CONTENT_TEXTURES)
-    task.set_editor_property("destination_name", nombre_asset)
-    task.set_editor_property("replace_existing", True)
-    task.set_editor_property("automated", True)
-    task.set_editor_property("save", True)
-    task.set_editor_property("factory", unreal.TextureFactory())
-
-    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
-
-    objetos = [o for o in task.get_objects() if isinstance(o, unreal.Texture2D)]
-    if not objetos:
-        fallar(
-            "La importacion de la textura {} ({}) no devolvio ningun "
-            "Texture2D.".format(ruta_archivo, nombre_asset)
-        )
-    textura = objetos[0]
-
-    if tipo == "normal":
-        textura.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_NORMALMAP)
-        textura.set_editor_property("srgb", False)
-    elif tipo == "roughness":
-        textura.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_MASKS)
-        textura.set_editor_property("srgb", False)
-    # basecolor se deja con los valores por defecto del importador (color,
-    # con sRGB encendido): es una textura de color de verdad.
-
-    unreal.EditorAssetLibrary.save_loaded_asset(textura)
-    resumen["texturas_importadas"].append(nombre_asset)
-    return textura
-
-
-def _texturas_para_material(nombre_material):
-    """Busca e importa (si existen) los 3 mapas de un material. Devuelve un
-    dict {tipo: unreal.Texture2D} con solo los tipos que si se encontraron."""
-    encontradas = {}
-    for tipo in ("basecolor", "roughness", "normal"):
-        ruta_archivo = _buscar_textura(nombre_material, tipo)
-        if ruta_archivo is None:
-            continue
-        nombre_asset = "T_{}_{}".format(nombre_material.replace("M_", ""), tipo.capitalize())
-        encontradas[tipo] = _importar_textura(ruta_archivo, nombre_asset, tipo)
-    return encontradas
-
-
-# ---------------------------------------------------------------------------
-# Paso 3: materiales
-# ---------------------------------------------------------------------------
-
-def _material_pbr_o_plano(nombre_material):
-    """Crea un material Default Lit para piso/muro/butaca/tarima/control/
-    puerta. Si 02_Export/texturas/ trae los mapas de este material, los usa
-    (color base + rugosidad lineal + normal); si no, cae a un color plano
-    oscuro y mate (FALLBACK_MATERIALES)."""
-    material = crear_asset(nombre_material, CONTENT_MATERIALS, unreal.Material, unreal.MaterialFactoryNew())
-    mel = unreal.MaterialEditingLibrary
-
-    color_fallback, roughness_fallback = FALLBACK_MATERIALES.get(
-        nombre_material, ((0.03, 0.03, 0.03), 0.9)
-    )
-
-    texturas = _texturas_para_material(nombre_material)
-
-    # --- Color base ---
-    if "basecolor" in texturas:
-        tex_expr = mel.create_material_expression(
-            material, unreal.MaterialExpressionTextureSampleParameter2D, -500, -150
-        )
-        tex_expr.set_editor_property("parameter_name", "BaseColorTexture")
-        tex_expr.set_editor_property("texture", texturas["basecolor"])
-        tex_expr.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
-        mel.connect_material_property(tex_expr, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
-    else:
-        color_expr = mel.create_material_expression(
-            material, unreal.MaterialExpressionVectorParameter, -500, -150
-        )
-        color_expr.set_editor_property("parameter_name", "Color")
-        color_expr.set_editor_property(
-            "default_value",
-            unreal.LinearColor(color_fallback[0], color_fallback[1], color_fallback[2], 1.0),
-        )
-        mel.connect_material_property(color_expr, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
-
-    # --- Rugosidad ---
-    if "roughness" in texturas:
-        tex_expr = mel.create_material_expression(
-            material, unreal.MaterialExpressionTextureSampleParameter2D, -500, 0
-        )
-        tex_expr.set_editor_property("parameter_name", "RoughnessTexture")
-        tex_expr.set_editor_property("texture", texturas["roughness"])
-        tex_expr.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
-        mel.connect_material_property(tex_expr, "R", unreal.MaterialProperty.MP_ROUGHNESS)
-    else:
-        rough_expr = mel.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -500, 0
-        )
-        rough_expr.set_editor_property("parameter_name", "Roughness")
-        rough_expr.set_editor_property("default_value", roughness_fallback)
-        mel.connect_material_property(rough_expr, "", unreal.MaterialProperty.MP_ROUGHNESS)
-
-    # --- Metalico: siempre 0, no hay mapas metalicos en el contrato ---
-    metal_expr = mel.create_material_expression(
-        material, unreal.MaterialExpressionConstant, -500, 150
-    )
-    metal_expr.set_editor_property("r", 0.0)
-    mel.connect_material_property(metal_expr, "", unreal.MaterialProperty.MP_METALLIC)
-
-    # --- Normal ---
-    if "normal" in texturas:
-        tex_expr = mel.create_material_expression(
-            material, unreal.MaterialExpressionTextureSampleParameter2D, -500, 300
-        )
-        tex_expr.set_editor_property("parameter_name", "NormalTexture")
-        tex_expr.set_editor_property("texture", texturas["normal"])
-        tex_expr.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
-        mel.connect_material_property(tex_expr, "RGB", unreal.MaterialProperty.MP_NORMAL)
-
-    errores = mel.recompile_material(material)
-    if errores:
-        aviso("Errores al compilar {}: {}".format(nombre_material, list(errores)))
-
-    if not texturas:
-        aviso(
-            "{} no encontro texturas en {}: quedo con color plano de "
-            "respaldo {}.".format(nombre_material, TEXTURAS_DIR, color_fallback)
-        )
-
-    marcar_uso_nanite(material, nombre_material)
-
-    return material
-
+#
+# Hasta el 18 sep 2026 cada superficie era un Material propio con los mapas
+# horneados por Blender (02_Export/texturas, UV de horneado) o un color plano.
+# Ahora las superficies son instancias (MI_Muro, MI_Butaca, ...) de un solo
+# material triplanar, M_SalaPBR, con texturas tileables generadas por
+# generar_texturas_pbr.py y escaladas en metros. Todo eso vive en
+# realismo_sala.py. Los mapas horneados de 02_Export/texturas ya no se
+# importan.
 
 def marcar_uso_nanite(material, nombre_material):
     """Pone (o quita) el indicador de uso Nanite del material, en linea con
@@ -753,6 +573,31 @@ def _material_domo_emisivo():
         tex_expr.set_editor_property("texture", placeholder_tex)
         tex_expr.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
 
+    # EspejoU: la U de la cupula crece hacia la IZQUIERDA de quien mira desde
+    # adentro (azimut antihorario visto desde arriba), y en TouchDesigner u
+    # crece hacia la derecha. Sin voltearla, un texto mandado por Spout se lee
+    # al reves en la cupula (medido el 18 sep 2026 con la palabra IZQUIERDA
+    # en el lienzo; ver 04_Docs/02_Sala_Unreal.md). El frente (u 0,5) y la
+    # costura (u 0 = 1) no se mueven. Es la misma correccion que M_DomoMedia.
+    uv_expr = mel.create_material_expression(material, unreal.MaterialExpressionTextureCoordinate, -900, 0)
+    espejo_expr = mel.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -900, 120)
+    espejo_expr.set_editor_property("parameter_name", "EspejoU")
+    espejo_expr.set_editor_property("default_value", ESPEJO_U_INICIAL)
+    uv_custom = mel.create_material_expression(material, unreal.MaterialExpressionCustom, -650, 0)
+    uv_custom.set_editor_property("description", "EspejoU")
+    uv_custom.set_editor_property("code", "return float2(EspejoU > 0.5 ? 1.0 - UV.x : UV.x, UV.y);")
+    uv_custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT2)
+    entradas = []
+    for nombre in ("UV", "EspejoU"):
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", nombre)
+        entradas.append(ci)
+    uv_custom.set_editor_property("inputs", entradas)
+    mel.connect_material_expressions(uv_expr, "", uv_custom, "UV")
+    mel.connect_material_expressions(espejo_expr, "", uv_custom, "EspejoU")
+    if not mel.connect_material_expressions(uv_custom, "", tex_expr, "UVs"):
+        fallar("No se pudo conectar EspejoU a la UV de M_Domo.")
+
     intensidad_expr = mel.create_material_expression(
         material, unreal.MaterialExpressionScalarParameter, -250, 150
     )
@@ -789,119 +634,40 @@ def _material_domo_emisivo():
     return material, mi
 
 
-MATERIALES_PBR = ("M_Muro", "M_Madera", "M_Piso", "M_Butaca", "M_Tarima", "M_Control", "M_Puerta")
-
-
 def crear_materiales():
-    """Media esfera: recrea todos los materiales (fuente de verdad, como
-    siempre). Casquetes: reutiliza los que ya existen en /Game/Sala/Materials
-    y crea solo los que falten, para no reescribir los assets del 180 mientras
-    el editor puede tenerlos abiertos."""
+    """M_Domo / MI_Domo (el 180 los recrea; las salas frontales y los
+    casquetes los reutilizan si existen) mas las instancias PBR de la sala,
+    recreadas en cada corrida por realismo_sala.materiales_de_sala."""
     materiales = {}
     creados = []
 
-    if ES_SALA_FRONTAL:
-        return _crear_materiales_frontales()
-
     if ES_MEDIA_ESFERA:
         m_domo, mi_domo = _material_domo_emisivo()
-        materiales["M_Domo"] = m_domo
-        materiales["MI_Domo"] = mi_domo
         creados += ["M_Domo", "MI_Domo"]
-        for nombre_material in MATERIALES_PBR:
-            materiales[nombre_material] = _material_pbr_o_plano(nombre_material)
-            creados.append(nombre_material)
     else:
         ruta_m_domo = _ruta_completa(CONTENT_MATERIALS, "M_Domo")
         ruta_mi_domo = _ruta_completa(CONTENT_MATERIALS, "MI_Domo")
         if (unreal.EditorAssetLibrary.does_asset_exist(ruta_m_domo)
                 and unreal.EditorAssetLibrary.does_asset_exist(ruta_mi_domo)):
-            materiales["M_Domo"] = cargar_asset_obligatorio(ruta_m_domo)
-            materiales["MI_Domo"] = cargar_asset_obligatorio(ruta_mi_domo)
+            m_domo = cargar_asset_obligatorio(ruta_m_domo)
+            mi_domo = cargar_asset_obligatorio(ruta_mi_domo)
         else:
             aviso("M_Domo/MI_Domo no existian en {}; se crean (normalmente los crea "
                   "la importacion de la media esfera).".format(CONTENT_MATERIALS))
             m_domo, mi_domo = _material_domo_emisivo()
-            materiales["M_Domo"] = m_domo
-            materiales["MI_Domo"] = mi_domo
             creados += ["M_Domo", "MI_Domo"]
-        for nombre_material in MATERIALES_PBR:
-            ruta = _ruta_completa(CONTENT_MATERIALS, nombre_material)
-            if unreal.EditorAssetLibrary.does_asset_exist(ruta):
-                materiales[nombre_material] = cargar_asset_obligatorio(ruta)
-            else:
-                aviso("{} no existia; se crea.".format(ruta))
-                materiales[nombre_material] = _material_pbr_o_plano(nombre_material)
-                creados.append(nombre_material)
+    materiales["M_Domo"] = m_domo
+    materiales["MI_Domo"] = mi_domo
 
-    if creados:
-        unreal.EditorAssetLibrary.save_directory(CONTENT_MATERIALS, False, True)
-    if resumen["texturas_importadas"]:
-        unreal.EditorAssetLibrary.save_directory(CONTENT_TEXTURES, False, True)
+    realismo.preparar()
+    carpeta = CONTENT_MATERIALS_SALA if ES_SALA_FRONTAL else CONTENT_MATERIALS
+    pbr = realismo.materiales_de_sala(FOV_DOMO, DATOS_SALA if ES_SALA_FRONTAL else None, carpeta)
+    materiales.update(pbr)
+    creados += ["{}/MI_{}".format(carpeta, n[2:]) for n in sorted(pbr)]
 
-    reutilizados = sorted(set(materiales.keys()) - set(creados))
-    log("Materiales creados: {}; reutilizados: {}".format(sorted(creados), reutilizados))
-    resumen["materiales_creados"] = sorted(creados)
-    resumen["materiales_reutilizados"] = reutilizados
-    return materiales
-
-
-def _material_color_frontal(nombre, datos):
-    """Material Default Lit de color plano con parametros Color, Roughness y
-    Metallic (y Emissive si el JSON trae emision, como el LED de paso). Los
-    valores son los mismos que usa Blender para los renders."""
-    material = crear_asset(nombre, CONTENT_MATERIALS_SALA, unreal.Material, unreal.MaterialFactoryNew())
-    mel = unreal.MaterialEditingLibrary
-    color = datos["color"]
-    expr = mel.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -500, -150)
-    expr.set_editor_property("parameter_name", "Color")
-    expr.set_editor_property("default_value", unreal.LinearColor(color[0], color[1], color[2], 1.0))
-    mel.connect_material_property(expr, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
-    for y, (param, valor, prop) in enumerate((
-            ("Roughness", datos["rugosidad"], unreal.MaterialProperty.MP_ROUGHNESS),
-            ("Metallic", datos["metalico"], unreal.MaterialProperty.MP_METALLIC))):
-        e = mel.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -500, y * 150)
-        e.set_editor_property("parameter_name", param)
-        e.set_editor_property("default_value", float(valor))
-        mel.connect_material_property(e, "", prop)
-    if datos.get("emision"):
-        em = datos["emision"]
-        fuerza = float(datos.get("fuerza_emision", 1.0))
-        e = mel.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -500, 300)
-        e.set_editor_property("parameter_name", "Emissive")
-        e.set_editor_property("default_value", unreal.LinearColor(em[0] * fuerza, em[1] * fuerza, em[2] * fuerza, 1.0))
-        mel.connect_material_property(e, "RGB", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-    errores = mel.recompile_material(material)
-    if errores:
-        aviso("Errores al compilar {}: {}".format(nombre, list(errores)))
-    marcar_uso_nanite(material, nombre)
-    return material
-
-
-def _crear_materiales_frontales():
-    """Sala frontal: MI_Domo compartido (el de Spout) para la cupula, mas los
-    materiales propios del modelo en CONTENT_MATERIALS_SALA, recreados en cada
-    corrida desde el JSON de Blender."""
-    materiales, creados = {}, []
-    ruta_m_domo = _ruta_completa(CONTENT_MATERIALS, "M_Domo")
-    ruta_mi_domo = _ruta_completa(CONTENT_MATERIALS, "MI_Domo")
-    if (unreal.EditorAssetLibrary.does_asset_exist(ruta_m_domo)
-            and unreal.EditorAssetLibrary.does_asset_exist(ruta_mi_domo)):
-        materiales["M_Domo"] = cargar_asset_obligatorio(ruta_m_domo)
-        materiales["MI_Domo"] = cargar_asset_obligatorio(ruta_mi_domo)
-    else:
-        aviso("M_Domo/MI_Domo no existian en {}; se crean.".format(CONTENT_MATERIALS))
-        materiales["M_Domo"], materiales["MI_Domo"] = _material_domo_emisivo()
-        creados += ["M_Domo", "MI_Domo"]
-        unreal.EditorAssetLibrary.save_directory(CONTENT_MATERIALS, False, True)
-    if not unreal.EditorAssetLibrary.does_directory_exist(CONTENT_MATERIALS_SALA):
-        unreal.EditorAssetLibrary.make_directory(CONTENT_MATERIALS_SALA)
-    for nombre, datos in sorted(DATOS_SALA["materiales"].items()):
-        materiales[nombre] = _material_color_frontal(nombre, datos)
-        creados.append("{}/{}".format(CONTENT_MATERIALS_SALA, nombre))
-    unreal.EditorAssetLibrary.save_directory(CONTENT_MATERIALS_SALA, False, True)
-    reutilizados = ["MI_Domo"] if "MI_Domo" not in creados else []
-    log("Materiales de la sala frontal creados: {}; reutilizados: {}".format(creados, reutilizados))
+    unreal.EditorAssetLibrary.save_directory(CONTENT_MATERIALS, False, True)
+    reutilizados = sorted(set(["M_Domo", "MI_Domo"]) - set(creados))
+    log("Materiales creados: {}; reutilizados: {}".format(creados, reutilizados))
     resumen["materiales_creados"] = creados
     resumen["materiales_reutilizados"] = reutilizados
     return materiales
@@ -1079,6 +845,10 @@ def crear_post_process(actor_subsystem):
     settings.set_editor_property("override_auto_exposure_max_brightness", True)
     settings.set_editor_property("auto_exposure_max_brightness", 1.0)
     ppv.set_editor_property("settings", settings)
+    # Los valores de la sala oscura realista (rebote sin multiplicar, calidad
+    # de Lumen, vineta suave, sin grano ni aberracion) los pone
+    # realismo_sala.ajustar_post_proceso, que tambien se corre suelto.
+    realismo.ajustar_post_proceso(ppv)
 
     resumen["actores_colocados"].append(ppv.get_actor_label())
     log("Post Process Volume infinito con exposicion manual y fija creado.")
@@ -1101,9 +871,9 @@ def crear_skylight_domo(actor_subsystem):
     # En las salas frontales la pantalla baja hasta el piso: la parte de la
     # cupula bajo el horizonte tambien alumbra.
     comp.set_editor_property("lower_hemisphere_is_black", not ES_SALA_FRONTAL)
-    comp.set_editor_property("intensity", 2.0)
+    realismo.ajustar_skylight(sky)
     resumen["actores_colocados"].append(sky.get_actor_label())
-    log("SkyLight_Domo con captura en tiempo real creado (intensidad 2).")
+    log("SkyLight_Domo con captura en tiempo real creado (intensidad {:g}).".format(realismo.SKYLIGHT_INTENSIDAD))
     return sky
 
 
@@ -1196,7 +966,7 @@ def main():
         log("Pantalla de 180 grados, radio {:.1f} m, inclinada {:.1f} grados; datos de {}".format(
             pantalla["radio_m"], pantalla["inclinacion_deg"], DATOS_SALA_PATH))
     else:
-        log("Texturas esperadas en: {}".format(TEXTURAS_DIR))
+        log("Texturas PBR (tileables, generar_texturas_pbr.py) en: {}".format(realismo.TEXTURAS_DIR))
         log(
             "Escala de sala: radio {:.1f} m (cilindro cerrado, sin volumen "
             "exterior), {} butacas en 6 cunas radiales.".format(
@@ -1225,6 +995,9 @@ def main():
         crear_ojo_frontal(actor_subsystem)
     else:
         crear_player_start(actor_subsystem)
+    if mallas and (ES_MEDIA_ESFERA or ES_SALA_FRONTAL):
+        n = realismo.colocar_detalles(actor_subsystem, FOV_DOMO, DATOS_SALA if ES_SALA_FRONTAL else None)
+        resumen["actores_colocados"].append("{} detalles (carpeta Detalles)".format(n))
 
     level_subsystem = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
     ok = level_subsystem.save_current_level()
@@ -1239,6 +1012,11 @@ def main():
     # guarda el paquete del nivel nuevo por nombre y nada mas.
     unreal.EditorAssetLibrary.save_directory(CONTENT_MALLAS, False, True)
     if ES_MEDIA_ESFERA:
+        # Los Materials de antes (M_Muro, M_Piso, ... con los mapas horneados)
+        # y sus texturas ya no los usa nadie.
+        realismo.borrar_materiales_viejos(CONTENT_MATERIALS, list(realismo.MATERIALES_180.keys()))
+        if unreal.EditorAssetLibrary.does_directory_exist(CONTENT_TEXTURES):
+            unreal.EditorAssetLibrary.delete_directory(CONTENT_TEXTURES)
         unreal.EditorAssetLibrary.save_directory(CONTENT_MAPS, False, True)
     else:
         if not unreal.EditorAssetLibrary.save_asset(MAP_PACKAGE_PATH, False):

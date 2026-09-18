@@ -667,11 +667,21 @@ línea fina detrás del público.
 ![3gracias desde las butacas en la sala VR](../05_Preview/renders/3gracias_unreal_desde_butacas.png)
 ![3gracias, vista general de la sala](../05_Preview/renders/3gracias_unreal_general.png)
 
-Las capturas de Unreal (`05_Preview/renders/3gracias_unreal_*`, cuadros 190, 60
-y 330 del video) se hicieron en Simulate y miden 1775 × 1216: es el tamaño del
-viewport del editor con los paneles abiertos en una pantalla de 2560.
-`3gracias_equirect.png` es el lienzo que recibe Unreal, con la cúpula en la
-mitad superior.
+Las capturas actuales son del 18 de septiembre de 2026 y usan otro video del
+mismo trabajo, `test roto pintura.mp4`, con los ajustes de David: `Rhorizonte`
+26,1, `Rcurva` 0,8, `Rpitch` 0 (`Rpiso` marca 28 grados de piso en el borde).
+Van en el cuadro 30, fijo (`playmode` en *specify index* mientras se captura):
+el papel beige con la figura azul sobre la cabeza y las figuras rojas y
+amarillas al frente. `3gracias_domemaster.png` es `out_domo` a 4096 (`Res` en
+`r4096`) y `3gracias_equirect.png` es `para_unreal`, el lienzo que recibe
+Unreal, con la cúpula en la mitad superior. Las de Unreal
+(`3gracias_unreal_*`, `3gracias_sala45_*`, `3gracias_sala90_*`) llegan por
+Spout y se hicieron en `-game` con el preset Render (TSR al 200 %) a 1920 ×
+1080; el procedimiento está en [02_Sala_Unreal.md](02_Sala_Unreal.md),
+sección 14. Una nota de composición: con estos ajustes la figura azul queda
+casi toda sobre la cabeza del público y las figuras del frente salen chicas;
+subir `Rhorizonte` unos grados más las agrandaría, a costa de meter más piso
+del video en el borde.
 
 ## 8. Trampas medidas
 

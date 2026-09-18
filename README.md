@@ -38,7 +38,7 @@ las capturas están en el repo.
 | Domemaster de *3gracias*: lo que sale hacia el proyector | La sala completa con *3gracias* en la cúpula |
 | ![3gracias en equirectangular, el lienzo común](05_Preview/renders/3gracias_equirect.png) | ![El patrón de prueba en el domemaster](05_Preview/pruebas/td_patron_domemaster.png) |
 | El lienzo equirectangular que recibe la sala VR | El patrón de prueba con el que se midió todo |
-| ![Modelo de sala de 45 grados, tipo Maloka](05_Preview/vista_general_perspectiva_45.png) | ![Modelo de sala de 90 grados, público de pie](05_Preview/vista_de_pie_90.png) |
+| ![3gracias en la sala de 45 grados, tipo Maloka](05_Preview/renders/3gracias_sala45_general.png) | ![3gracias en la sala de 90 grados, de pie](05_Preview/renders/3gracias_sala90_general.png) |
 | Sala de 45 grados, tipo Maloka, público sentado | Sala de 90 grados, público de pie con barandas |
 
 ## Arquitectura
@@ -81,12 +81,13 @@ Spout), Blender 4 solo si se quiere regenerar la sala.
    deja `Fuente` en *Patrón de prueba* para calibrar, o elige un módulo y pon
    el archivo en su página de la raíz: *360*, *180* o *16:9*. Solo suena el
    audio del video que está al aire.
-2. Abre la sala con `03_Unreal/abrir_proyecto.ps1`. Los niveles arrancan
-   reproduciendo la playlist de `Content/Movies/` (fuente *Media*); para ver
-   lo que llegue por Spout con el nombre `TD_Domo_Lab`, pon `Fuente = Spout`
-   en el actor `DomeMediaController` (o `domo.Fuente Spout` en la consola).
-   Si la cúpula se queda negra, revisa la lista de comprobación de
-   [03_Puente_Spout.md](04_Docs/03_Puente_Spout.md).
+2. Abre la sala con `03_Unreal/abrir_proyecto.ps1`. En el editor los niveles
+   arrancan mostrando lo que llegue por Spout con el nombre `TD_Domo_Lab`
+   (fuente *Spout*); el programa empaquetado arranca en cambio reproduciendo
+   la playlist de `Content/Movies/` (fuente *Media*). Se cambia en el actor
+   `DomeMediaController`, con `domo.Fuente Spout|Media` en la consola o con
+   `-DomoFuente=` al arrancar. Si la cúpula se queda negra, revisa la lista de
+   comprobación de [03_Puente_Spout.md](04_Docs/03_Puente_Spout.md).
 3. Para VR: OpenXR está habilitado; con SteamVR o Virtual Desktop corriendo,
    *Play → VR Preview*.
 
@@ -115,8 +116,10 @@ Toda la documentación está también como una sola página con buscador en
    6 sectores, tarima central, zona de control de 7 m, 4 puertas, paredes con
    listones de madera) y exporta el FBX de `02_Export/`.
 2. **Modelo → Unreal.** `03_Unreal/importar_sala.py` arma el nivel `DomoVR`:
-   materiales, post proceso y una cúpula emisiva marcada como cielo más un
-   SkyLight en tiempo real, para que Lumen deje que la cúpula ilumine la sala.
+   materiales PBR con texturas generadas por script (tela, madera, alfombra,
+   metal cepillado), Nanite, Lumen con trazado de rayos por hardware, TSR,
+   post proceso de sala oscura y una cúpula emisiva marcada como cielo más un
+   SkyLight en tiempo real, para que la cúpula ilumine la sala.
    `conectar_spout.py` pone el receptor Spout (`ASpoutDomeReceiver`, en C++).
 3. **TouchDesigner → Spout.** `00_TouchDesigner/build_domo.py` construye
    `/project1/DOMO`: cada módulo de entrada entrega el mismo lienzo

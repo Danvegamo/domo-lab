@@ -177,7 +177,9 @@ def re_marcar_nanite_en_materiales():
     """Vuelve a pasar marcar_uso_nanite (de importar_sala.py) sobre los
     materiales de la sala, por si este script se corre suelto despues de
     tocar algo a mano."""
-    nombres = ["M_Muro", "M_Piso", "M_Butaca", "M_Tarima", "M_Control", "M_Puerta"]
+    # Desde el 18 sep 2026 las superficies son instancias; el indicador vive
+    # en los materiales base.
+    nombres = ["M_Domo", "M_SalaPBR", "M_SalaEmisivo"]
     for nombre in nombres:
         ruta = sala._ruta_completa(sala.CONTENT_MATERIALS, nombre)
         material = unreal.EditorAssetLibrary.load_asset(ruta)

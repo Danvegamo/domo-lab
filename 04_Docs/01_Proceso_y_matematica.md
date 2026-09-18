@@ -57,7 +57,9 @@ patrón de prueba ──► se mira en la cúpula real y en la VR ──► Yaw,
 2. **Modelo → Unreal.** `importar_sala.py` importa el FBX, crea los materiales
    y arma el nivel. La cúpula (`SM_Domo`) lleva las normales hacia adentro y un
    UV con U = azimut y V = elevación: la textura que reciba se lee como lienzo
-   equirectangular sin ninguna corrección del lado de Unreal. El material de la
+   equirectangular; la única corrección del lado de Unreal es voltear la U
+   (`EspejoU`, porque la U de la cúpula crece hacia la izquierda de quien mira
+   desde adentro). El material de la
    cúpula es Unlit y emisivo; con Lumen, esa emisión ilumina butacas y muro.
    Detalle en [02_Sala_Unreal.md](02_Sala_Unreal.md).
 
@@ -501,7 +503,7 @@ sus pendientes están en [../06_Modelos/Domos_de_Colombia.md](../06_Modelos/Domo
   Unreal.** Sin esa bandera la sala entraba como una maqueta de 23 cm y se veía
   negra por el plano de recorte. Se corrigió del lado de Unreal, no en Blender,
   porque el mismo FBX produce el glTF.
-- **17 sep 2026 · Nanite apagado.** La sala son unos 43 000 triángulos; Nanite
+- **17 sep 2026 · Nanite apagado** (revertido el 18 de septiembre, ver abajo). La sala son unos 43 000 triángulos; Nanite
   no aporta y su indicador de uso en los materiales dio avisos. `USAR_NANITE`
   es la única constante que hay que voltear si entra fotogrametría.
 - **17 sep 2026 · Spout en vez de NDI hacia Unreal.** Obliga a un módulo C++
@@ -528,6 +530,19 @@ sus pendientes están en [../06_Modelos/Domos_de_Colombia.md](../06_Modelos/Domo
   fórmula (`V = 0,5 + elevación/180`) en los tres modelos de sala (180, 90 y
   45), sin normalizar al casquete. Ver
   [05_Modelos_de_sala.md](05_Modelos_de_sala.md), sección 3.
+- **18 sep 2026 · Nanite encendido, salvo la cúpula.** Con materiales PBR
+  que llevan el indicador de uso (un solo material base triplanar) el aviso
+  desapareció; la cúpula queda sin Nanite porque el SkyLight la captura como
+  cielo. Lumen pasó a trazado de rayos por hardware y el anti-aliasing a TSR.
+  Ver [02_Sala_Unreal.md](02_Sala_Unreal.md), sección 11.
+- **18 sep 2026 · La sala seguía verde con otro contenido en la cúpula.** El
+  editor en segundo plano tickeaba a 3 cuadros por segundo y el SkyLight
+  recapturaba repartido en unos 12 cuadros. Ver
+  [02_Sala_Unreal.md](02_Sala_Unreal.md), sección 12.
+- **18 sep 2026 · La imagen de Spout se veía espejada en la cúpula.** La U de
+  la cúpula crece hacia la izquierda de quien mira desde adentro; `M_Domo` la
+  voltea con `EspejoU`. Medido con un lienzo con texto. Ver
+  [02_Sala_Unreal.md](02_Sala_Unreal.md), sección 13.
 - **Sector de control: 7 m de arco.** La constante `ANCHO_CONTROL` vale 7,0 m
   (unos 35° con radio 11,5 m), pero la cabecera del script de Blender y el
   documento antiguo `Unreal_sala_domo.md` todavía hablan de 5 m y 25°. Manda

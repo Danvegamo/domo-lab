@@ -52,9 +52,10 @@ izquierda de quien mira desde adentro (azimut antihorario visto desde arriba),
 y en TouchDesigner `u` crece hacia la derecha (`x = sin(az)`). El frente
 (`u = 0,5`) y la costura (`u = 0 = 1`) caen bien, por eso el patrón simétrico
 no lo delataba. `M_DomoMedia` lo corrige con el parámetro `EspejoU` (1 por
-defecto). El camino de Spout usa la misma UV sin corregir, así que lo más
-probable es que la imagen de TouchDesigner también se vea espejada en la
-cúpula; está sin comprobar (ver la sección 9).
+defecto). El camino de Spout tenía el mismo espejo: se comprobó el 18 de
+septiembre de 2026 con un lienzo con texto mandado desde TouchDesigner, y
+`M_Domo` lleva desde entonces su propio `EspejoU` ([02_Sala_Unreal.md](02_Sala_Unreal.md),
+sección 13).
 
 ## 2. Cómo se arma
 
@@ -206,7 +207,9 @@ pulsaciones a la máquina mientras se usaba para otra cosa.
 `Brillo`, `FovSala` y `EspejoU`), `domo.Fuente Spout|Media`, `domo.Recargar`
 (vuelve a leer la playlist), `domo.Estado` (escribe en el log el reproductor,
 el tiempo, el tamaño de la textura, las pistas de audio y el nivel del audio) y
-`domo.Camara X Y Z Pitch Yaw [FOV]` (mueve al jugador; para capturas).
+`domo.Camara X Y Z Pitch Yaw [FOV]` (mueve al jugador; para capturas) y
+`domo.Preset VR|Render` (calidad de imagen; [02_Sala_Unreal.md](02_Sala_Unreal.md),
+sección 14).
 
 **Remote Control.** `RC_Domo` expone `Play`, `Pause`, `TogglePause`, `Next`,
 `Prev`, `GoToCue`, `Reiniciar`, `SetParam`, `Blackout`, `ToggleBlackout`,
@@ -227,11 +230,18 @@ audio solo suena en Play, `-game` o el build, para que el editor no suene
 mientras se trabaja. `bReproducirEnEditor` lo apaga. Durante una sesión de
 Play manda la copia de juego; al salir, la del editor vuelve a abrir el cue.
 
-**Spout o Media.** Los tres niveles arrancan en `Media`
-(`FUENTE_INICIAL` en `crear_media_domo.py`). Para trabajar con TouchDesigner
-en vivo: `Fuente = Spout` en el panel de detalles del actor
-`DomeMediaController`, `domo.Fuente Spout` en la consola del editor, o la
-tecla S en Play. Con `Media`, el controlador apaga el tick del
+**Spout o Media.** Desde el 18 de septiembre de 2026 los tres niveles se
+guardan en `Spout` (`FUENTE_INICIAL` en `crear_media_domo.py`): el editor, y
+Play dentro del editor, arrancan con TouchDesigner en vivo, como antes de la
+versión standalone. Fuera del editor (el build empaquetado y `-game`) el
+controlador arranca en `Media`: lo decide `FuenteFueraDelEditor`, una
+propiedad de configuración del controlador (`Media` por defecto; se cambia con
+`[/Script/DomoVR.DomeMediaController]` `FuenteFueraDelEditor=Spout` en
+`Config/DefaultGame.ini` o en el `Game.ini` del build). `-DomoFuente=Spout` o
+`-DomoFuente=Media` en la línea de comandos pisa a las dos. El log lo dice al
+arrancar: `Fuente al arrancar: Media`. Para cambiar en vivo: `Fuente` en el
+panel de detalles del actor `DomeMediaController`, `domo.Fuente Spout|Media`
+en la consola, o la tecla S en Play. Con `Media`, el controlador apaga el tick del
 `SpoutDomeReceiver` (así no le devuelve su material a la cúpula ni llena el log
 de "no disponible todavia"); con `Spout`, cierra el video y el receptor vuelve
 a poner su material (`ASpoutDomeReceiver::ReaplicarMaterial`, que se agregó
@@ -359,18 +369,14 @@ este proyecto, y no existen en el build empaquetado.
 
 ## 9. Pendiente de confirmar
 
-- **Espejo en el camino de Spout.** La U de la cúpula está espejada respecto
-  de la convención de TouchDesigner (sección 1). `M_DomoMedia` lo corrige con
-  `EspejoU`; `M_Domo` no. Hay que mandar por Spout algo con texto y mirar si se
-  lee al revés; si es así, la corrección natural es la misma en `M_Domo`
-  (`u = 1 − U`) o en la UV que escribe Blender, que afectaría a las dos rutas.
+- **Espejo en el camino de Spout: resuelto** el 18 de septiembre de 2026
+  (`EspejoU` en `M_Domo`; [02_Sala_Unreal.md](02_Sala_Unreal.md), sección 13).
 - **El build en el visor.** Se probó sin visor (`-nohmd`); falta abrirlo con
   SteamVR o Virtual Desktop y mirar la cúpula en VR.
 - **Los `Failed to create pipeline state` del arranque del build** (sección 7).
 - **Remote Control en el build** con `-RCWebControlEnable`: no probado.
 - **HEVC y 60 cuadros**: no probados.
-- **Indicador de uso Nanite.** En `-game`, los materiales de la sala
-  (`M_Muro`, `M_Piso`, `M_Butaca`, …) avisan `missing usage flag Nanite!
-  Default Material will be used in game`. No es de esta parte (el de
-  `M_DomoMedia` ya va con el indicador puesto), pero en un build esas mallas
-  saldrían con el material por defecto si son Nanite.
+- **Indicador de uso Nanite: resuelto** el 18 de septiembre de 2026. Las
+  superficies de la sala son instancias de `M_SalaPBR`, que lleva el
+  indicador; el aviso ya no sale en `-game` ([02_Sala_Unreal.md](02_Sala_Unreal.md),
+  sección 11). El build no se volvió a empaquetar después de ese cambio.
