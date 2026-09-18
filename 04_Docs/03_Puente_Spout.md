@@ -127,6 +127,18 @@ muestrear, que es lo que espera el pin de Emissive Color. No hay que configurar
 nada. Si la cúpula se ve lavada o apagada, el lugar a revisar es la cadena de
 TouchDesigner (formato de salida del `Syphon Spout Out`), no el sRGB de Unreal.
 
+**El receptor solo lee texturas de 8 bits por canal** (medido el 17 de
+septiembre de 2026). Si TouchDesigner manda una textura de 16-bit float, que es
+lo que sale del sistema de pantallas `VIDEO_DOME` y de cualquier cadena que lo
+herede, `SpoutReceiver` devuelve falso y `ASpoutDomeReceiver` se queda mostrando
+el último frame que pudo leer, sin avisar en pantalla: solo aparece el aviso
+"no disponible todavia" cada unos 5 segundos en el log. El síntoma es una
+cúpula que parece congelada en un cuadro viejo aunque TouchDesigner muestre
+otra cosa. El arreglo va del lado de TouchDesigner: un Reorder TOP (o cualquier
+TOP) con formato `rgba8fixed` justo antes del `Syphon Spout Out`; en
+`build_domo.py` ese nodo es `alfa_unreal`. La prueba que lo destapó fue un
+`constant` rojo de 8 bits, que sí llegaba mientras la cadena completa no.
+
 ## 7. El crash `ERROR_MOD_NOT_FOUND` (`0xC06D007E`) y su arreglo
 
 Es un fallo del plugin original en la rama `5.8_fix`, no de este proyecto.
@@ -179,6 +191,12 @@ TouchDesigner, sin volcados nuevos.
 5. La cúpula muestra la imagen en vivo y las butacas cambian de tono con ella.
    Si se ve la textura de marcador de posición, revisar en `Saved/Logs/DomoVR.log`
    los avisos de `ASpoutDomeReceiver` (`LogTemp`) y `LogSpoutPlugin`.
+   Si la cúpula muestra un cuadro viejo que no cambia aunque TouchDesigner sí
+   cambie, y el log repite "no disponible todavia" cada ~5 s, el sender está
+   mandando 16-bit float: el receptor solo lee 8 bits por canal (sección 6).
+   Confirmar que el TOP anterior al `Syphon Spout Out` (`alfa_unreal`) tenga
+   formato `rgba8fixed`; un `constant` rojo de 8 bits sirve como prueba de
+   que el camino funciona.
 6. Sin depender del render: por MCP, `CaptureAssetImage` sobre la textura del
    parámetro `SpoutTexture` de la instancia dinámica (`MID_MI_Domo_0`) muestra
    el frame real de TouchDesigner. Así se confirmó que la señal llega al material.

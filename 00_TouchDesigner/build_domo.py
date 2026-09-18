@@ -565,7 +565,10 @@ lienzo(unreal)
 wire(out_domo, unreal)
 giro_un = mk(D, transformTOP, 'giro_unreal', 1000, -100, tunit='fraction', extend='repeat', tx=-0.25)
 wire(unreal, giro_un)
-alfa = mk(D, reorderTOP, 'alfa_unreal', 1200, -100, outputalphachan='one')
+# El receptor Spout de Unreal solo lee texturas de 8 bits: con el lienzo en
+# 16-bit float (lo que sale de VIDEO_DOME) se queda con el ultimo frame que
+# pudo leer, sin avisar. Aqui se fija el formato antes del sender.
+alfa = mk(D, reorderTOP, 'alfa_unreal', 1200, -100, outputalphachan='one', format='rgba8fixed')
 wire(giro_un, alfa)
 sp_un = mk(D, syphonspoutoutTOP, 'spout_unreal', 1400, -100)
 expr(sp_un, 'sendername', 'parent().par.Spoutunrealnombre')

@@ -320,8 +320,10 @@ en la mitad superior, ya con Yaw, Pitch y el FOV del modelo aplicados. Se
 reconstruye desde el domemaster: `para_unreal` (Projection TOP `fisheye →
 equirectangular`, `rx = -90`, fov igual al de `domo`), `giro_unreal` (Transform
 TOP, `tx = -0.25`, `repeat`) que deshace el `ry = 90` del domemaster,
-`alfa_unreal` (Reorder TOP, alfa en uno) y `spout_unreal`, que lo manda con el
-nombre que lee el `SpoutDomeReceiver` del nivel de Unreal. Medido con el patrón:
+`alfa_unreal` (Reorder TOP, alfa en uno y formato fijado a `rgba8fixed`, porque
+el receptor de Unreal solo lee 8 bits por canal; ver la sección 8) y
+`spout_unreal`, que lo manda con el nombre que lee el `SpoutDomeReceiver` del
+nivel de Unreal. Medido con el patrón:
 el cuadro blanco del frente vuelve a `u 0.5, v 0.75`. La mitad inferior del
 lienzo queda sin imagen, que es lo que corresponde a un domo de 180.
 
@@ -412,6 +414,14 @@ queda en el centro del domemaster y la costura del lienzo va a parar detrás.
 - **El sender de la sala VR se llama `TD_Domo_Lab`.** El `SpoutDomeReceiver`
   del nivel tiene que leer ese nombre; si se cambia en la página Salidas hay
   que cambiarlo también en el actor (ver [03_Puente_Spout.md](03_Puente_Spout.md)).
+- **El receptor de Unreal no lee 16-bit float.** `ASpoutDomeReceiver` solo
+  acepta texturas de 8 bits por canal. `VIDEO_DOME`, y cualquier cadena que
+  herede de él, entrega 16-bit float; con ese formato `SpoutReceiver` devuelve
+  falso y la cúpula se queda congelada en el último frame que pudo leer, sin
+  aviso en pantalla (solo "no disponible todavia" cada ~5 s en el log de
+  Unreal). Por eso `alfa_unreal` fija el formato a `rgba8fixed` justo antes de
+  `spout_unreal`. Lo destapó un `constant` rojo de 8 bits, que sí llegaba
+  mientras la cadena completa no (medido el 17 de septiembre de 2026).
 - **VIDEO_DOME termina en un Null, no en un Out TOP.** `IN_169` lo lee con un
   Select TOP apuntado a `VIDEO_DOME/out_dome`; no está cableado por conector.
 - **VIDEO_DOME no conserva solo su montaje** cuando corre `build_domo.py`,
