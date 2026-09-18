@@ -30,3 +30,6 @@ Thumbs.db
 *.dir/
 Backup*/
 *.tmp
+
+# Unreal escribe este perfil de vista previa solo; no es configuracion del proyecto
+03_Unreal/DomoVR/Config/DefaultEditor.ini

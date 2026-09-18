@@ -57,7 +57,7 @@ MI_DOMO_PATH = "/Game/Sala/Materials/MI_Domo"
 BP_SPOUT_RECEIVER_PATH = "/Game/Sala/BP_SpoutDomoReceiver"
 
 # TD_Domo_Final = Pantallas (SPOUT_UNREAL). El de dosis.45 manda "TDSyphonSpoutOut".
-SPOUT_SENDER_NAME = "TD_Domo_Final"
+SPOUT_SENDER_NAME = "TD_Domo_Lab"
 PARAMETRO_TEXTURA_DOMO = "SpoutTexture"
 
 # Reusa la lista de materiales de la sala y el arreglo de Nanite de

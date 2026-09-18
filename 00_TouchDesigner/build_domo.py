@@ -1,0 +1,627 @@
+"""
+Construye /project1/DOMO: el sistema de senal para cupula.
+
+Se ejecuta DENTRO de TouchDesigner (Textport, un Execute DAT, o por MCP):
+
+    BUILD_DIR = r'C:/ruta/al/repo/00_TouchDesigner'
+    exec(open(BUILD_DIR + '/build_domo.py', encoding='utf-8').read())
+
+Es idempotente: si /project1/DOMO ya existe lo destruye y lo vuelve a crear,
+pero antes guarda el valor de todos los parametros personalizados (rutas de
+video, angulos, nombres de Spout...) y los reescribe al final. Asi se puede
+volver a correr tras editar este archivo sin perder la configuracion.
+
+Estructura que deja:
+
+    DOMO                      COMP raiz, atajo `parent.DOMO`, paginas Domo y Salidas
+      IN_360                  video 360 equirectangular (+ costura opcional)
+      IN_180                  domemaster fisheye, VR180 mono o VR180 lado a lado
+      IN_169                  video plano (16:9 o cualquier aspecto) sobre una pantalla en la cupula
+      AUDIO                   audio del video, de un archivo o de la entrada, con EQ, retardo y limitador
+      mezcla -> equi          la fuente elegida, como lienzo equirectangular 2:1
+      domo -> out_domo        el domemaster fisheye con el FOV del modelo de sala
+      spout_domo / ndi_domo   salidas del domemaster
+      para_unreal -> spout_unreal   la version equirectangular que espera la sala VR
+      grabar                  Movie File Out del domemaster
+
+Cada modulo tiene su parametro `Activo`: apagado, el modulo entrega negro y
+no cocina (el Switch solo cocina la entrada elegida). Cada bloque lleva su
+caja de comentario (Annotate COMP) que explica que hace.
+
+Convencion del lienzo equirectangular: u = 0.5 es el frente, v = 0.5 el
+horizonte y v = 1 el cenit. La mitad superior del lienzo ES la cupula. Es el
+mismo formato que espera la cupula de la sala VR en Unreal.
+"""
+
+import os
+
+try:
+    BUILD_DIR
+except NameError:
+    BUILD_DIR = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else project.folder + '/00_TouchDesigner'
+
+RAIZ = op('/project1')
+NOMBRE = 'DOMO'
+VERSION = '1.0 (17 sep 2026)'
+
+# ---------------------------------------------------------------- utilidades
+
+def leer(nombre):
+    ruta = os.path.join(BUILD_DIR, 'shaders', nombre)
+    with open(ruta, encoding='utf-8') as f:
+        return f.read()
+
+
+def setpar(o, nombres, val):
+    """Escribe el primer parametro que exista de la lista. Devuelve True si pudo."""
+    if isinstance(nombres, str):
+        nombres = [nombres]
+    for n in nombres:
+        p = getattr(o.par, n, None)
+        if p is not None:
+            try:
+                p.val = val
+                return True
+            except Exception as e:
+                print('[DOMO] %s.%s = %r fallo: %s' % (o.path, n, val, e))
+                return False
+    print('[DOMO] %s no tiene ninguno de %s' % (o.path, nombres))
+    return False
+
+
+def expr(o, nombre, e):
+    p = getattr(o.par, nombre, None)
+    if p is None:
+        print('[DOMO] %s no tiene el par %s' % (o.path, nombre))
+        return
+    p.expr = e
+
+
+def mk(padre, tipo, nombre, x, y, **pars):
+    viejo = padre.op(nombre)
+    if viejo:
+        viejo.destroy()
+    o = padre.create(tipo, nombre)
+    o.nodeX, o.nodeY = x, y
+    o.viewer = True
+    for k, v in pars.items():
+        setpar(o, k, v)
+    return o
+
+
+def wire(a, b, i=0):
+    b.inputConnectors[i].connect(a.outputConnectors[0])
+
+
+def lienzo(o):
+    """Resolucion del lienzo equirectangular: Ancho x Ancho/2 del COMP raiz."""
+    setpar(o, 'outputresolution', 'custom')
+    expr(o, 'resolutionw', 'parent.DOMO.par.Ancho')
+    expr(o, 'resolutionh', 'parent.DOMO.par.Ancho // 2')
+
+
+def caja(padre, nombre, titulo, cuerpo, nodos, color=(0.16, 0.18, 0.22), pad=(60, 60), extra_arriba=0):
+    """Annotate COMP que encierra `nodos` con un titulo y un texto explicativo.
+
+    Trampas medidas en TD 2025.32460: si el Annotate COMP se crea con nombre
+    (`create(annotateCOMP, 'x')`) o se le enciende el flag `utility`, se
+    autodestruye unos frames despues. Hay que crearlo sin nombre, configurarlo
+    y renombrarlo al final. El aviso "Invalid path for node .../annotate/annotation"
+    en su `back` interno lo trae de fabrica y no afecta.
+    """
+    viejo = padre.op(nombre)
+    if viejo:
+        viejo.destroy()
+    c = padre.create(annotateCOMP)
+    x0 = min(n.nodeX for n in nodos) - pad[0]
+    y0 = min(n.nodeY for n in nodos) - pad[1]
+    x1 = max(n.nodeX + max(n.nodeWidth, 160) for n in nodos) + pad[0]
+    y1 = max(n.nodeY + max(n.nodeHeight, 100) for n in nodos) + pad[1] + extra_arriba
+    c.nodeX, c.nodeY = x0, y0
+    c.nodeWidth, c.nodeHeight = x1 - x0, y1 - y0
+    setpar(c, 'Titletext', titulo)
+    setpar(c, 'Bodytext', cuerpo)
+    setpar(c, 'Bodywordwrap', True)
+    setpar(c, 'Bodyfontsize', 11)
+    setpar(c, 'Backcolorr', color[0])
+    setpar(c, 'Backcolorg', color[1])
+    setpar(c, 'Backcolorb', color[2])
+    setpar(c, 'Backcoloralpha', 0.9)
+    setpar(c, 'layerzone', 'belowgrid')
+    c.name = nombre
+    return c
+
+
+def menu(pagina, nombre, etiqueta, nombres, etiquetas, defecto=0):
+    p = pagina.appendMenu(nombre, label=etiqueta)[0]
+    p.menuNames = nombres
+    p.menuLabels = etiquetas
+    p.val = nombres[defecto]
+    p.default = nombres[defecto]
+    return p
+
+
+def flotante(pagina, nombre, etiqueta, val, lo=None, hi=None):
+    p = pagina.appendFloat(nombre, label=etiqueta)[0]
+    p.val = val
+    p.default = val
+    if lo is not None:
+        p.normMin = lo
+        p.min = lo
+        p.clampMin = True
+    if hi is not None:
+        p.normMax = hi
+    return p
+
+
+def toggle(pagina, nombre, etiqueta, val):
+    p = pagina.appendToggle(nombre, label=etiqueta)[0]
+    p.val = val
+    p.default = val
+    return p
+
+
+def texto(pagina, nombre, etiqueta, val):
+    p = pagina.appendStr(nombre, label=etiqueta)[0]
+    p.val = val
+    p.default = val
+    return p
+
+
+def negro_y_salida(comp, resultado, x):
+    """Cierra un modulo: Switch [negro, resultado] gobernado por Activo, y out1."""
+    negro = mk(comp, constantTOP, 'negro', x, -150, colorr=0, colorg=0, colorb=0, alpha=1)
+    lienzo(negro)
+    sw = mk(comp, switchTOP, 'activo', x + 200, 0)
+    wire(negro, sw, 0)
+    wire(resultado, sw, 1)
+    expr(sw, 'index', 'int(parent().par.Activo)')
+    salida = mk(comp, outTOP, 'out1', x + 400, 0)
+    wire(sw, salida)
+    return sw, salida
+
+
+# ------------------------------------------------- conservar la configuracion
+
+guardado = {}
+vd_previo = {'pars': {}, 'screens': None, 'moments': None}
+viejo = RAIZ.op(NOMBRE)
+if viejo:
+    # VIDEO_DOME (dentro de IN_169) guarda su montaje en pars y en dos tablas;
+    # su propio constructor no lo puede conservar porque aqui se destruye todo
+    # DOMO antes de que corra. Se copia aqui y se reescribe al final.
+    vd = viejo.op('IN_169/VIDEO_DOME')
+    if vd is not None:
+        for p in vd.customPars:
+            if p.isPulse or p.isMomentary:
+                continue
+            try:
+                vd_previo['pars'][p.name] = ('expr', p.expr) if p.mode == ParMode.EXPRESSION else ('val', p.eval())
+            except Exception:
+                pass
+        for t in ('screens', 'moments'):
+            d = vd.op(t)
+            if d is not None and d.numRows > 1:
+                vd_previo[t] = d.text
+    for comp in [viejo] + [c for c in viejo.children if c.isCOMP and c.customPars]:
+        rel = comp.path[len(viejo.path):] or '.'
+        guardado[rel] = {}
+        for p in comp.customPars:
+            if p.mode == ParMode.CONSTANT and p.style not in ('Pulse',):
+                try:
+                    guardado[rel][p.name] = p.val
+                except Exception:
+                    pass
+    viejo.destroy()
+    print('[DOMO] configuracion guardada de %d COMPs' % len(guardado))
+
+# --------------------------------------------------------------------- raiz
+
+D = RAIZ.create(baseCOMP, NOMBRE)
+D.nodeX, D.nodeY = 0, 0
+D.viewer = True
+D.par.parentshortcut = 'DOMO'
+
+pg = D.appendCustomPage('Domo')
+menu(pg, 'Fuente', 'Fuente al aire',
+     ['v360', 'v180', 'v169', 'patron'],
+     ['Video 360 (IN_360)', 'Video 180 / domemaster (IN_180)', 'Video plano 16:9 (IN_169)',
+      'Patron de prueba (calibrar la sala)'], 0)
+menu(pg, 'Modelo', 'Modelo de sala',
+     ['domo180', 'domo90', 'domo45', 'custom'],
+     ['Domo 180 (media esfera, planetario)', 'Domo 90 (casquete)', 'Domo 45 (casquete chico)', 'Otro FOV'], 0)
+flotante(pg, 'Fovcustom', 'FOV si el modelo es Otro (grados)', 120, 10, 360)
+flotante(pg, 'Yaw', 'Girar el contenido en azimut (grados)', 0, -180, 180)
+flotante(pg, 'Pitch', 'Inclinar el contenido hacia el cenit (grados)', 0, -90, 90)
+menu(pg, 'Res', 'Resolucion del domemaster',
+     ['r1024', 'r2048', 'r4096'], ['1024 (ensayo)', '2048 (tiempo real)', '4096 (grabar)'], 1)
+p = pg.appendInt('Ancho', label='Ancho del lienzo equirectangular')[0]
+p.val = 4096
+p.default = 4096
+p.normMin, p.normMax = 1024, 8192
+p = pg.appendStr('Version', label='Version')[0]
+p.val = VERSION
+p.readOnly = True
+
+ps = D.appendCustomPage('Salidas')
+toggle(ps, 'Spoutunreal', 'Spout a la sala VR (equirectangular)', True)
+texto(ps, 'Spoutunrealnombre', 'Nombre del sender para Unreal', 'TD_Domo_Lab')
+toggle(ps, 'Spoutdomo', 'Spout del domemaster', False)
+texto(ps, 'Spoutdomonombre', 'Nombre del sender domemaster', 'TD_Domemaster')
+toggle(ps, 'Ndi', 'NDI del domemaster', False)
+texto(ps, 'Ndinombre', 'Nombre NDI', 'TD_Domemaster')
+toggle(ps, 'Grabar', 'Grabar el domemaster (HAP)', False)
+p = ps.appendFolder('Grabarcarpeta', label='Carpeta de grabacion')[0]
+p.val = '05_Media'
+p.default = '05_Media'
+
+# ------------------------------------------------------------------ IN_360
+
+M = D.create(baseCOMP, 'IN_360')
+M.nodeX, M.nodeY = -600, 450
+M.viewer = True
+pm = M.appendCustomPage('Video360')
+toggle(pm, 'Activo', 'Activo', True)
+p = pm.appendFile('Archivo', label='Archivo 360 equirectangular (2:1)')[0]
+p.val = ''
+toggle(pm, 'Play', 'Reproducir', True)
+flotante(pm, 'Velocidad', 'Velocidad', 1.0, 0, 4)
+toggle(pm, 'Costura', 'Fundir la costura del stitching', False)
+flotante(pm, 'Costurapos', 'Posicion de la costura (0..1 en u)', 0.0, 0, 1)
+flotante(pm, 'Costuraancho', 'Ancho de la franja', 0.03, 0, 0.2)
+flotante(pm, 'Costurablur', 'Desenfoque horizontal', 0.02, 0, 0.1)
+flotante(pm, 'Costuraoffsety', 'Corrimiento vertical del lado derecho', 0.0, -0.05, 0.05)
+flotante(pm, 'Costuraganancia', 'Ganancia del lado derecho', 1.0, 0.5, 1.5)
+toggle(pm, 'Costuraguia', 'Pintar la costura en rojo', False)
+
+video = mk(M, moviefileinTOP, 'video', 0, 0)
+expr(video, 'file', 'parent().par.Archivo')
+expr(video, 'play', 'parent().par.Play')
+expr(video, 'speed', 'parent().par.Velocidad')
+setpar(video, 'textendright', 'cycle')
+
+glsl_dat = mk(M, textDAT, 'costura_glsl', 200, -250)
+glsl_dat.text = leer('costura.frag')
+cos = mk(M, glslTOP, 'costura', 200, 0)
+cos.par.pixeldat = glsl_dat
+setpar(cos, 'inputextenduv', 'repeat')
+setpar(cos, 'vec', 2)
+setpar(cos, 'vec0name', 'uSeam')
+expr(cos, 'vec0valuex', 'parent().par.Costurapos')
+expr(cos, 'vec0valuey', 'parent().par.Costuraancho')
+expr(cos, 'vec0valuez', 'parent().par.Costurablur')
+expr(cos, 'vec0valuew', 'int(parent().par.Costuraguia)')
+setpar(cos, 'vec1name', 'uFix')
+expr(cos, 'vec1valuex', 'parent().par.Costuraoffsety')
+expr(cos, 'vec1valuey', 'parent().par.Costuraganancia')
+setpar(cos, 'vec1valuez', 0)
+setpar(cos, 'vec1valuew', 0)
+wire(video, cos)
+
+sw_cos = mk(M, switchTOP, 'con_costura', 400, 0)
+wire(video, sw_cos, 0)
+wire(cos, sw_cos, 1)
+expr(sw_cos, 'index', 'int(parent().par.Costura)')
+
+fit360 = mk(M, fitTOP, 'lienzo', 600, 0, fit='fitbest')
+lienzo(fit360)
+wire(sw_cos, fit360)
+negro_y_salida(M, fit360, 800)
+
+caja(M, 'nota', 'IN_360: video 360 equirectangular',
+     'El archivo ya viene en el formato del lienzo (2:1, el frente en el centro), asi que solo se '
+     'ajusta al tamano del lienzo. Si el stitching dejo una linea vertical, enciende Costura y mueve '
+     'Costurapos hasta que la guia roja caiga sobre ella; luego apaga la guia.',
+     [video, cos, sw_cos, fit360, M.op('negro'), M.op('activo'), M.op('out1')], (0.13, 0.20, 0.16))
+
+# ------------------------------------------------------------------ IN_180
+
+M = D.create(baseCOMP, 'IN_180')
+M.nodeX, M.nodeY = -600, 250
+M.viewer = True
+pm = M.appendCustomPage('Video180')
+toggle(pm, 'Activo', 'Activo', True)
+p = pm.appendFile('Archivo', label='Archivo 180 (domemaster o VR180)')[0]
+p.val = ''
+toggle(pm, 'Play', 'Reproducir', True)
+flotante(pm, 'Velocidad', 'Velocidad', 1.0, 0, 4)
+menu(pm, 'Formato', 'Formato del archivo',
+     ['domemaster', 'vr180', 'vr180sbs'],
+     ['Domemaster (fisheye 180, cuadrado)', 'VR180 mono (media equirectangular, cuadrado)', 'VR180 lado a lado (se usa el ojo izquierdo)'], 0)
+
+video = mk(M, moviefileinTOP, 'video', 0, 0)
+expr(video, 'file', 'parent().par.Archivo')
+expr(video, 'play', 'parent().par.Play')
+expr(video, 'speed', 'parent().par.Velocidad')
+setpar(video, 'textendright', 'cycle')
+
+dm = mk(M, projectionTOP, 'domemaster_a_equi', 200, 150, input='fisheye', output='equirectangular', fov=180, rx=-90)
+lienzo(dm)
+wire(video, dm)
+
+sbs = mk(M, cropTOP, 'ojo_izquierdo', 200, -100, cropright=0.5, croprightunit='fraction')
+wire(video, sbs)
+sw_ojo = mk(M, switchTOP, 'mono_o_sbs', 400, -100)
+wire(video, sw_ojo, 0)
+wire(sbs, sw_ojo, 1)
+expr(sw_ojo, 'index', "1 if parent().par.Formato == 'vr180sbs' else 0")
+fit180 = mk(M, fitTOP, 'al_centro', 600, -100, fit='fitbest', justifyh='center', justifyv='center')
+lienzo(fit180)
+wire(sw_ojo, fit180)
+
+sw_fmt = mk(M, switchTOP, 'formato', 800, 0)
+wire(dm, sw_fmt, 0)
+wire(fit180, sw_fmt, 1)
+expr(sw_fmt, 'index', "0 if parent().par.Formato == 'domemaster' else 1")
+negro_y_salida(M, sw_fmt, 1000)
+
+caja(M, 'nota', 'IN_180: domemaster o VR180',
+     'Un domemaster (fisheye 180) se convierte a equirectangular con el Projection TOP; rx = -90 deja '
+     'el cenit arriba, en la mitad superior del lienzo. Un VR180 (media esfera, cuadrado) se centra '
+     'en el lienzo con bandas negras a los lados: ocupa el frente, del horizonte al cenit y hacia abajo. '
+     'Sube Pitch en DOMO para llevarlo a la cupula.',
+     [video, dm, sbs, sw_ojo, fit180, sw_fmt, M.op('negro'), M.op('activo'), M.op('out1')], (0.13, 0.17, 0.22))
+
+# ------------------------------------------------------------------ IN_169
+#
+# El video plano no va sobre una sola pantalla: es el sistema de pantallas de
+# Domo_Pantallas (video_dome/build_video_dome.py), que se construye aqui
+# adentro. Sus montajes (una pantalla al frente, cuatro salas, corona cosida,
+# anillos, cilindro, mosaico...) viven en la tabla `screens` y en los templates
+# y versiones; el fondo desenfocado, el editor con el mouse y los momentos
+# vienen con el. Su fuente puede ser un archivo, NDI o Spout (par Fuente de
+# VIDEO_DOME). Entrega un domemaster con el frente ABAJO, la misma convencion
+# que `domo`, y aqui se pasa al lienzo equirectangular con la misma receta que
+# para_unreal: fisheye -> equirect rx -90 y corrimiento de -0.25.
+
+M = D.create(baseCOMP, 'IN_169')
+M.nodeX, M.nodeY = -600, 50
+M.viewer = True
+pm = M.appendCustomPage('Video169')
+toggle(pm, 'Activo', 'Activo', True)
+p = pm.appendStr('Donde', label='El montaje se edita en')[0]
+p.val = 'IN_169/VIDEO_DOME: paginas Video, Montaje, Pantalla, Espacio, Versiones'
+p.readOnly = True
+
+ns = dict(globals())
+ns.update({
+    'TEMPLATE_TARGET': M.path,
+    'VIDEO_DOME_DIR': os.path.join(BUILD_DIR, 'video_dome'),
+    'VIDEO_DOME_VIDEO': '',
+    'VIDEO_DOME_SET_FPS': False,
+    'RESET_DEFAULTS': True,
+})
+with open(os.path.join(BUILD_DIR, 'video_dome', 'build_video_dome.py'), encoding='utf-8') as fh:
+    exec(compile(fh.read(), 'build_video_dome.py', 'exec'), ns)
+vd = M.op('VIDEO_DOME')
+vd.nodeX, vd.nodeY = 0, 0
+
+# VIDEO_DOME termina en un Null (out_dome), no en un Out TOP: se lee con un Select.
+sel_vd = mk(M, selectTOP, 'domemaster', 300, 0)
+sel_vd.par.top = 'VIDEO_DOME/out_dome'
+a_equi = mk(M, projectionTOP, 'domemaster_a_equi', 500, 0, input='fisheye', output='equirectangular', rx=-90, ry=0, rz=0)
+expr(a_equi, 'fov', "op('VIDEO_DOME').par.Domefov")
+lienzo(a_equi)
+wire(sel_vd, a_equi)
+giro169 = mk(M, transformTOP, 'al_frente', 700, 0, tunit='fraction', extend='repeat', tx=-0.25)
+wire(a_equi, giro169)
+negro_y_salida(M, giro169, 900)
+
+caja(M, 'nota', 'IN_169: video plano sobre pantallas en la cupula',
+     'VIDEO_DOME es el sistema de pantallas de Domo_Pantallas: el shader recorre el domemaster y '
+     'pregunta que pantalla cubre cada pixel; las pantallas son filas de la tabla screens. Ahi '
+     'estan los templates (una al frente, sala de 4, corona cosida, anillos, cilindro, mosaico), '
+     'el fondo desenfocado, el editor con el mouse y las versiones guardadas. Su par Fuente elige '
+     'archivo, NDI o Spout. Su domemaster (frente abajo) se pasa al lienzo equirectangular igual '
+     'que para_unreal.',
+     [vd, sel_vd, a_equi, giro169, M.op('negro'), M.op('activo'), M.op('out1')], (0.22, 0.17, 0.13))
+
+# ------------------------------------------------------------------- AUDIO
+
+M = D.create(baseCOMP, 'AUDIO')
+M.nodeX, M.nodeY = -600, -200
+M.viewer = True
+pm = M.appendCustomPage('Audio')
+toggle(pm, 'Activo', 'Activo', True)
+menu(pm, 'Fuente', 'Fuente de audio', ['video', 'archivo', 'entrada'],
+     ['El audio del video al aire', 'Un archivo de audio', 'La entrada de audio del equipo'], 0)
+p = pm.appendFile('Archivo', label='Archivo de audio')[0]
+p.val = ''
+flotante(pm, 'Ganancia', 'Ganancia', 1.0, 0, 4)
+flotante(pm, 'Graves', 'Graves 100 Hz (dB)', 0, -12, 12)
+flotante(pm, 'Medios', 'Medios 1 kHz (dB)', 0, -12, 12)
+flotante(pm, 'Agudos', 'Agudos 8 kHz (dB)', 0, -12, 12)
+flotante(pm, 'Retardo', 'Retardo para sincronizar con la imagen (ms)', 0, 0, 2000)
+toggle(pm, 'Limitador', 'Limitador de picos', True)
+
+a_video = mk(M, audiomovieCHOP, 'del_video', 0, 100)
+expr(a_video, 'moviefileintop',
+     "[op('../IN_360/video'), op('../IN_180/video'), op('../IN_169/VIDEO_DOME/movie1'), op('../IN_360/video')][parent.DOMO.par.Fuente.menuIndex]")
+a_arch = mk(M, audiofileinCHOP, 'archivo', 0, -50, repeat=True)
+expr(a_arch, 'file', 'parent().par.Archivo')
+expr(a_arch, 'play', "parent().par.Activo and parent().par.Fuente == 'archivo'")
+a_in = mk(M, audiodeviceinCHOP, 'entrada', 0, -200)
+expr(a_in, 'active', "parent().par.Activo and parent().par.Fuente == 'entrada'")
+
+sw_a = mk(M, switchCHOP, 'fuente', 200, 0)
+wire(a_video, sw_a, 0)
+wire(a_arch, sw_a, 1)
+wire(a_in, sw_a, 2)
+expr(sw_a, 'index', 'parent().par.Fuente.menuIndex')
+
+gan = mk(M, mathCHOP, 'ganancia', 400, 0)
+expr(gan, 'gain', 'parent().par.Ganancia')
+wire(sw_a, gan)
+
+eq = mk(M, audioparaeqCHOP, 'eq', 600, 0, units='frequency',
+        enableeq1=True, frequencyhz1=100, bandwidth1=1.0,
+        enableeq2=True, frequencyhz2=1000, bandwidth2=1.0,
+        enableeq3=True, frequencyhz3=8000, bandwidth3=1.0)
+expr(eq, 'boost1', 'parent().par.Graves')
+expr(eq, 'boost2', 'parent().par.Medios')
+expr(eq, 'boost3', 'parent().par.Agudos')
+wire(gan, eq)
+
+ret = mk(M, delayCHOP, 'retardo', 800, 0, delayunit='seconds')
+expr(ret, 'delay', 'parent().par.Retardo / 1000.0')
+wire(eq, ret)
+
+din = mk(M, audiodynamicsCHOP, 'dinamica', 1000, 0, enablecompressor=False, thresholdlimiter=-1.0)
+expr(din, 'enablelimiter', 'parent().par.Limitador')
+wire(ret, din)
+
+a_out = mk(M, outCHOP, 'out1', 1200, 100)
+wire(din, a_out)
+dev = mk(M, audiodeviceoutCHOP, 'salida', 1200, -100)
+expr(dev, 'active', 'parent().par.Activo')
+wire(din, dev)
+
+caja(M, 'nota', 'AUDIO: la cadena de sonido',
+     'Fuente elige entre el audio del video que esta al aire (sigue a DOMO.Fuente), un archivo '
+     'aparte o la entrada del equipo. Luego ganancia, EQ de tres bandas, retardo en milisegundos '
+     'para cuadrar con la imagen y un limitador que evita picos. Sale por el dispositivo por '
+     'defecto y por out1 para quien quiera grabarlo o analizarlo.',
+     [a_video, a_arch, a_in, sw_a, gan, eq, ret, din, a_out, dev], (0.20, 0.13, 0.20))
+
+# --------------------------------------------------------- mezcla y modelo
+
+# Patron de prueba: arriba verde (la cupula), abajo rojo (bajo el horizonte),
+# columna negra en u = 0 (la costura del lienzo), cuadro blanco al frente a
+# 45 grados de elevacion y marca azul en el cenit. Con el se verifico la
+# orientacion del domemaster y de la sala VR (ver 05_Preview/pruebas/).
+patron_dat = mk(D, textDAT, 'patron_glsl', -400, -100)
+patron_dat.text = leer('patron.frag')
+patron = mk(D, glslTOP, 'patron', -200, -100)
+patron.par.pixeldat = patron_dat
+lienzo(patron)
+
+mez = mk(D, switchTOP, 'mezcla', -200, 250)
+wire(D.op('IN_360'), mez, 0)
+wire(D.op('IN_180'), mez, 1)
+wire(D.op('IN_169'), mez, 2)
+wire(patron, mez, 3)
+expr(mez, 'index', 'parent().par.Fuente.menuIndex')
+equi = mk(D, nullTOP, 'equi', 0, 250)
+wire(mez, equi)
+
+# Yaw: un corrimiento horizontal del lienzo equirectangular es un giro puro en
+# azimut, independiente del orden de rotaciones del Projection TOP.
+giro = mk(D, transformTOP, 'giro', 200, 250, tunit='fraction', extend='repeat')
+expr(giro, 'tx', 'parent().par.Yaw / 360.0')
+wire(equi, giro)
+
+# Medido con el patron (17 sep 2026): equirect -> fisheye deja el centro del
+# fisheye en el horizonte del frente; rx = 90 sube el cenit al centro, ry = 90
+# gira el domemaster para que el frente quede ABAJO del cuadro (convencion
+# domemaster), y el Pitch va restando de rx: 90 - Pitch inclina el contenido
+# del frente hacia el cenit.
+domo = mk(D, projectionTOP, 'domo', 400, 250, input='equirectangular', output='fisheye', ry=90, rz=0)
+expr(domo, 'fov', "[180, 90, 45, parent().par.Fovcustom][parent().par.Modelo.menuIndex]")
+expr(domo, 'rx', '90 - parent().par.Pitch')
+setpar(domo, 'outputresolution', 'custom')
+expr(domo, 'resolutionw', '[1024, 2048, 4096][parent().par.Res.menuIndex]')
+expr(domo, 'resolutionh', '[1024, 2048, 4096][parent().par.Res.menuIndex]')
+wire(giro, domo)
+out_domo = mk(D, nullTOP, 'out_domo', 600, 250)
+wire(domo, out_domo)
+D.par.opviewer = out_domo
+
+caja(D, 'nota_mezcla', 'Mezcla y modelo de sala',
+     'mezcla elige el modulo al aire (DOMO.Fuente) y equi es el lienzo equirectangular comun: '
+     'u 0.5 al frente, v 0.5 en el horizonte, v 1 en el cenit. giro aplica Yaw como corrimiento '
+     'horizontal. domo lo pasa a fisheye con el FOV del modelo de sala (180 media esfera, 90 y 45 '
+     'casquetes): rx 90 pone el cenit en el centro, ry 90 deja el frente abajo, Pitch resta de rx. '
+     'out_domo es el domemaster.',
+     [patron_dat, patron, mez, equi, giro, domo, out_domo], (0.16, 0.20, 0.24))
+
+# ------------------------------------------------------------------ salidas
+
+sp_domo = mk(D, syphonspoutoutTOP, 'spout_domo', 800, 400)
+expr(sp_domo, 'sendername', 'parent().par.Spoutdomonombre')
+expr(sp_domo, 'active', 'parent().par.Spoutdomo')
+wire(out_domo, sp_domo)
+
+ndi = mk(D, ndioutTOP, 'ndi_domo', 800, 250)
+expr(ndi, 'name', 'parent().par.Ndinombre')
+expr(ndi, 'active', 'parent().par.Ndi')
+setpar(ndi, 'audiochop', 'AUDIO/out1')
+wire(out_domo, ndi)
+
+grab = mk(D, moviefileoutTOP, 'grabar', 800, 100, type='movie', uniquesuff=True)
+setpar(grab, 'videocodec', 'hap')
+expr(grab, 'file', "parent().par.Grabarcarpeta + '/domemaster.mov'")
+expr(grab, 'record', 'parent().par.Grabar')
+setpar(grab, 'audiochop', 'AUDIO/out1')
+wire(out_domo, grab)
+
+# La sala VR quiere el lienzo equirectangular (cupula en la mitad superior),
+# ya con Yaw, Pitch y el FOV del modelo aplicados. Se reconstruye desde el
+# domemaster con fisheye -> equirect rx -90; como el domemaster va girado 90
+# grados (ry 90 de `domo`), giro_unreal lo devuelve con un corrimiento de -0.25.
+# Medido con el patron: el cuadro blanco del frente vuelve a (u 0.5, v 0.75).
+unreal = mk(D, projectionTOP, 'para_unreal', 800, -100, input='fisheye', output='equirectangular', rx=-90, ry=0, rz=0)
+expr(unreal, 'fov', "op('domo').par.fov")
+lienzo(unreal)
+wire(out_domo, unreal)
+giro_un = mk(D, transformTOP, 'giro_unreal', 1000, -100, tunit='fraction', extend='repeat', tx=-0.25)
+wire(unreal, giro_un)
+alfa = mk(D, reorderTOP, 'alfa_unreal', 1200, -100, outputalphachan='one')
+wire(giro_un, alfa)
+sp_un = mk(D, syphonspoutoutTOP, 'spout_unreal', 1400, -100)
+expr(sp_un, 'sendername', 'parent().par.Spoutunrealnombre')
+expr(sp_un, 'active', 'parent().par.Spoutunreal')
+wire(alfa, sp_un)
+
+caja(D, 'nota_salidas', 'Salidas',
+     'Del domemaster salen Spout y NDI (para un servidor de domo o Resolume) y la grabacion en HAP. '
+     'La sala VR en Unreal no quiere el domemaster sino el lienzo equirectangular con la cupula en '
+     'la mitad superior: para_unreal lo reconstruye desde el domemaster (rx -90), giro_unreal '
+     'deshace el giro de 90 del domemaster y spout_unreal lo manda con el nombre que lee el '
+     'SpoutDomeReceiver (TD_Domo_Lab). Los toggles estan en la pagina Salidas.',
+     [sp_domo, ndi, grab, unreal, giro_un, alfa, sp_un], (0.24, 0.20, 0.14))
+
+caja(D, 'nota_modulos', 'Modulos de entrada',
+     'Cada modulo lee su propio archivo y entrega el mismo lienzo equirectangular. Su parametro '
+     'Activo apagado entrega negro y deja de cocinar. Solo el modulo elegido en DOMO.Fuente llega '
+     'a la salida; los demas no gastan GPU aunque esten activos.',
+     [D.op('IN_360'), D.op('IN_180'), D.op('IN_169'), D.op('AUDIO')], (0.14, 0.14, 0.18))
+
+# ------------------------------------------------- reescribir la configuracion
+
+restaurados = 0
+for rel, pares in guardado.items():
+    comp = D if rel == '.' else D.op(rel.strip('/'))
+    if comp is None:
+        continue
+    for nombre, val in pares.items():
+        p = getattr(comp.par, nombre, None)
+        if p is not None and p.mode == ParMode.CONSTANT:
+            try:
+                p.val = val
+                restaurados += 1
+            except Exception as e:
+                print('[DOMO] no se pudo restaurar %s.%s: %s' % (comp.path, nombre, e))
+if guardado:
+    print('[DOMO] %d parametros restaurados' % restaurados)
+
+vd = D.op('IN_169/VIDEO_DOME')
+if vd is not None and (vd_previo['pars'] or vd_previo['screens']):
+    n = 0
+    for nombre, (tipo, valor) in vd_previo['pars'].items():
+        p = getattr(vd.par, nombre, None)
+        if p is None or p.isPulse or p.isMomentary:
+            continue
+        try:
+            if tipo == 'expr':
+                p.expr = valor
+            else:
+                p.val = valor
+            n += 1
+        except Exception:
+            pass
+    for t in ('screens', 'moments'):
+        if vd_previo[t] and vd.op(t) is not None:
+            vd.op(t).text = vd_previo[t]
+    print('[DOMO] VIDEO_DOME: %d pars y sus tablas restaurados' % n)
+
+print('[DOMO] construido: %s, %d operadores' % (D.path, len(D.findChildren())))

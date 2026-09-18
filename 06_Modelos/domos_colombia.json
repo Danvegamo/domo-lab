@@ -1,0 +1,287 @@
+[
+  {
+    "id": "planetario-bogota",
+    "nombre": "Planetario de Bogotá",
+    "ciudad": "Bogotá",
+    "operador": "Instituto Distrital de las Artes (Idartes) - Alcaldía Mayor de Bogotá",
+    "diametro_m": 23,
+    "inclinacion_deg": null,
+    "fov_vertical_deg": null,
+    "aforo": 375,
+    "butacas": "concéntricas (distribución circular tradicional; en 2025-2026 anuncian transformación a un formato flexible con más capacidad)",
+    "proyeccion": "Digistar 7 (Evans & Sutherland) con 2 proyectores láser Christie Griffyn 4K32-RGB, 4K nativo, 34.000 lúmenes c/u, control Pandoras Box 8, calibración Mystique",
+    "pantalla": "Nanoseam sin costuras, 420 paneles",
+    "anio": "1969 apertura original; 2021 renovación del sistema de proyección (reemplazo del proyector óptico-mecánico Zeiss de 52 años)",
+    "senal_en_vivo": true,
+    "notas": "Es la cúpula más grande de Latinoamérica según fuentes citadas. Programa 'Domo Vivo' con conciertos y shows en formato fulldome 4K en vivo (ej. Domo Vivo: Superlitio), lo que confirma capacidad de señal en vivo, aunque no se publica el protocolo exacto (NDI u otro). Desde 2025 Idartes anuncia una transformación del domo que subiría el aforo de 375 a 700 personas y dejaría el esquema circular tradicional; verificar estado de esa obra antes de dar por definitivos aforo y butacas.",
+    "fuentes": [
+      "https://planetariodebogota.gov.co/historia",
+      "https://www.digitalavmagazine.com/en/2021/12/07/el-planetario-de-bogota-renueva-su-sistema-de-proyeccion-con-christie/",
+      "https://www.idartes.gov.co/es/noticias/el-planetario-de-bogota-inaugura-su-nuevo-sistema-de-proyeccion",
+      "https://www.idartes.gov.co/es/noticias/el-planetario-de-bogota-transforma-su-domo",
+      "https://www.pulzo.com/nacion/planetario-de-bogota-ciencia-cine-y-astronomia-hasta-2026-con-experiencia-sobre-materia-oscura-PP5128535A"
+    ],
+    "verificado_en_sala": false,
+    "pendiente": [
+      "inclinacion_deg (no se encontró fuente explícita; el domo tradicional se asume horizontal pero no está confirmado por escrito)",
+      "fov_vertical_deg (no publicado)",
+      "aforo exacto (una fuente dice 375, otra 376)",
+      "estado final de la transformación 2025-2026 (aforo/butacas nuevos)"
+    ]
+  },
+  {
+    "id": "planetario-medellin",
+    "nombre": "Planetario de Medellín \"Jesús Emilio Ramírez\"",
+    "ciudad": "Medellín",
+    "operador": "Parque Explora / Alcaldía de Medellín",
+    "diametro_m": 15,
+    "inclinacion_deg": 27,
+    "fov_vertical_deg": 160,
+    "aforo": 110,
+    "butacas": null,
+    "proyeccion": "Sky-Skan Definiti sobre software Uniview, resolución 4K",
+    "pantalla": "paneles de aluminio microperforado",
+    "anio": "1984 apertura; renovación digital reportada en 2004 y en 2012 (fuentes no coinciden en el año exacto de la instalación Sky-Skan)",
+    "senal_en_vivo": null,
+    "notas": "Cuenta además con un domo móvil (unidad itinerante) para llevar experiencias fuera de la sede fija, con contenidos como exoplanetas. Sonido reportado en 7.1.",
+    "fuentes": [
+      "https://es.wikipedia.org/wiki/Planetario_de_Medell%C3%ADn",
+      "https://www.planetariomedellin.org/visitanos/domo-planetario",
+      "https://www.planetariomedellin.org/domo-planetario",
+      "https://www.elcolombiano.com/tecnologia/ciencia/planetario-medellin-nuevo-domo-movil-en-el-tesoro-CD34047401"
+    ],
+    "verificado_en_sala": false,
+    "pendiente": [
+      "tipo de butacas",
+      "año exacto de la renovación digital (2004 vs 2012 según la fuente)",
+      "si acepta señal en vivo / protocolo"
+    ]
+  },
+  {
+    "id": "maloka-cine-domo",
+    "nombre": "Cine Domo de Maloka",
+    "ciudad": "Bogotá",
+    "operador": "Corporación Maloka",
+    "diametro_m": 22,
+    "inclinacion_deg": null,
+    "fov_vertical_deg": 180,
+    "aforo": 314,
+    "butacas": null,
+    "proyeccion": "5 proyectores de alta definición, 30.000 lúmenes, 4K (una renovación de 2017 reportó 8K con proyectores Christie Mirage 304K; fuentes de 2024 vuelven a hablar de 4K, sin aclarar si cambiaron los equipos)",
+    "pantalla": "pantalla curva semiesférica de 180°, 16 m de altura x 22 m de diámetro; material no especificado en las fuentes consultadas",
+    "anio": "Cine domo original de finales de los 90 (primer teatro de formato gigante de Suramérica, tecnología Iwerks); renovación a 8K en 2017; reapertura tras mantenimiento el 1 de junio de 2024",
+    "senal_en_vivo": null,
+    "notas": "Hay una discrepancia de aforo entre fuentes (309 vs 314 personas); se dejó 314 por ser la cifra del artículo de reapertura de 2024, más reciente. También hay discrepancia entre 4K (2024) y 8K (2017) que no se pudo resolver con fuentes abiertas.",
+    "fuentes": [
+      "https://maloka.org/cine-domo/",
+      "https://maloka.org/noticias/regresa-el-cine-domo-de-maloka/",
+      "https://www.avilatinoamerica.com/201704114557/noticias/empresas/maloka-renovo-domo-con-3d-en-resolucion-8k.html",
+      "https://www.eltiempo.com/bogota/maloka-reinaugura-su-domo-39920"
+    ],
+    "verificado_en_sala": false,
+    "pendiente": [
+      "inclinación de la cúpula/plataforma",
+      "tipo de butacas",
+      "marca real de proyectores vigente (4K de 2024 vs 8K Christie Mirage de 2017)",
+      "material de pantalla",
+      "si acepta señal en vivo"
+    ]
+  },
+  {
+    "id": "planetario-combarranquilla",
+    "nombre": "Planetario Combarranquilla",
+    "ciudad": "Barranquilla",
+    "operador": "Combarranquilla (Caja de Compensación Familiar de Barranquilla)",
+    "diametro_m": null,
+    "inclinacion_deg": null,
+    "fov_vertical_deg": null,
+    "aforo": null,
+    "butacas": null,
+    "proyeccion": "Se menciona un proyector estelar digital Digitarium Zeta, pero no quedó claro en las fuentes si corresponde a la sala principal (Sala de Estrellas / Sala Domo) o a otra sala menor",
+    "pantalla": null,
+    "anio": "1995 apertura (inaugurado el 25 de mayo de 1995, primera función pública el 7 de junio de 1995); ampliación con sala museográfica interactiva en 2014",
+    "senal_en_vivo": null,
+    "notas": "Cuenta con un domo móvil inflable llamado MIMAS (ver ficha aparte domo-movil-mimas-combarranquilla) para itinerancia por el Caribe colombiano. No se encontraron especificaciones técnicas públicas del domo fijo (diámetro, aforo, marca de proyección); se recomienda verificar en sitio o pedirlas directamente a Combarranquilla (planetario.boston@combarranquilla.co).",
+    "fuentes": [
+      "https://tuguia.combarranquilla.co/Revista/?p=6444",
+      "https://www.combarranquilla.co/ciencia-y-cultura/"
+    ],
+    "verificado_en_sala": false,
+    "pendiente": [
+      "diámetro de cúpula",
+      "inclinación",
+      "fov vertical",
+      "aforo",
+      "butacas",
+      "marca y resolución exacta del sistema de proyección de la sala fija",
+      "pantalla"
+    ]
+  },
+  {
+    "id": "domo-movil-mimas-combarranquilla",
+    "nombre": "MIMAS (domo móvil inflable de Combarranquilla)",
+    "ciudad": "Barranquilla (itinerante por la región Caribe)",
+    "operador": "Combarranquilla",
+    "diametro_m": 5,
+    "inclinacion_deg": null,
+    "fov_vertical_deg": null,
+    "aforo": null,
+    "butacas": null,
+    "proyeccion": "sistema de proyección digital; marca no especificada en las fuentes",
+    "pantalla": "domo inflable portátil",
+    "anio": 2025,
+    "senal_en_vivo": null,
+    "notas": "No es una sala fija. Va acompañado de un módulo interactivo. Se presenta como iniciativa itinerante para el Caribe colombiano.",
+    "fuentes": [
+      "https://www.ruedalaeconomia.com/2025/06/14/desde-el-planetario-combarranquilla-mimas-el-domo-inflable-para-explorar-el-universo/",
+      "https://tuguia.combarranquilla.co/Revista/?p=6654"
+    ],
+    "verificado_en_sala": false,
+    "pendiente": [
+      "aforo",
+      "marca del sistema de proyección",
+      "fecha exacta de puesta en marcha"
+    ]
+  },
+  {
+    "id": "planetario-cali-cienciarte",
+    "nombre": "Planetario del Centro de Ciencia, Arte y Tecnología (Parque Tecnológico de Innovación San Fernando)",
+    "ciudad": "Cali",
+    "operador": "Universidad Antonio José Camacho (operación inicial; se anuncia tránsito a un ente mixto público-privado)",
+    "diametro_m": 15,
+    "inclinacion_deg": null,
+    "fov_vertical_deg": null,
+    "aforo": 120,
+    "butacas": null,
+    "proyeccion": "5 proyectores láser 4K con sonido envolvente; marca no especificada en las fuentes consultadas",
+    "pantalla": null,
+    "anio": "octubre de 2024 (apertura para colegios e instituciones); abril de 2025 (apertura al público general)",
+    "senal_en_vivo": null,
+    "notas": "Se presenta como uno de los planetarios más modernos de Latinoamérica y el primero del suroccidente colombiano. Es un proyecto distinto y más nuevo que el histórico Planetario de EMAVI (ver planetario-emavi-cali).",
+    "fuentes": [
+      "https://www.elpais.com.co/cali/en-imagenes-los-detalles-ineditos-de-como-es-el-centro-de-ciencia-arte-y-tecnologia-inaugurado-en-cali-0212.html",
+      "https://www.cali.gov.co/infraestructura/publicaciones/179992/llego-el-domo-para-el-planetario-del-parque-tecnologico-de-innovacion-san-fernando/",
+      "https://www.cali.gov.co/boletines/publicaciones/188383/por-primera-vez-en-cali-petronio-se-gozara-bajo-un-planetario-en-cali/"
+    ],
+    "verificado_en_sala": false,
+    "pendiente": [
+      "inclinación",
+      "fov vertical",
+      "tipo de butacas",
+      "marca de los proyectores",
+      "material de pantalla",
+      "señal en vivo"
+    ]
+  },
+  {
+    "id": "planetario-emavi-cali",
+    "nombre": "Planetario de EMAVI (Escuela Militar de Aviación \"Marco Fidel Suárez\")",
+    "ciudad": "Cali",
+    "operador": "Fuerza Aeroespacial Colombiana / EMAVI",
+    "diametro_m": 8,
+    "inclinacion_deg": null,
+    "fov_vertical_deg": null,
+    "aforo": 60,
+    "butacas": null,
+    "proyeccion": "proyector óptico-mecánico Carl Zeiss, adquirido en 1967",
+    "pantalla": null,
+    "anio": "1967 adquisición del proyector Zeiss; apertura al público general en octubre de 1972",
+    "senal_en_vivo": null,
+    "notas": "Es considerado el primer planetario de Colombia. Está declarado Bien de Interés Cultural por el Concejo de Cali. Al estar dentro de una instalación militar (EMAVI), el acceso del público general y la vigencia de funciones regulares no quedaron claras en las fuentes abiertas; se recomienda confirmar directamente con EMAVI si todavía programa funciones periódicas.",
+    "fuentes": [
+      "https://www.emavi.edu.co/es/noticias/el-planetario-de-emavi-patrimonio-arquitectonico-y-urbanistico-de-cali",
+      "https://www.fac.mil.co/es/noticias/primer-planetario-de-colombia-en-la-escuela-militar-de-aviacion",
+      "https://www.colombia.com/turismo/sitios-turisticos/cali/atractivos-turisticos/sdi212/53289/el-planetario"
+    ],
+    "verificado_en_sala": false,
+    "pendiente": [
+      "inclinación",
+      "fov vertical",
+      "tipo de butacas",
+      "vigencia actual de funciones públicas regulares",
+      "pantalla"
+    ]
+  },
+  {
+    "id": "planetario-utp-pereira",
+    "nombre": "Planetario y Observatorio Astronómico UTP",
+    "ciudad": "Pereira",
+    "operador": "Universidad Tecnológica de Pereira",
+    "diametro_m": null,
+    "inclinacion_deg": null,
+    "fov_vertical_deg": null,
+    "aforo": 76,
+    "butacas": null,
+    "proyeccion": "sistema fulldome; marca no especificada en las fuentes consultadas",
+    "pantalla": null,
+    "anio": "apertura aproximada en 1988 (una fuente de 2008 dice que el planetario llevaba entonces 20 años funcionando); fecha exacta sin confirmar",
+    "senal_en_vivo": null,
+    "notas": "Ofrece experiencias fulldome como 'Colombia Tierra de Gigantes' y visitas guiadas al observatorio del grupo de investigación Alfa Orión. No se encontraron especificaciones técnicas detalladas del domo en fuentes públicas.",
+    "fuentes": [
+      "https://comunicaciones.utp.edu.co/68160/vicerrectorias/vicerrectorias-vicerrectorias-3/el-planetario-de-la-universidad-tecnologica-de-pereira-presenta-pereira-bajo-las-estrellas-en-agosto/",
+      "https://godues.wordpress.com/2008/02/29/la-universidad-tecnologica-de-pereira-y-su-planetario-u-t-p-ed-rac-457/",
+      "https://planetario.utp.edu.co/parque-de-ciencia/"
+    ],
+    "verificado_en_sala": false,
+    "pendiente": [
+      "diámetro de cúpula",
+      "inclinación",
+      "fov vertical",
+      "tipo de butacas",
+      "marca del sistema de proyección",
+      "año exacto de apertura"
+    ]
+  },
+  {
+    "id": "planetario-narino-pasto",
+    "nombre": "Planetario del Centro de Ciencias de la Universidad de Nariño",
+    "ciudad": "Pasto",
+    "operador": "Universidad de Nariño",
+    "diametro_m": null,
+    "inclinacion_deg": null,
+    "fov_vertical_deg": null,
+    "aforo": null,
+    "butacas": null,
+    "proyeccion": null,
+    "pantalla": null,
+    "anio": null,
+    "senal_en_vivo": null,
+    "notas": "TODAVÍA NO ESTÁ ABIERTO AL PÚBLICO. Es un planetario digital dentro del Centro de Ciencias de la Universidad de Nariño (6.403 m2, junto a un telescopio de 1 m de apertura), en construcción. Según fuentes de 2025, el edificio se esperaba terminado en año y medio, y 2027 marcaría el inicio del equipamiento tecnológico y la curaduría de contenidos, lo que incluiría el domo. No incluir como sala operativa hasta confirmar apertura real.",
+    "fuentes": [
+      "https://impactotic.co/ciencia/centro-de-ciencias-de-la-universidad-de-narino/",
+      "https://www.diariodelsur.com.co/la-universidad-de-narino-arranca-la-construccion-del-centro-de-ciencias/",
+      "https://www.udenar.edu.co/centro-de-ciencias-universidad-de-narino/"
+    ],
+    "verificado_en_sala": false,
+    "pendiente": [
+      "todo: el domo aún no existe físicamente ni tiene especificaciones definidas",
+      "fecha real de apertura"
+    ]
+  },
+  {
+    "id": "domo-movil-oam-manizales",
+    "nombre": "Planetario Móvil OAM (Observatorio Astronómico de Manizales - Museo Samoga, Universidad Nacional de Colombia sede Manizales)",
+    "ciudad": "Manizales",
+    "operador": "Universidad Nacional de Colombia sede Manizales (OAM / Museo Samoga)",
+    "diametro_m": 4.8,
+    "inclinacion_deg": null,
+    "fov_vertical_deg": null,
+    "aforo": 25,
+    "butacas": null,
+    "proyeccion": "equipo de video para proyección interior del domo; marca no especificada",
+    "pantalla": "domo hemisférico portátil oscuro, inflable, 3.2 m de alto x 4.8 m de diámetro",
+    "anio": null,
+    "senal_en_vivo": null,
+    "notas": "No es una sala fija: Manizales no tiene, según las fuentes consultadas, un planetario de domo fijo construido; un planetario fijo en Samoga aparece solo como proyecto/aspiración, no como obra ejecutada. Requiere espacio cubierto de 3.5 m de alto x 6 m x 7 m para instalarse.",
+    "fuentes": [
+      "https://oam.manizales.unal.edu.co/planetario-movil/planetario-movil/",
+      "http://samoga.manizales.unal.edu.co/"
+    ],
+    "verificado_en_sala": false,
+    "pendiente": [
+      "marca del equipo de proyección",
+      "año de puesta en marcha",
+      "si el planetario fijo proyectado en Samoga llegó a construirse"
+    ]
+  }
+]
