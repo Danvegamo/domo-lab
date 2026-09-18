@@ -50,7 +50,7 @@ funcionar. El script solo hace falta para reconstruirlo o cambiarlo.
 ## 2. Estructura
 
 ```
-DOMO                          COMP raíz, atajo parent.DOMO, páginas Domo y Salidas
+DOMO                          COMP raíz, atajo parent.DOMO, páginas Domo, Mapping y Salidas
   IN_360                      video 360 equirectangular (+ costura opcional)
   IN_180                      domemaster fisheye, VR180 mono o VR180 lado a lado
   IN_169                      video plano sobre pantallas en la cúpula (VIDEO_DOME adentro)
@@ -58,7 +58,7 @@ DOMO                          COMP raíz, atajo parent.DOMO, páginas Domo y Sal
   patron                      el patrón de prueba, cuarta entrada de la mezcla
   mezcla -> equi              la fuente elegida, como lienzo equirectangular 2:1
   giro                        Yaw, como corrimiento horizontal del lienzo
-  domo -> out_domo            el domemaster fisheye con el FOV del modelo de sala
+  domo -> mapping -> out_domo el domemaster fisheye; mapping mueve el cénit, escala y rota
   spout_domo / ndi_domo       salidas del domemaster
   grabar                      Movie File Out del domemaster (HAP)
   para_unreal -> giro_unreal -> alfa_unreal -> spout_unreal   el equirectangular que espera la sala VR
@@ -305,10 +305,28 @@ defecto y por `out1`, que es lo que graban `grabar` y `ndi_domo`.
    frente; `rx = 90` sube el cénit al centro, `ry = 90` gira el domemaster para
    que el frente quede ABAJO del cuadro (la convención domemaster), y el Pitch
    se aplica como `rx = 90 - Pitch`: un Pitch positivo inclina el contenido del
-   frente hacia el cénit. El fov es el del modelo de sala: 180 para `domo180`
-   (media esfera, planetario), 90 y 45 para los casquetes, `Fovcustom` para
-   `custom`. La resolución es la de `Res`, cuadrada.
-3. **`out_domo`** es el domemaster terminado y el visor del COMP.
+   frente hacia el cénit. El fov es el del contenido: con `Fovauto` encendido
+   (por defecto) es el del modelo de sala, 180 para `domo180` (media esfera,
+   planetario), 90 y 45 para los casquetes, `Fovcustom` para `custom`; con
+   `Fovauto` apagado es `Fovcontenido`. La resolución es la de `Res`, cuadrada.
+3. **`mapping`** (Transform TOP, unidades en fracción, extensión `zero`) es el
+   ajuste que en una sala real se hace en vivo sobre el servidor del domo:
+   `Centrox` y `Centroy` mueven el cénit, `Escala` agranda o encoge el
+   domemaster y `Rotar` lo gira. Lo que queda fuera del cuadro es negro.
+4. **`out_domo`** es el domemaster terminado y el visor del COMP.
+
+**El truco del FOV.** `domo` usa el FOV del contenido, pero `para_unreal` (y el
+servidor de un domo real, que solo recibe) leen el domemaster con el FOV de la
+sala. Con `Fovauto` apagado y `Fovcontenido = 230`, el domemaster mete 230
+grados de contenido en el mismo círculo, y la cúpula de 180 muestra también lo
+que estaba hasta 25 grados bajo el horizonte: más espacio para lo que se creó.
+Es lo mismo que pasa con un servidor de domo en vivo: el domo recibe y desde
+TouchDesigner se mueve, se gira y se ajusta. Verificado el 18 de septiembre de
+2026 con el patrón: la banda amarilla (`v 0.25–0.5`, bajo el horizonte) aparece
+sobre la línea de arranque de la cúpula.
+
+![El domemaster con 230 grados de contenido](../05_Preview/pruebas/td_patron_domemaster_fov230.png)
+![La sala VR con 230 grados sobre la cúpula de 180](../05_Preview/pruebas/unreal_patron_fov230.png)
 
 Del domemaster salen `spout_domo` (Syphon Spout Out), `ndi_domo` (NDI Out, con
 el audio de `AUDIO/out1`) y `grabar` (Movie File Out en HAP, con sufijo único,
@@ -318,7 +336,8 @@ por defecto salvo lo que diga la página Salidas.
 La sala VR no quiere el domemaster sino el lienzo equirectangular con la cúpula
 en la mitad superior, ya con Yaw, Pitch y el FOV del modelo aplicados. Se
 reconstruye desde el domemaster: `para_unreal` (Projection TOP `fisheye →
-equirectangular`, `rx = -90`, fov igual al de `domo`), `giro_unreal` (Transform
+equirectangular`, `rx = -90`, fov el del modelo de sala, no el del contenido),
+`giro_unreal` (Transform
 TOP, `tx = -0.25`, `repeat`) que deshace el `ry = 90` del domemaster,
 `alfa_unreal` (Reorder TOP, alfa en uno y formato fijado a `rgba8fixed`, porque
 el receptor de Unreal solo lee 8 bits por canal; ver la sección 8) y
@@ -340,7 +359,15 @@ Parámetros del COMP raíz:
 | `Pitch` | inclinar el contenido hacia el cénit (±90) |
 | `Res` | lado del domemaster: `r1024` (ensayo), `r2048` (tiempo real, por defecto), `r4096` (grabar) |
 | `Ancho` | ancho del lienzo equirectangular (4096 por defecto; el alto es la mitad) |
-| `Version` | solo lectura, la versión del constructor |
+| `Version` | solo lectura, la versión del constructor (1.1, 18 sep 2026) |
+
+| Página Mapping | Qué hace |
+|---|---|
+| `Fovauto` | encendido por defecto: el FOV del contenido es el del modelo de sala |
+| `Fovcontenido` | FOV del contenido en grados (230 por defecto); se usa con `Fovauto` apagado |
+| `Centrox`, `Centroy` | mover el cénit, en fracción del domemaster (−0.5 a 0.5) |
+| `Escala` | escala del domemaster (0.5 a 2) |
+| `Rotar` | rotar el domemaster en grados (±180) |
 
 | Página Salidas | Qué hace |
 |---|---|
@@ -370,7 +397,12 @@ sala nueva, sea física o virtual:
 4. Si aparece rojo en la cúpula, la sala está leyendo bajo el horizonte: el
    modelo tiene más FOV del que la cúpula cubre, o el lienzo que llega no es el
    de la mitad superior.
-5. En la sala VR, con `Spoutunreal` encendido, comprobar las tres vistas: el
+5. Si la cúpula real corta la imagen o le sobra borde, ajustar `Centrox`,
+   `Centroy`, `Escala` y `Rotar` (página Mapping) mirando el patrón, hasta que
+   el círculo del domemaster coincida con la cúpula. Si se quiere que entre más
+   contenido del que cubre la sala, apagar `Fovauto` y subir `Fovcontenido`
+   (230 sobre 180 está verificado).
+6. En la sala VR, con `Spoutunreal` encendido, comprobar las tres vistas: el
    frente (cuadro blanco y, arriba, la marca azul del cénit), el cénit y la
    parte de atrás con la columna negra de la costura.
 
@@ -399,8 +431,9 @@ queda en el centro del domemaster y la costura del lienzo va a parar detrás.
   `para_unreal` y en `IN_169`.
 - **El modelo de sala es el FOV del fisheye.** `domo180` es media esfera;
   `domo90` y `domo45` son casquetes; el resto de la esfera no entra en el
-  círculo. `para_unreal` usa el mismo fov, así que la sala VR recibe
-  exactamente lo que cubre el modelo.
+  círculo. `para_unreal` usa siempre el fov de la sala, así que la sala VR
+  recibe exactamente lo que cubre el modelo; si `domo` trabaja con más grados
+  (`Fovauto` apagado), ese contenido extra entra en la cúpula por el borde.
 - **Annotate COMP que se autodestruye.** En TD 2025.32460, si el Annotate COMP
   se crea con nombre (`create(annotateCOMP, 'x')`) o se le enciende el flag
   `utility`, desaparece unos frames después. La función `caja()` lo crea sin

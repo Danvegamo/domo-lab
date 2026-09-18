@@ -11,6 +11,21 @@ Se ejecuta headless con:
 
     UnrealEditor-Cmd.exe <ruta al .uproject> -run=pythonscript -script=<ruta a este archivo>
 
+MODELOS DE SALA (variable de entorno DOMO_FOV, ver 04_Docs/05_Modelos_de_sala.md):
+    sin DOMO_FOV o DOMO_FOV=180   media esfera: 02_Export/sala_domo.fbx ->
+                                  mallas en /Game/Sala, nivel /Game/Maps/DomoVR
+                                  (comportamiento original, sin cambios).
+    DOMO_FOV=90 / DOMO_FOV=45     casquete: 02_Export/sala_domo_90.fbx ->
+                                  mallas en /Game/Sala/Domo_90 (el importador
+                                  las nombra sala_domo_90_SM_*), nivel
+                                  /Game/Maps/DomoVR_90. Los materiales M_* /
+                                  MI_Domo de /Game/Sala/Materials se REUTILIZAN
+                                  (solo se crean los que falten); el FBX se
+                                  importa sin materiales para no pisar los
+                                  assets de la media esfera. No se toca
+                                  /Game/Maps/DomoVR ni sala_domo_SM_*.
+    importar_sala.ps1 -Fov 90 fija la variable y corre este script.
+
 IMPORTANTE (operacion): si el editor grafico de DomoVR ya esta abierto, NO
 correr este script por linea de comandos (dos procesos de Unreal sobre el
 mismo .uproject se pelean por los mismos archivos). En ese caso se corre
@@ -70,14 +85,36 @@ import unreal
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DOMO_ROOT_DIR = os.path.dirname(SCRIPT_DIR)  # Domo_VR_Unreal
 
-FBX_PATH = os.path.join(DOMO_ROOT_DIR, "02_Export", "sala_domo.fbx")
+def _leer_fov_domo():
+    """FOV del modelo de sala desde DOMO_FOV (180 si no esta). Mismo criterio
+    que 01_Blender/generar_sala_domo.py."""
+    valor = os.environ.get("DOMO_FOV", "").strip()
+    if not valor:
+        return 180.0
+    fov = float(valor)
+    if not (10.0 <= fov <= 180.0):
+        raise RuntimeError("[importar_sala] DOMO_FOV tiene que estar entre 10 y 180; llego {}".format(valor))
+    return fov
+
+
+FOV_DOMO = _leer_fov_domo()
+ES_MEDIA_ESFERA = abs(FOV_DOMO - 180.0) < 1e-6
+# Sufijo de archivos y assets del modelo: vacio para la media esfera (nombres
+# originales), "_90" / "_45" para los casquetes. Igual que en Blender.
+SUFIJO_MODELO = "" if ES_MEDIA_ESFERA else "_{:g}".format(FOV_DOMO)
+
+FBX_PATH = os.path.join(DOMO_ROOT_DIR, "02_Export", "sala_domo{}.fbx".format(SUFIJO_MODELO))
 TEXTURAS_DIR = os.path.join(DOMO_ROOT_DIR, "02_Export", "texturas")
 
 CONTENT_SALA = "/Game/Sala"
 CONTENT_MATERIALS = "/Game/Sala/Materials"
 CONTENT_TEXTURES = "/Game/Sala/Textures"
+# Donde caen las mallas: la media esfera en /Game/Sala (como siempre); cada
+# casquete en su subcarpeta, para que no se mezclen con las del 180 y se
+# puedan borrar de un tajo.
+CONTENT_MALLAS = CONTENT_SALA if ES_MEDIA_ESFERA else "{}/Domo{}".format(CONTENT_SALA, SUFIJO_MODELO)
 CONTENT_MAPS = "/Game/Maps"
-MAP_PACKAGE_PATH = "/Game/Maps/DomoVR"
+MAP_PACKAGE_PATH = "/Game/Maps/DomoVR{}".format(SUFIJO_MODELO)
 
 PREFIJO_BUTACAS = "SM_Butacas"
 PREFIJO_PUERTAS = "SM_Puerta"
@@ -198,6 +235,7 @@ resumen = {
     "mallas_faltantes": [],
     "texturas_importadas": [],
     "materiales_creados": [],
+    "materiales_reutilizados": [],
     "actores_colocados": [],
     "avisos": [],
 }
@@ -288,12 +326,16 @@ def importar_fbx():
         resumen["mallas_faltantes"] = list(NOMBRES_MALLAS_ESPERADAS)
         return {}
 
-    log("Importando {} -> {}".format(FBX_PATH, CONTENT_SALA))
+    log("Importando {} -> {}".format(FBX_PATH, CONTENT_MALLAS))
 
     options = unreal.FbxImportUI()
     options.import_mesh = True
     options.import_as_skeletal = False
-    options.import_materials = True
+    # La media esfera importa los materiales del FBX como siempre (quedan en
+    # /Game/Sala como M_* sueltos, que el nivel no usa). Los casquetes NO:
+    # traerian los mismos nombres y pisarian esos assets del 180; sus mallas
+    # reciben los materiales de /Game/Sala/Materials en aplicar_materiales.
+    options.import_materials = ES_MEDIA_ESFERA
     options.import_textures = False
     options.import_animations = False
     options.mesh_type_to_import = unreal.FBXImportType.FBXIT_STATIC_MESH
@@ -329,7 +371,7 @@ def importar_fbx():
 
     task = unreal.AssetImportTask()
     task.set_editor_property("filename", FBX_PATH)
-    task.set_editor_property("destination_path", CONTENT_SALA)
+    task.set_editor_property("destination_path", CONTENT_MALLAS)
     task.set_editor_property("replace_existing", True)
     task.set_editor_property("replace_existing_settings", True)
     task.set_editor_property("automated", True)
@@ -684,22 +726,57 @@ def _material_domo_emisivo():
     return material, mi
 
 
+MATERIALES_PBR = ("M_Muro", "M_Madera", "M_Piso", "M_Butaca", "M_Tarima", "M_Control", "M_Puerta")
+
+
 def crear_materiales():
+    """Media esfera: recrea todos los materiales (fuente de verdad, como
+    siempre). Casquetes: reutiliza los que ya existen en /Game/Sala/Materials
+    y crea solo los que falten, para no reescribir los assets del 180 mientras
+    el editor puede tenerlos abiertos."""
     materiales = {}
+    creados = []
 
-    m_domo, mi_domo = _material_domo_emisivo()
-    materiales["M_Domo"] = m_domo
-    materiales["MI_Domo"] = mi_domo
+    if ES_MEDIA_ESFERA:
+        m_domo, mi_domo = _material_domo_emisivo()
+        materiales["M_Domo"] = m_domo
+        materiales["MI_Domo"] = mi_domo
+        creados += ["M_Domo", "MI_Domo"]
+        for nombre_material in MATERIALES_PBR:
+            materiales[nombre_material] = _material_pbr_o_plano(nombre_material)
+            creados.append(nombre_material)
+    else:
+        ruta_m_domo = _ruta_completa(CONTENT_MATERIALS, "M_Domo")
+        ruta_mi_domo = _ruta_completa(CONTENT_MATERIALS, "MI_Domo")
+        if (unreal.EditorAssetLibrary.does_asset_exist(ruta_m_domo)
+                and unreal.EditorAssetLibrary.does_asset_exist(ruta_mi_domo)):
+            materiales["M_Domo"] = cargar_asset_obligatorio(ruta_m_domo)
+            materiales["MI_Domo"] = cargar_asset_obligatorio(ruta_mi_domo)
+        else:
+            aviso("M_Domo/MI_Domo no existian en {}; se crean (normalmente los crea "
+                  "la importacion de la media esfera).".format(CONTENT_MATERIALS))
+            m_domo, mi_domo = _material_domo_emisivo()
+            materiales["M_Domo"] = m_domo
+            materiales["MI_Domo"] = mi_domo
+            creados += ["M_Domo", "MI_Domo"]
+        for nombre_material in MATERIALES_PBR:
+            ruta = _ruta_completa(CONTENT_MATERIALS, nombre_material)
+            if unreal.EditorAssetLibrary.does_asset_exist(ruta):
+                materiales[nombre_material] = cargar_asset_obligatorio(ruta)
+            else:
+                aviso("{} no existia; se crea.".format(ruta))
+                materiales[nombre_material] = _material_pbr_o_plano(nombre_material)
+                creados.append(nombre_material)
 
-    for nombre_material in ("M_Muro", "M_Madera", "M_Piso", "M_Butaca", "M_Tarima", "M_Control", "M_Puerta"):
-        materiales[nombre_material] = _material_pbr_o_plano(nombre_material)
-
-    unreal.EditorAssetLibrary.save_directory(CONTENT_MATERIALS, False, True)
+    if creados:
+        unreal.EditorAssetLibrary.save_directory(CONTENT_MATERIALS, False, True)
     if resumen["texturas_importadas"]:
         unreal.EditorAssetLibrary.save_directory(CONTENT_TEXTURES, False, True)
 
-    log("Materiales creados: {}".format(sorted(materiales.keys())))
-    resumen["materiales_creados"] = sorted(materiales.keys())
+    reutilizados = sorted(set(materiales.keys()) - set(creados))
+    log("Materiales creados: {}; reutilizados: {}".format(sorted(creados), reutilizados))
+    resumen["materiales_creados"] = sorted(creados)
+    resumen["materiales_reutilizados"] = reutilizados
     return materiales
 
 
@@ -924,6 +1001,8 @@ def crear_player_start(actor_subsystem):
 
 def main():
     log("=== Importacion de la sala de domo (DomoVR) ===")
+    log("Modelo de sala: FOV {:g} ({}) -> mallas en {}, nivel {}".format(
+        FOV_DOMO, "media esfera" if ES_MEDIA_ESFERA else "casquete", CONTENT_MALLAS, MAP_PACKAGE_PATH))
     log("FBX esperado en: {}".format(FBX_PATH))
     log("Texturas esperadas en: {}".format(TEXTURAS_DIR))
     log(
@@ -956,8 +1035,19 @@ def main():
     ok = level_subsystem.save_current_level()
     if not ok:
         aviso("save_current_level devolvio False; revisar si el nivel quedo guardado.")
-    unreal.EditorAssetLibrary.save_directory(CONTENT_SALA, False, True)
-    unreal.EditorAssetLibrary.save_directory(CONTENT_MAPS, False, True)
+    # Media esfera: guarda todo /Game/Sala y todo /Game/Maps (como siempre).
+    # Casquete: solo su carpeta de mallas y SU mapa. OJO: el commandlet
+    # arranca con el mapa de inicio del proyecto (/Game/Maps/DomoVR) cargado,
+    # y save_directory(CONTENT_MAPS, only_if_is_dirty=False) lo reescribia
+    # aunque no se hubiera tocado (paso el 17 sep 2026 con el editor abierto
+    # en ese mismo mapa; se restauro desde git). Por eso aqui el casquete
+    # guarda el paquete del nivel nuevo por nombre y nada mas.
+    unreal.EditorAssetLibrary.save_directory(CONTENT_MALLAS, False, True)
+    if ES_MEDIA_ESFERA:
+        unreal.EditorAssetLibrary.save_directory(CONTENT_MAPS, False, True)
+    else:
+        if not unreal.EditorAssetLibrary.save_asset(MAP_PACKAGE_PATH, False):
+            aviso("save_asset devolvio False para {}; revisar si el nivel quedo guardado.".format(MAP_PACKAGE_PATH))
 
     log("=== Resumen ===")
     log("Mallas importadas ({}): {}".format(len(resumen["mallas_importadas"]), resumen["mallas_importadas"]))
@@ -965,6 +1055,8 @@ def main():
         log("Mallas faltantes ({}): {}".format(len(resumen["mallas_faltantes"]), resumen["mallas_faltantes"]))
     log("Texturas importadas ({}): {}".format(len(resumen["texturas_importadas"]), resumen["texturas_importadas"]))
     log("Materiales creados ({}): {}".format(len(resumen["materiales_creados"]), resumen["materiales_creados"]))
+    if resumen["materiales_reutilizados"]:
+        log("Materiales reutilizados ({}): {}".format(len(resumen["materiales_reutilizados"]), resumen["materiales_reutilizados"]))
     log("Actores colocados ({}): {}".format(len(resumen["actores_colocados"]), resumen["actores_colocados"]))
     if resumen["avisos"]:
         log("Avisos ({}):".format(len(resumen["avisos"])))

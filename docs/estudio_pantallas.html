@@ -1,0 +1,1318 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Estudio de pantallas del domo · Domo_Pantallas
+     Un solo archivo, sin dependencias. Se abre con doble clic.
+     Las tipografias vienen de Google Fonts si hay conexion; sin conexion
+     caen a la pila del sistema y la pagina funciona igual. -->
+<title>Estudio de pantallas del domo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+/* ------------------------------------------------------------------ *
+ * Estudio de pantallas del domo
+ * Un solo archivo, sin dependencias. La cupula se dibuja en WebGL2 con
+ * el mismo mapeo que dome_map.frag adentro de TouchDesigner.
+ *
+ * La sala de un planetario se calibra a oscuras, asi que la pagina vive
+ * en un solo mundo oscuro: no hay tema claro, y todos los colores se
+ * pintan explicitos para que no dependa del fondo de quien la abra.
+ * ------------------------------------------------------------------ */
+:root {
+  --noche:      #0a0d14;   /* la sala apagada */
+  --panel:      #121826;
+  --panel-alto: #182034;
+  --linea:      #232e44;
+  --texto:      #dde4f0;
+  --tenue:      #8493ab;   /* gris con sesgo azul, no gris de fabrica */
+  --ambar:      #ff8c3f;   /* el rebote calido del proyector */
+  --ambar-sordo:#3a2418;
+  --agua:       #57d3bd;   /* señal de "cosido" */
+  --alarma:     #f2585b;
+  --sombra:     0 18px 40px rgba(0,0,0,.45);
+  --r:          10px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--noche);
+  color: var(--texto);
+  font: 400 15px/1.55 "IBM Plex Sans", system-ui, -apple-system, Segoe UI, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .etiqueta, .chip, button, .pestana {
+  font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+}
+
+.num, input[type="number"], .tabla-export, .lectura {
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- estructura ---------------- */
+.marco { max-width: 1420px; margin: 0 auto; padding: 22px 20px 60px; }
+
+header.tapa {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 18px;
+  padding-bottom: 16px; margin-bottom: 20px;
+  border-bottom: 1px solid var(--linea);
+}
+header.tapa h1 {
+  margin: 0; font-size: 26px; font-weight: 600; letter-spacing: .01em;
+  text-wrap: balance;
+}
+header.tapa p { margin: 0; color: var(--tenue); font-size: 14px; max-width: 62ch; }
+.marca {
+  font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ambar); font-family: "IBM Plex Sans Condensed", sans-serif;
+}
+
+.tablero {
+  display: grid; gap: 22px;
+  grid-template-columns: minmax(360px, 1fr) minmax(340px, 420px);
+  align-items: start;
+}
+@media (max-width: 940px) { .tablero { grid-template-columns: 1fr; } }
+
+/* ---------------- cupula ---------------- */
+.cupula-caja {
+  background: var(--panel); border: 1px solid var(--linea);
+  border-radius: var(--r); padding: 14px; box-shadow: var(--sombra);
+}
+.lienzo-envoltura { position: relative; width: 100%; aspect-ratio: 1 / 1; }
+canvas#domo {
+  width: 100%; height: 100%; display: block; border-radius: 6px;
+  background: #05070c; cursor: crosshair; touch-action: none;
+}
+canvas#domo:focus-visible { outline: 2px solid var(--ambar); outline-offset: 3px; }
+
+.rosa { /* los cuatro rumbos alrededor del circulo */
+  position: absolute; inset: 0; pointer-events: none;
+  color: var(--tenue); font: 500 11px/1 "IBM Plex Sans Condensed", sans-serif;
+  letter-spacing: .12em; text-transform: uppercase;
+}
+.rosa span { position: absolute; transform: translate(-50%, -50%); }
+.rosa .n { left: 50%; top: 10px; }
+.rosa .s { left: 50%; bottom: 10px; top: auto; transform: translate(-50%, 50%); color: var(--ambar); }
+.rosa .e { right: 12px; top: 50%; transform: translate(50%, -50%); }
+.rosa .o { left: 12px; top: 50%; }
+
+.pie-cupula {
+  display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--linea);
+  font-size: 13px; color: var(--tenue);
+}
+.lectura { color: var(--texto); font-size: 13px; }
+.lectura b { color: var(--ambar); font-weight: 500; }
+
+/* ---------------- consola ---------------- */
+.consola { display: flex; flex-direction: column; gap: 14px; }
+
+.bloque {
+  background: var(--panel); border: 1px solid var(--linea); border-radius: var(--r);
+}
+.bloque > summary, .bloque > .cabeza {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 11px 14px; cursor: pointer; list-style: none;
+  font: 600 12px/1 "IBM Plex Sans Condensed", sans-serif;
+  letter-spacing: .13em; text-transform: uppercase; color: var(--tenue);
+}
+.bloque > summary::-webkit-details-marker { display: none; }
+.bloque > summary::after {
+  content: "+"; color: var(--tenue); font-size: 15px; line-height: 1;
+}
+.bloque[open] > summary::after { content: "–"; }
+.bloque[open] > summary { color: var(--texto); border-bottom: 1px solid var(--linea); }
+.cuerpo { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+
+/* fila de control: etiqueta / slider / numero */
+.ctrl { display: grid; grid-template-columns: 1fr 1.35fr 62px; gap: 10px; align-items: center; }
+.ctrl > label { font-size: 13px; color: var(--tenue); }
+.ctrl input[type="range"] { width: 100%; accent-color: var(--ambar); }
+.ctrl input[type="number"], .ctrl select {
+  width: 100%; background: var(--panel-alto); color: var(--texto);
+  border: 1px solid var(--linea); border-radius: 6px; padding: 5px 6px; font-size: 12.5px;
+}
+.ctrl.ancho { grid-template-columns: 1fr 2fr; }
+.ctrl.ancho select { grid-column: 2 / -1; }
+input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--ambar); outline-offset: 2px;
+}
+
+button {
+  background: var(--panel-alto); color: var(--texto);
+  border: 1px solid var(--linea); border-radius: 7px;
+  padding: 7px 11px; font-size: 12.5px; font-weight: 500; cursor: pointer;
+  letter-spacing: .02em;
+}
+button:hover { border-color: var(--ambar); color: #fff; }
+button.principal { background: var(--ambar-sordo); border-color: var(--ambar); color: #ffd8bb; }
+button.principal:hover { background: var(--ambar); color: #1a0d05; }
+.botonera { display: flex; flex-wrap: wrap; gap: 7px; }
+
+/* lista de pantallas */
+.lista { display: flex; flex-direction: column; gap: 5px; }
+.pantalla-fila {
+  display: grid; grid-template-columns: 22px 1fr auto auto; gap: 8px; align-items: center;
+  padding: 7px 9px; border: 1px solid var(--linea); border-radius: 7px;
+  background: var(--panel-alto); cursor: pointer; text-align: left; width: 100%;
+}
+.pantalla-fila:hover { border-color: #35486a; }
+.pantalla-fila[aria-current="true"] { border-color: var(--ambar); background: #1d1a1c; }
+.pantalla-fila .idx { color: var(--tenue); font-size: 11px; font-family: "IBM Plex Mono", monospace; }
+.pantalla-fila .nom { font-size: 13.5px; }
+.pantalla-fila .meta { font-size: 11px; color: var(--tenue); font-family: "IBM Plex Mono", monospace; }
+.pantalla-fila.apagada .nom, .pantalla-fila.apagada .meta { opacity: .42; text-decoration: line-through; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px; border: 1px solid currentColor;
+}
+.chip.ok    { color: var(--agua); }
+.chip.aviso { color: var(--ambar); }
+.chip.mal   { color: var(--alarma); }
+.chip .punto { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+.nota { font-size: 12.5px; color: var(--tenue); margin: 0; }
+.nota code, code {
+  font-family: "IBM Plex Mono", monospace; font-size: 12px;
+  background: var(--panel-alto); border: 1px solid var(--linea);
+  border-radius: 4px; padding: 1px 5px; color: #ffc39a;
+}
+
+textarea.tabla-export {
+  width: 100%; min-height: 132px; resize: vertical;
+  background: #080b12; color: #b9ffe8; border: 1px solid var(--linea);
+  border-radius: 7px; padding: 9px; font-size: 11.5px; line-height: 1.5;
+  white-space: pre; overflow-x: auto;
+}
+
+/* ---------------- ensayos ---------------- */
+.ensayos { display: flex; flex-wrap: wrap; gap: 7px; }
+.ensayos button { border-color: #2b3a56; }
+
+/* ---------------- explicaciones ---------------- */
+.leer { margin-top: 34px; padding-top: 26px; border-top: 1px solid var(--linea); }
+.leer h2 {
+  margin: 0 0 4px; font-size: 13px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--ambar); font-weight: 600;
+}
+.leer > p.entrada { margin: 0 0 22px; color: var(--tenue); max-width: 66ch; }
+.cuadricula { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
+.ficha h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+.ficha p { margin: 0 0 8px; font-size: 14px; color: #b9c4d6; max-width: 60ch; }
+.ficha .clave {
+  font-size: 12px; color: var(--tenue); border-left: 2px solid var(--ambar);
+  padding-left: 10px; margin-top: 10px;
+}
+
+footer.cierre {
+  margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--linea);
+  color: var(--tenue); font-size: 12.5px;
+}
+footer.cierre a { color: var(--ambar); }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="marco">
+
+<header class="tapa">
+  <div style="flex:1 1 320px">
+    <div class="marca">Domo_Pantallas · 10_Video_Domo</div>
+    <h1>Estudio de pantallas del domo</h1>
+  </div>
+  <p>
+    El mismo mapeo que corre en TouchDesigner, dibujado acá en el navegador.
+    Arrastrá sobre la cúpula para mover la pantalla seleccionada, y copiá la
+    tabla al final para pegarla en el <code>.toe</code>.
+  </p>
+</header>
+
+<div class="tablero">
+
+  <!-- ---------------- columna de la cúpula ---------------- -->
+  <section class="cupula-caja">
+    <div class="lienzo-envoltura">
+      <canvas id="domo" width="900" height="900" tabindex="0"
+              aria-label="Vista fisheye de la cúpula. Arrastrá para mover la pantalla seleccionada."></canvas>
+      <div class="rosa" aria-hidden="true">
+        <span class="n">cenit al centro</span>
+        <span class="s">frente</span>
+        <span class="e">90°</span>
+        <span class="o">270°</span>
+      </div>
+    </div>
+
+    <div class="pie-cupula">
+      <span class="lectura" id="lectura">—</span>
+      <span id="chip-anillo" class="chip ok"><i class="punto"></i>anillo</span>
+      <span style="flex:1"></span>
+      <label style="display:flex;gap:6px;align-items:center;font-size:12.5px">
+        <input type="checkbox" id="ver-guias" checked> rejilla
+      </label>
+      <label style="display:flex;gap:6px;align-items:center;font-size:12.5px">
+        <input type="checkbox" id="ver-anim" checked> animación
+      </label>
+    </div>
+
+    <div class="pie-cupula" style="border-top:none;padding-top:2px">
+      <div class="ensayos" id="ensayos"></div>
+    </div>
+  </section>
+
+  <!-- ---------------- consola ---------------- -->
+  <div class="consola">
+
+    <details class="bloque" open>
+      <summary>Montaje</summary>
+      <div class="cuerpo">
+        <div class="ctrl ancho">
+          <label for="tpl">Template</label>
+          <select id="tpl"></select>
+        </div>
+        <div class="botonera">
+          <button class="principal" id="btn-aplicar">Aplicar template</button>
+          <button id="btn-agregar">Agregar pantalla</button>
+          <button id="btn-duplicar">Duplicar</button>
+          <button id="btn-borrar">Borrar</button>
+        </div>
+        <div class="lista" id="lista"></div>
+      </div>
+    </details>
+
+    <details class="bloque" open>
+      <summary>La pantalla seleccionada</summary>
+      <div class="cuerpo" id="ctrl-pantalla"></div>
+    </details>
+
+    <details class="bloque" open>
+      <summary>Anillo y costura</summary>
+      <div class="cuerpo" id="ctrl-anillo">
+        <p class="nota" id="nota-anillo"></p>
+      </div>
+    </details>
+
+    <details class="bloque">
+      <summary>Recorte del cuadro</summary>
+      <div class="cuerpo" id="ctrl-recorte">
+        <p class="nota">
+          Qué pedazo de la película usa esta pantalla. Con
+          <code>repofs</code> cada copia del anillo corre el recorte y la sala
+          arma el cuadro entero repartido.
+        </p>
+      </div>
+    </details>
+
+    <details class="bloque">
+      <summary>Espacio, fondo y animación</summary>
+      <div class="cuerpo" id="ctrl-espacio"></div>
+    </details>
+
+    <details class="bloque">
+      <summary>Fuente</summary>
+      <div class="cuerpo">
+        <p class="nota">
+          El patrón de prueba tiene números y flechas a propósito: así se ve de
+          una si una copia quedó espejada o si la costura corta la imagen.
+        </p>
+        <div class="botonera">
+          <button id="btn-patron">Patrón de prueba</button>
+          <label class="boton-archivo">
+            <input type="file" id="archivo" accept="video/*,image/*" hidden>
+            <button type="button" id="btn-archivo">Cargar un video o imagen…</button>
+          </label>
+        </div>
+      </div>
+    </details>
+
+    <details class="bloque" open>
+      <summary>Llevarlo a TouchDesigner</summary>
+      <div class="cuerpo">
+        <p class="nota">
+          Copiá esto y pegalo en la tabla <code>screens</code> de
+          <code>/project1/VIDEO_DOME</code>. Son las mismas columnas, en el
+          mismo orden que espera el shader.
+        </p>
+        <textarea class="tabla-export" id="export" readonly spellcheck="false"></textarea>
+        <div class="botonera">
+          <button class="principal" id="btn-copiar">Copiar la tabla</button>
+          <button id="btn-seleccionar">Seleccionar todo</button>
+        </div>
+      </div>
+    </details>
+
+  </div>
+</div>
+
+<!-- ---------------- explicaciones ---------------- -->
+<section class="leer">
+  <h2>Cómo leerlo</h2>
+  <p class="entrada">
+    Tres cosas que no son evidentes la primera vez que uno mira un domemaster.
+  </p>
+
+  <div class="cuadricula">
+    <article class="ficha">
+      <h3>El círculo no es una foto: es el cielo entero</h3>
+      <p>
+        El centro es el cenit —justo encima de la cabeza— y el borde es el
+        horizonte. La distancia al centro <em>es</em> el ángulo: un punto a
+        media distancia está a 45° de elevación. El frente de la sala queda
+        <strong>abajo</strong> del cuadro, que es donde apunta el proyector.
+      </p>
+      <p class="clave">
+        Por eso una pantalla que en el círculo parece pequeña y torcida, adentro
+        de la cúpula se ve recta y enorme.
+      </p>
+    </article>
+
+    <article class="ficha">
+      <h3>Un domo lleno no tiene un frente</h3>
+      <p>
+        Con el público repartido, una sola pantalla adelante deja a media sala
+        mirando el fondo. Por eso una fila se repite en anillo: la misma
+        pantalla enfrente de cada sector, moviéndose como una sola.
+      </p>
+      <p>
+        La <strong>costura</strong> es lo que las une. Cada copia se encima unos
+        grados con la vecina y el píxel del solape se reparte entre las dos, así
+        que la unión queda pareja en vez de dejar una banda oscura.
+      </p>
+      <p>
+        Los <em>bordes</em> deciden el resto: con los cuatro, el anillo se funde
+        hacia el cenit y hacia el horizonte —eso es lo que hace
+        <em>sala corona</em>—; sólo con los costados, queda con el borde de
+        arriba neto y se lee como un objeto contra el negro.
+      </p>
+      <p class="clave">
+        La señal de arriba dice si el anillo cierra: verde cierra, ámbar deja
+        hueco, rojo se encima de más.
+      </p>
+    </article>
+
+    <article class="ficha">
+      <h3>Cilindro y túnel no son lo mismo</h3>
+      <p>
+        El <strong>túnel</strong> retuerce la imagen alrededor de un punto. Con
+        una textura de ciudad eso se lee como un remolino: hay movimiento, pero
+        no hay espacio.
+      </p>
+      <p>
+        El <strong>cilindro</strong> pone el video en una pared alrededor del
+        público. La altura a la que un rayo golpea esa pared es la tangente de
+        la elevación, así que la imagen se comprime sola hacia el cenit: eso es
+        la fuga, y es lo que hace que uno sienta que la ciudad sigue para
+        arriba. Con <em>llevar</em> encendido la pared sube, y el domo se
+        convierte en un ascensor.
+      </p>
+      <p class="clave">
+        Regla práctica: si la textura tiene horizonte o líneas rectas, cilindro.
+        El túnel es para material abstracto.
+      </p>
+    </article>
+  </div>
+</section>
+
+<footer class="cierre">
+  Mismo mapeo que <code>10_Video_Domo/dome_map.frag</code>. Lo que se arma acá
+  se pega en la tabla <code>screens</code>; los ajustes globales (FOV del domo,
+  giro, animación) viven en las páginas del COMP <code>VIDEO_DOME</code>.
+</footer>
+
+</div>
+
+<script>
+"use strict";
+
+/* ====================================================================
+ * 1. El modelo: las mismas columnas que la tabla `screens` de TD
+ * ================================================================== */
+const COLS = ['yaw','pitch','roll','mode','hfov','vfov','mirror','opacity',
+              'cropx','cropy','cropw','croph','on','feather','tile','blend',
+              'rep','repspan','repmir','repofs','travel','spin','edges','spare',
+              'name'];
+
+const DEFAULT = {yaw:0, pitch:45, roll:0, mode:0, hfov:70, vfov:39, mirror:0,
+                 opacity:1, cropx:0, cropy:0, cropw:1, croph:1, on:1,
+                 feather:0.04, tile:1, blend:0, rep:1, repspan:360, repmir:0,
+                 repofs:0, travel:0, spin:0, edges:0, spare:0, name:'pantalla'};
+
+const MODOS  = ['plana','curva','banda','túnel','cilindro'];
+const ESPEJOS = ['sin espejo','horizontal','vertical','los dos'];
+const BORDES = ['los cuatro lados','sólo los costados','sólo arriba y abajo'];
+
+const p = (o) => Object.assign({}, DEFAULT, o);
+
+const TEMPLATES = {
+  'cine':        [p({name:'cine', pitch:45, hfov:70, vfov:39})],
+  'grande':      [p({name:'grande', pitch:48, hfov:95, vfov:53})],
+  'cenital':     [p({name:'cenital', pitch:70, hfov:90, vfov:51})],
+  'sala_2':      [p({name:'dos_grandes', pitch:44, hfov:170, vfov:59, mode:1,
+                     rep:2, blend:12, edges:1})],
+  'sala_4':      [p({name:'cuatro', pitch:42, hfov:82, vfov:46, rep:4, blend:8, edges:1})],
+  'sala_6':      [p({name:'seis', pitch:40, hfov:54, vfov:30, rep:6, blend:6, edges:1})],
+  'sala_4_espejo':[p({name:'cuatro_espejo', pitch:42, hfov:82, vfov:46, rep:4,
+                     repmir:1, blend:8, edges:1})],
+  'sala_6_mosaico':[p({name:'mosaico', pitch:40, hfov:54, vfov:54, rep:6,
+                     repofs:1/6, cropx:-0.01, cropw:1/6+0.02, blend:6, edges:1})],
+  'sala_corona': [p({name:'corona', pitch:32, hfov:66, vfov:42, rep:6, repmir:1,
+                     blend:8, edges:0}),
+                  p({name:'cenital', pitch:70, hfov:96, vfov:96, mode:1,
+                     opacity:0.85, feather:0.30})],
+  'sala_corona_panorama':[p({name:'corona_pan', pitch:32, hfov:66, vfov:42, rep:6,
+                     repofs:1/6, cropx:-0.012, cropw:1/6+0.024, blend:8, edges:0}),
+                  p({name:'cenital', pitch:70, hfov:96, vfov:96, mode:1,
+                     opacity:0.75, feather:0.30})],
+  'tres':        [p({name:'izq', yaw:-38, pitch:45, hfov:34, vfov:19, mirror:1}),
+                  p({name:'centro', pitch:45, hfov:34, vfov:19}),
+                  p({name:'der', yaw:38, pitch:45, hfov:34, vfov:19, mirror:1})],
+  'espejo':      [p({name:'a', yaw:-42, pitch:45, hfov:60, vfov:34}),
+                  p({name:'b_espejo', yaw:42, pitch:45, hfov:60, vfov:34, mirror:1})],
+  'anillo':      [p({name:'anillo', pitch:40, hfov:360, vfov:34, mode:2, tile:3})],
+  'tunel':       [p({name:'tunel', pitch:90, hfov:170, vfov:170, mode:3, tile:4})],
+  'cilindro':    [p({name:'cilindro', pitch:8, hfov:360, vfov:60, mode:4,
+                     tile:3, travel:1, edges:2, feather:0.10})],
+  'cilindro_doble':[p({name:'pared', pitch:6, hfov:360, vfov:50, mode:4, tile:3,
+                     travel:1, edges:2, feather:0.08}),
+                  p({name:'pared_alta', yaw:180, pitch:40, hfov:360, vfov:40, mode:4,
+                     tile:2, travel:-0.6, mirror:2, opacity:0.7, edges:2, feather:0.12})],
+  'cilindro_con_sala':[p({name:'cilindro', pitch:8, hfov:360, vfov:70, mode:4,
+                     tile:3, travel:1, opacity:0.55, edges:2, feather:0.10}),
+                  p({name:'sala', pitch:38, hfov:70, vfov:39, rep:4, blend:8, edges:1})],
+  'fragmentos':  [p({name:'frag_izq', yaw:-46, pitch:45, hfov:42, vfov:42, cropx:0, cropw:0.34}),
+                  p({name:'frag_centro', pitch:45, hfov:42, vfov:42, cropx:0.33, cropw:0.34}),
+                  p({name:'frag_der', yaw:46, pitch:45, hfov:42, vfov:42, cropx:0.66, cropw:0.34})]
+};
+
+const MAXSCREENS = 16;
+
+const estado = {
+  pantallas: TEMPLATES['sala_corona'].map(s => Object.assign({}, s)),
+  sel: 0,
+  domefov: 180,
+  yawglobal: 0,
+  viewfov: 120,
+  views: 4,
+  bg: 2,            // 0 nada · 1 lavado · 2 envolvente
+  bgtile: 2,
+  guias: true,
+  anim: true,
+  animtravel: 0.05,
+  animspin: 0
+};
+
+const sel = () => estado.pantallas[Math.min(estado.sel, estado.pantallas.length - 1)];
+
+/* ====================================================================
+ * 2. WebGL: el mismo mapeo que dome_map.frag
+ * ================================================================== */
+const lienzo = document.getElementById('domo');
+const gl = lienzo.getContext('webgl2', {antialias:true, alpha:false});
+
+const VERT = `#version 300 es
+in vec2 aPos;
+out vec2 vUv;
+void main(){ vUv = aPos * 0.5 + 0.5; gl_Position = vec4(aPos, 0.0, 1.0); }`;
+
+const FRAG = `#version 300 es
+precision highp float;
+#define MAXSCREENS 16
+#define MAXCOPIES 12
+in vec2 vUv;
+out vec4 fragColor;
+
+uniform sampler2D uTex;
+uniform vec4 uView;   // fov del domo, aspecto, cuantas pantallas, giro global
+uniform vec4 uAnim;   // desplazamiento acumulado, giro acumulado
+uniform vec4 uGui;    // rejilla si/no, campo de mirada, puntos de vista, seleccionada
+uniform vec4 uBg;     // modo de fondo, repeticiones, giro, zoom
+uniform vec4 uPos[MAXSCREENS];
+uniform vec4 uSize[MAXSCREENS];
+uniform vec4 uCrop[MAXSCREENS];
+uniform vec4 uOpt[MAXSCREENS];
+uniform vec4 uRep[MAXSCREENS];
+uniform vec4 uAnm[MAXSCREENS];
+
+const float PI = 3.14159265359;
+const float EL_MAX = 1.5551;      // tan(89.1 grados)
+
+vec3 dirFrom(float az, float el){
+  return vec3(sin(az)*cos(el), cos(az)*cos(el), sin(el));
+}
+
+float copyYaw(int k, int n, float span){
+  if (n <= 1) return 0.0;
+  bool completa = span >= radians(359.0);
+  float paso = completa ? span/float(n) : span/float(n-1);
+  return completa ? float(k)*paso : (float(k) - (float(n)-1.0)*0.5)*paso;
+}
+
+bool screenUV(vec3 P, float yaw, float pitch, float roll, float hf, float vf,
+              int modo, float tile, float travel, out vec2 uv){
+  uv = vec2(0.0);
+
+  if (modo == 2){                       // banda: azimut / elevacion
+    float az = atan(P.x, P.y);
+    float el = asin(clamp(P.z, -1.0, 1.0));
+    float da = atan(sin(az-yaw), cos(az-yaw));
+    uv = vec2(0.5 + da/hf, 0.5 + (el-pitch)/vf);
+    if (tile > 1.0) uv.x = fract(uv.x*tile);
+    uv.y -= travel;
+    return (uv.x>=0.0 && uv.x<=1.0 && uv.y>=0.0 && uv.y<=1.0);
+  }
+
+  if (modo == 4){                       // cilindro: pared alrededor del publico
+    float az = atan(P.x, P.y);
+    float el = asin(clamp(P.z, -1.0, 1.0));
+    if (el <= 0.0005) return false;
+    float da = atan(sin(az-yaw), cos(az-yaw));
+    if (abs(da) > hf*0.5) return false;
+    float h  = tan(min(el, EL_MAX));
+    float h0 = tan(clamp(pitch, 0.0, EL_MAX));
+    float h1 = tan(clamp(pitch+vf, 0.001, EL_MAX));
+    if (h1 <= h0) return false;
+    uv = vec2(0.5 + da/hf, (h-h0)/(h1-h0));
+    if (tile > 1.0) uv.x = fract(uv.x*tile);
+    uv.y -= travel;
+    return (uv.x>=0.0 && uv.x<=1.0 && uv.y>=0.0 && uv.y<=1.0);
+  }
+
+  vec3 C  = dirFrom(yaw, pitch);
+  vec3 Rv = vec3(cos(yaw), -sin(yaw), 0.0);
+  vec3 Uv = vec3(-sin(yaw)*sin(pitch), -cos(yaw)*sin(pitch), cos(pitch));
+  if (abs(roll) > 1e-6){
+    vec3 r2 = Rv*cos(roll) + Uv*sin(roll);
+    Uv = Uv*cos(roll) - Rv*sin(roll);
+    Rv = r2;
+  }
+  float x = dot(P, Rv), y = dot(P, Uv), z = dot(P, C);
+  if (z <= 0.001) return false;
+
+  if (modo == 3){                       // tunel: polar alrededor del centro
+    vec2 q = vec2(atan(x, z)/(hf*0.5), asin(clamp(y,-1.0,1.0))/(vf*0.5));
+    float rad = length(q);
+    if (rad > 1.0) return false;
+    float ang = atan(q.y, q.x)/(2.0*PI) + 0.5;
+    uv = vec2(ang, fract((1.0-rad)*max(tile,1.0) - travel));
+    return true;
+  }
+
+  if (modo == 0){                       // plana (gnomonica)
+    uv = vec2(0.5 + (x/z)/(2.0*tan(hf*0.5)), 0.5 + (y/z)/(2.0*tan(vf*0.5)));
+  } else {                              // curva (angulos iguales)
+    uv = vec2(0.5 + atan(x,z)/hf, 0.5 + asin(clamp(y,-1.0,1.0))/vf);
+  }
+  if (tile > 1.0) uv.x = fract(uv.x*tile);
+  return (uv.x>=0.0 && uv.x<=1.0 && uv.y>=0.0 && uv.y<=1.0);
+}
+
+float pesoBorde(vec2 uv, float fth, int bordes){
+  fth = max(fth, 0.0001);
+  float lados = smoothstep(0.0, fth, uv.x) * smoothstep(0.0, fth, 1.0-uv.x);
+  float arrab = smoothstep(0.0, fth, uv.y) * smoothstep(0.0, fth, 1.0-uv.y);
+  if (bordes == 1) return lados;
+  if (bordes == 2) return arrab;
+  return lados * arrab;
+}
+
+float linea(float valor, float paso, float grosor){
+  float d = abs(fract(valor/paso - 0.5) - 0.5) * paso;
+  return 1.0 - smoothstep(0.0, grosor*fwidth(valor), d);
+}
+
+void main(){
+  vec2 nc = vUv*2.0 - 1.0;
+  float r = length(nc);
+  if (r > 1.0){ fragColor = vec4(0.02, 0.03, 0.05, 1.0); return; }
+
+  float medio  = radians(uView.x*0.5);
+  float theta  = r*medio;
+  float phi    = atan(nc.x, -nc.y);
+  float aspect = max(uView.y, 0.0001);
+  vec3 P = vec3(sin(theta)*sin(phi), sin(theta)*cos(phi), cos(theta));
+
+  // ---- fondo ----
+  vec4 acc = vec4(0.0);
+  int modoBg = int(uBg.x + 0.5);
+  if (modoBg == 2){
+    float a = (phi - radians(uBg.z))/(2.0*PI) + 0.5;
+    float t = max(uBg.y, 1.0);
+    vec2 uvw = vec2(abs(mod(a*t, 2.0) - 1.0), clamp(1.0 - theta/medio, 0.0, 1.0));
+    acc = vec4(texture(uTex, clamp(uvw, 0.0, 1.0)).rgb * 0.34, 1.0);
+  } else if (modoBg == 1){
+    float zoom = max(uBg.w, 0.01);
+    vec2 uvz = vec2(0.5 + nc.x*0.5/zoom, 0.5 + nc.y*0.5*aspect/zoom);
+    acc = vec4(texture(uTex, clamp(uvz, 0.0, 1.0)).rgb * 0.34, 1.0);
+  } else {
+    acc = vec4(0.03, 0.04, 0.06, 1.0);
+  }
+
+  // ---- pantallas ----
+  float giro = radians(uView.w);
+  int count = int(uView.z + 0.5);
+  for (int i = 0; i < MAXSCREENS; ++i){
+    if (i >= count) break;
+    if (uOpt[i].x < 0.5) continue;
+
+    int modo = int(uPos[i].w + 0.5);
+    float hf = radians(max(uSize[i].x, 0.1));
+    float vf = radians(max(uSize[i].y, 0.1));
+    float travel = uAnim.x * uAnm[i].x;
+    float yaw0 = radians(uPos[i].x + uAnim.y*uAnm[i].y) + giro;
+    int bordes = int(uAnm[i].z + 0.5);
+
+    int copias = int(uRep[i].x + 0.5);
+    copias = clamp(copias, 1, MAXCOPIES);
+    float span = radians(uRep[i].y <= 0.0 ? 360.0 : uRep[i].y);
+    bool alterna = uRep[i].z > 0.5;
+    float pasoCrop = uRep[i].w;
+
+    float solape = radians(max(uOpt[i].w, 0.0));
+    float hfc = (copias > 1) ? hf + solape : hf;
+    float fth = (copias > 1 && solape > 0.0) ? solape/hfc : max(uOpt[i].y, 0.0001);
+
+    vec4 suma = vec4(0.0);
+    float peso = 0.0;
+
+    for (int k = 0; k < MAXCOPIES; ++k){
+      if (k >= copias) break;
+      vec2 uv;
+      if (!screenUV(P, yaw0 + copyYaw(k, copias, span), radians(uPos[i].y),
+                    radians(uPos[i].z), hfc, vf, modo, uOpt[i].z, travel, uv)) continue;
+      float w = pesoBorde(uv, fth, bordes);
+      if (w <= 0.0) continue;
+
+      int esp = int(uSize[i].z + 0.5);
+      bool fx = (esp == 1 || esp == 3);
+      bool fy = (esp == 2 || esp == 3);
+      if (alterna && (k - (k/2)*2) == 1) fx = !fx;
+      if (fx) uv.x = 1.0 - uv.x;
+      if (fy) uv.y = 1.0 - uv.y;
+
+      vec2 c0 = uCrop[i].xy;
+      c0.x = fract(c0.x + pasoCrop*float(k));
+      vec2 cs = max(uCrop[i].zw, vec2(0.0001));
+      vec2 uvs = clamp(c0 + uv*cs, 0.0, 1.0);
+
+      suma += texture(uTex, uvs) * w;
+      peso += w;
+    }
+
+    if (peso <= 0.0) continue;
+    vec4 col = suma/peso;
+    float a = min(peso, 1.0) * clamp(uSize[i].w, 0.0, 1.0);
+    acc = mix(acc, col, a*col.a);
+  }
+
+  // ---- rejilla ----
+  if (uGui.x > 0.5){
+    float elev = 90.0 - degrees(theta);
+    float az   = degrees(phi);
+    float g = max(linea(elev, 15.0, 1.1), linea(az, 30.0, 1.1));
+    acc.rgb += vec3(0.22, 0.45, 0.66) * g * 0.55;
+    acc.rgb += vec3(1.0, 0.85, 0.35) * (1.0 - smoothstep(0.0, 2.2*fwidth(elev), abs(elev)));
+    acc.rgb += vec3(0.34, 1.0, 0.62) * (1.0 - smoothstep(0.0, 2.2*fwidth(az), abs(az))) * 0.8;
+
+    int puestos = clamp(int(uGui.z + 0.5), 1, 8);
+    for (int s = 0; s < 8; ++s){
+      if (s >= puestos) break;
+      vec3 look = dirFrom(float(s)*2.0*PI/float(puestos), radians(45.0));
+      float ang = degrees(acos(clamp(dot(P, look), -1.0, 1.0)));
+      float borde = 1.0 - smoothstep(0.0, 1.6*fwidth(ang), abs(ang - uGui.y*0.5));
+      acc.rgb += vec3(1.0) * borde * (s == 0 ? 0.75 : 0.38);
+    }
+
+    // marco de la pantalla seleccionada, para saber cual se esta moviendo
+    int isel = int(uGui.w + 0.5);
+    if (isel < count && uOpt[isel].x > 0.5){
+      int copias = clamp(int(uRep[isel].x + 0.5), 1, MAXCOPIES);
+      float span = radians(uRep[isel].y <= 0.0 ? 360.0 : uRep[isel].y);
+      float hfc = radians(max(uSize[isel].x, 0.1))
+                + (copias > 1 ? radians(max(uOpt[isel].w, 0.0)) : 0.0);
+      for (int k = 0; k < MAXCOPIES; ++k){
+        if (k >= copias) break;
+        vec2 uv;
+        if (!screenUV(P, radians(uPos[isel].x + uAnim.y*uAnm[isel].y) + giro
+                        + copyYaw(k, copias, span),
+                      radians(uPos[isel].y), radians(uPos[isel].z), hfc,
+                      radians(max(uSize[isel].y, 0.1)),
+                      int(uPos[isel].w + 0.5), 1.0, 0.0, uv)) continue;
+        float borde = min(min(uv.x, 1.0-uv.x), min(uv.y, 1.0-uv.y));
+        float dw = max(fwidth(uv.x), fwidth(uv.y)) * 1.6;
+        acc.rgb += vec3(1.0, 0.55, 0.25) * (1.0 - smoothstep(0.0, dw, borde))
+                   * (k == 0 ? 1.0 : 0.45);
+      }
+    }
+  }
+
+  fragColor = vec4(acc.rgb, 1.0);
+}`;
+
+function compilar(tipo, fuente){
+  const s = gl.createShader(tipo);
+  gl.shaderSource(s, fuente);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(s));
+  }
+  return s;
+}
+
+const prog = gl.createProgram();
+gl.attachShader(prog, compilar(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compilar(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+gl.useProgram(prog);
+
+const vao = gl.createVertexArray();
+gl.bindVertexArray(vao);
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'aPos');
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+const U = {};
+['uTex','uView','uAnim','uGui','uBg','uPos','uSize','uCrop','uOpt','uRep','uAnm']
+  .forEach(n => U[n] = gl.getUniformLocation(prog, n + (n.length > 4 ? '[0]' : '')));
+U.uTex  = gl.getUniformLocation(prog, 'uTex');
+U.uView = gl.getUniformLocation(prog, 'uView');
+U.uAnim = gl.getUniformLocation(prog, 'uAnim');
+U.uGui  = gl.getUniformLocation(prog, 'uGui');
+U.uBg   = gl.getUniformLocation(prog, 'uBg');
+
+/* ---------------- la textura fuente ---------------- */
+const tex = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, tex);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+let fuenteVideo = null;
+let aspectoFuente = 16/9;
+
+/* Patron de prueba: un cuadro 16:9 que se parece a la pelicula (horizonte,
+   ciudad, sol bajo) y ademas lleva numeros y flechas. Sin esas marcas es
+   imposible ver si una copia quedo espejada o si la costura corta la imagen. */
+function patron(){
+  const c = document.createElement('canvas');
+  c.width = 1280; c.height = 720;
+  const x = c.getContext('2d');
+
+  const cielo = x.createLinearGradient(0, 0, 0, 470);
+  cielo.addColorStop(0, '#1a2440');
+  cielo.addColorStop(0.55, '#7a4b52');
+  cielo.addColorStop(1, '#e39a5c');
+  x.fillStyle = cielo; x.fillRect(0, 0, 1280, 500);
+  x.fillStyle = '#0d1018'; x.fillRect(0, 500, 1280, 220);
+
+  x.fillStyle = '#ffd9a0';
+  x.beginPath(); x.arc(880, 430, 52, 0, Math.PI*2); x.fill();
+
+  // horizonte: una recta larga, que es lo que delata cualquier deformacion
+  x.strokeStyle = 'rgba(255,220,180,.75)'; x.lineWidth = 2;
+  x.beginPath(); x.moveTo(0, 500); x.lineTo(1280, 500); x.stroke();
+
+  // ciudad
+  let px = -20;
+  const alturas = [180,120,240,90,300,150,210,110,265,140,190,95,230,160,120,205];
+  alturas.forEach((h, i) => {
+    const an = 50 + (i % 4) * 22;
+    x.fillStyle = i % 2 ? '#161c2b' : '#1e2536';
+    x.fillRect(px, 500 - h, an, h);
+    x.fillStyle = 'rgba(255,196,120,.5)';
+    for (let f = 0; f < Math.floor(h/34); f++)
+      for (let cIdx = 0; cIdx < Math.floor(an/22); cIdx++)
+        if ((f*3 + cIdx*7 + i) % 3 === 0)
+          x.fillRect(px + 8 + cIdx*22, 500 - h + 14 + f*34, 8, 14);
+    px += an + 12;
+  });
+
+  // banda de referencia: diez tramos numerados y flechas hacia la derecha
+  x.fillStyle = 'rgba(6,8,14,.82)'; x.fillRect(0, 0, 1280, 78);
+  for (let i = 0; i < 10; i++){
+    const x0 = i*128;
+    x.strokeStyle = 'rgba(255,140,63,.55)'; x.lineWidth = 1;
+    x.beginPath(); x.moveTo(x0, 0); x.lineTo(x0, 78); x.stroke();
+    x.fillStyle = '#ff8c3f';
+    x.font = '600 30px "IBM Plex Mono", monospace';
+    x.fillText(String(i), x0 + 14, 50);
+    x.strokeStyle = 'rgba(87,211,189,.9)'; x.lineWidth = 3;
+    x.beginPath();
+    x.moveTo(x0 + 58, 39); x.lineTo(x0 + 104, 39);
+    x.moveTo(x0 + 92, 28); x.lineTo(x0 + 104, 39); x.lineTo(x0 + 92, 50);
+    x.stroke();
+  }
+  x.fillStyle = 'rgba(221,228,240,.9)';
+  x.font = '600 26px "IBM Plex Sans Condensed", sans-serif';
+  x.fillText('ARRIBA', 24, 116);
+  x.save(); x.translate(1256, 690); x.rotate(Math.PI);
+  x.fillText('ABAJO', 0, 0); x.restore();
+
+  return c;
+}
+
+function usarPatron(){
+  fuenteVideo = null;
+  aspectoFuente = 16/9;
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, patron());
+}
+usarPatron();
+
+/* ---------------- pasar la tabla al shader ---------------- */
+const buffers = {pos:new Float32Array(64), size:new Float32Array(64),
+                 crop:new Float32Array(64), opt:new Float32Array(64),
+                 rep:new Float32Array(64), anm:new Float32Array(64)};
+
+function subirTabla(){
+  const n = Math.min(estado.pantallas.length, MAXSCREENS);
+  for (let i = 0; i < n; i++){
+    const s = estado.pantallas[i], o = i*4;
+    buffers.pos.set([s.yaw, s.pitch, s.roll, s.mode], o);
+    buffers.size.set([s.hfov, s.vfov, s.mirror, s.opacity], o);
+    buffers.crop.set([s.cropx, s.cropy, s.cropw, s.croph], o);
+    buffers.opt.set([s.on, s.feather, s.tile, s.blend], o);
+    buffers.rep.set([s.rep, s.repspan, s.repmir, s.repofs], o);
+    buffers.anm.set([s.travel, s.spin, s.edges, s.spare], o);
+  }
+  gl.uniform4fv(U.uPos, buffers.pos);
+  gl.uniform4fv(U.uSize, buffers.size);
+  gl.uniform4fv(U.uCrop, buffers.crop);
+  gl.uniform4fv(U.uOpt, buffers.opt);
+  gl.uniform4fv(U.uRep, buffers.rep);
+  gl.uniform4fv(U.uAnm, buffers.anm);
+}
+
+let t0 = performance.now();
+let reloj = 0;
+
+function dibujar(){
+  const ahora = performance.now();
+  const dt = Math.min((ahora - t0)/1000, 0.1);
+  t0 = ahora;
+  if (estado.anim) reloj += dt;
+
+  if (fuenteVideo && fuenteVideo.readyState >= 2){
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, fuenteVideo);
+  }
+
+  const lado = Math.min(lienzo.clientWidth, 1100) * (window.devicePixelRatio || 1);
+  const px = Math.max(360, Math.round(lado));
+  if (lienzo.width !== px){ lienzo.width = px; lienzo.height = px; }
+  gl.viewport(0, 0, lienzo.width, lienzo.height);
+
+  gl.useProgram(prog);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.uniform1i(U.uTex, 0);
+  gl.uniform4f(U.uView, estado.domefov, aspectoFuente,
+               Math.min(estado.pantallas.length, MAXSCREENS), estado.yawglobal);
+  gl.uniform4f(U.uAnim, reloj*estado.animtravel, reloj*estado.animspin, 0, 0);
+  gl.uniform4f(U.uGui, estado.guias ? 1 : 0, estado.viewfov, estado.views, estado.sel);
+  gl.uniform4f(U.uBg, estado.bg, estado.bgtile, estado.yawglobal, 1.8);
+  subirTabla();
+
+  gl.bindVertexArray(vao);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  requestAnimationFrame(dibujar);
+}
+requestAnimationFrame(dibujar);
+
+/* ====================================================================
+ * 3. Mover con el mouse: la cuenta del shader, al reves
+ * ================================================================== */
+function direccionDomo(u, v){
+  const x = u*2 - 1, y = v*2 - 1;
+  const r = Math.hypot(x, y);
+  if (r > 1) return null;
+  const theta = r * (estado.domefov*0.5) * Math.PI/180;
+  const phi = Math.atan2(x, -y);
+  return {az: phi*180/Math.PI, el: 90 - theta*180/Math.PI};
+}
+
+function puntoLienzo(ev){
+  const caja = lienzo.getBoundingClientRect();
+  return {u: (ev.clientX - caja.left)/caja.width,
+          v: 1 - (ev.clientY - caja.top)/caja.height};
+}
+
+function masCerca(az, el){
+  let mejor = 0, dist = 1e9;
+  estado.pantallas.forEach((s, i) => {
+    const d = Math.abs(((s.yaw + estado.yawglobal - az + 180) % 360 + 360) % 360 - 180)
+            + Math.abs(s.pitch - el);
+    if (d < dist){ dist = d; mejor = i; }
+  });
+  return mejor;
+}
+
+let arrastrando = false;
+
+lienzo.addEventListener('pointerdown', ev => {
+  const {u, v} = puntoLienzo(ev);
+  const d = direccionDomo(u, v);
+  if (!d) return;
+  lienzo.setPointerCapture(ev.pointerId);
+  if (ev.shiftKey){ estado.sel = masCerca(d.az, d.el); pintarConsola(); return; }
+  arrastrando = true;
+  mover(d);
+});
+
+lienzo.addEventListener('pointermove', ev => {
+  const {u, v} = puntoLienzo(ev);
+  const d = direccionDomo(u, v);
+  if (d) document.getElementById('lectura').innerHTML =
+    `azimut <b>${d.az.toFixed(0)}°</b> · elevación <b>${d.el.toFixed(0)}°</b>`;
+  if (!arrastrando || !d) return;
+  mover(d);
+});
+
+['pointerup','pointercancel','pointerleave'].forEach(e =>
+  lienzo.addEventListener(e, () => { arrastrando = false; }));
+
+function mover(d){
+  const s = sel();
+  if (!s) return;
+  s.yaw = ((d.az - estado.yawglobal + 180) % 360 + 360) % 360 - 180;
+  s.pitch = Math.max(-20, Math.min(90, d.el));
+  pintarConsola();
+}
+
+lienzo.addEventListener('wheel', ev => {
+  const s = sel();
+  if (!s) return;
+  ev.preventDefault();
+  s.hfov = Math.max(10, Math.min(360, s.hfov - ev.deltaY*0.08));
+  if (s.mode !== 3 && s.mode !== 4) s.vfov = s.hfov * 9/16;
+  pintarConsola();
+}, {passive:false});
+
+/* ====================================================================
+ * 4. La consola
+ * ================================================================== */
+function fila(cont, {clave, etiqueta, min, max, paso, sufijo}){
+  const s = sel();
+  const div = document.createElement('div');
+  div.className = 'ctrl';
+  const id = 'c_' + clave;
+  div.innerHTML =
+    `<label for="${id}">${etiqueta}</label>` +
+    `<input type="range" id="${id}_r" min="${min}" max="${max}" step="${paso}" value="${s[clave]}">` +
+    `<input type="number" id="${id}" class="num" min="${min}" max="${max}" step="${paso}" value="${(+s[clave]).toFixed(paso < 1 ? 3 : 0)}">`;
+  const [rango, numero] = [div.querySelector('input[type=range]'), div.querySelector('input[type=number]')];
+  const aplicar = (v) => {
+    sel()[clave] = +v;
+    rango.value = v; numero.value = (+v).toFixed(paso < 1 ? 3 : 0);
+    refrescarSalida();
+  };
+  rango.addEventListener('input', () => aplicar(rango.value));
+  numero.addEventListener('change', () => aplicar(numero.value));
+  cont.appendChild(div);
+}
+
+function menu(cont, {clave, etiqueta, opciones}){
+  const s = sel();
+  const div = document.createElement('div');
+  div.className = 'ctrl ancho';
+  div.innerHTML = `<label>${etiqueta}</label><select>` +
+    opciones.map((o, i) => `<option value="${i}" ${i === +s[clave] ? 'selected' : ''}>${o}</option>`).join('') +
+    `</select>`;
+  div.querySelector('select').addEventListener('change', e => {
+    sel()[clave] = +e.target.value;
+    pintarConsola();
+  });
+  cont.appendChild(div);
+}
+
+function texto(cont, {clave, etiqueta}){
+  const s = sel();
+  const div = document.createElement('div');
+  div.className = 'ctrl ancho';
+  div.innerHTML = `<label>${etiqueta}</label><input type="text" value="${s[clave]}">`;
+  const inp = div.querySelector('input');
+  inp.style.cssText = 'background:var(--panel-alto);color:var(--texto);border:1px solid var(--linea);border-radius:6px;padding:5px 7px;font-size:12.5px';
+  inp.addEventListener('input', () => { sel()[clave] = inp.value; pintarLista(); refrescarSalida(); });
+  cont.appendChild(div);
+}
+
+function pintarLista(){
+  const cont = document.getElementById('lista');
+  cont.innerHTML = '';
+  estado.pantallas.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.className = 'pantalla-fila' + (s.on ? '' : ' apagada');
+    b.setAttribute('aria-current', i === estado.sel ? 'true' : 'false');
+    b.innerHTML =
+      `<span class="idx">${i+1}</span>` +
+      `<span class="nom">${s.name}</span>` +
+      `<span class="meta">${MODOS[s.mode]}${s.rep > 1 ? ' ×' + s.rep : ''}</span>` +
+      `<span class="meta">${Math.round(s.yaw)}° / ${Math.round(s.pitch)}°</span>`;
+    b.addEventListener('click', () => { estado.sel = i; pintarConsola(); });
+    b.addEventListener('dblclick', () => { s.on = s.on ? 0 : 1; pintarConsola(); });
+    cont.appendChild(b);
+  });
+}
+
+function pintarConsola(){
+  const s = sel();
+  if (!s) return;
+  pintarLista();
+
+  const cp = document.getElementById('ctrl-pantalla');
+  cp.innerHTML = '';
+  texto(cp, {clave:'name', etiqueta:'Nombre'});
+  menu(cp, {clave:'mode', etiqueta:'Forma', opciones:MODOS});
+  fila(cp, {clave:'yaw',   etiqueta:'Azimut', min:-180, max:180, paso:1});
+  fila(cp, {clave:'pitch', etiqueta:'Elevación', min:-20, max:90, paso:1});
+  fila(cp, {clave:'hfov',  etiqueta:'Ancho angular', min:10, max:360, paso:1});
+  fila(cp, {clave:'vfov',  etiqueta:'Alto angular', min:5, max:180, paso:1});
+  fila(cp, {clave:'roll',  etiqueta:'Rotación', min:-180, max:180, paso:1});
+  menu(cp, {clave:'mirror', etiqueta:'Espejo', opciones:ESPEJOS});
+  fila(cp, {clave:'opacity', etiqueta:'Opacidad', min:0, max:1, paso:0.01});
+  fila(cp, {clave:'feather', etiqueta:'Borde suave', min:0, max:0.4, paso:0.01});
+  fila(cp, {clave:'tile', etiqueta:'Repeticiones adentro', min:1, max:8, paso:1});
+
+  const ca = document.getElementById('ctrl-anillo');
+  ca.innerHTML = '';
+  fila(ca, {clave:'rep', etiqueta:'Copias en anillo', min:1, max:12, paso:1});
+  fila(ca, {clave:'repspan', etiqueta:'Arco que ocupan', min:30, max:360, paso:5});
+  fila(ca, {clave:'blend', etiqueta:'Costura (grados)', min:0, max:30, paso:0.5});
+  menu(ca, {clave:'edges', etiqueta:'Bordes que se degradan', opciones:BORDES});
+  fila(ca, {clave:'repmir', etiqueta:'Espejar alternas', min:0, max:1, paso:1});
+  fila(ca, {clave:'repofs', etiqueta:'Corrimiento del recorte', min:0, max:1, paso:0.001});
+  const nota = document.createElement('p');
+  nota.className = 'nota';
+  nota.id = 'nota-anillo';
+  ca.appendChild(nota);
+
+  const cr = document.getElementById('ctrl-recorte');
+  cr.innerHTML = '';
+  fila(cr, {clave:'cropx', etiqueta:'Recorte X', min:-0.5, max:1, paso:0.005});
+  fila(cr, {clave:'cropy', etiqueta:'Recorte Y', min:-0.5, max:1, paso:0.005});
+  fila(cr, {clave:'cropw', etiqueta:'Ancho del recorte', min:0.05, max:1, paso:0.005});
+  fila(cr, {clave:'croph', etiqueta:'Alto del recorte', min:0.05, max:1, paso:0.005});
+  fila(cr, {clave:'travel', etiqueta:'Se lleva con la animación', min:-2, max:2, paso:0.05});
+  fila(cr, {clave:'spin', etiqueta:'Gira con la animación', min:-2, max:2, paso:0.05});
+
+  refrescarSalida();
+}
+
+/* controles globales, una sola vez */
+function pintarEspacio(){
+  const ce = document.getElementById('ctrl-espacio');
+  const glob = [
+    ['domefov', 'FOV del domo', 160, 240, 1],
+    ['yawglobal', 'Girar todo el montaje', -180, 180, 1],
+    ['viewfov', 'Campo de una mirada', 60, 180, 1],
+    ['views', 'Puntos de vista', 1, 8, 1],
+    ['animtravel', 'Velocidad de desplazamiento', -0.5, 0.5, 0.01],
+    ['animspin', 'Velocidad de giro (°/s)', -30, 30, 0.5],
+    ['bgtile', 'Repeticiones del fondo', 1, 8, 1]
+  ];
+  ce.innerHTML = '';
+  glob.forEach(([clave, etiqueta, min, max, paso]) => {
+    const div = document.createElement('div');
+    div.className = 'ctrl';
+    div.innerHTML = `<label>${etiqueta}</label>` +
+      `<input type="range" min="${min}" max="${max}" step="${paso}" value="${estado[clave]}">` +
+      `<input type="number" class="num" min="${min}" max="${max}" step="${paso}" value="${estado[clave]}">`;
+    const [r, n] = div.querySelectorAll('input');
+    const ap = v => { estado[clave] = +v; r.value = v; n.value = v; };
+    r.addEventListener('input', () => ap(r.value));
+    n.addEventListener('change', () => ap(n.value));
+    ce.appendChild(div);
+  });
+  const bg = document.createElement('div');
+  bg.className = 'ctrl ancho';
+  bg.innerHTML = `<label>Fondo</label><select>
+      <option value="0">Sin fondo (negro)</option>
+      <option value="1">Lavado: copia agrandada</option>
+      <option value="2" selected>Envolvente: el cuadro da la vuelta</option>
+    </select>`;
+  bg.querySelector('select').addEventListener('change', e => estado.bg = +e.target.value);
+  ce.appendChild(bg);
+}
+
+/* señal de si el anillo cierra */
+function refrescarSalida(){
+  const s = sel();
+  if (!s) return;
+  const chip = document.getElementById('chip-anillo');
+  const nota = document.getElementById('nota-anillo');
+  if (s.rep > 1){
+    const paso = s.repspan / s.rep;
+    const cubre = s.hfov + s.blend;
+    const dif = cubre - paso;
+    let clase = 'ok', txt = 'anillo cerrado';
+    if (dif < -0.5){ clase = 'aviso'; txt = `hueco de ${(-dif).toFixed(0)}°`; }
+    else if (dif > paso*0.55){ clase = 'mal'; txt = `se encima ${dif.toFixed(0)}°`; }
+    chip.className = 'chip ' + clase;
+    chip.innerHTML = `<i class="punto"></i>${txt}`;
+    if (nota) nota.innerHTML = `Paso entre copias <b>${paso.toFixed(1)}°</b>, ` +
+      `cada una cubre <b>${cubre.toFixed(1)}°</b> (ancho + costura). ` +
+      (dif < -0.5 ? 'Subí el ancho o la costura hasta que cierre.'
+       : dif > paso*0.55 ? 'Demasiado solape: la imagen se repite encima de sí misma.'
+       : 'Las copias se tocan y el solape se reparte parejo.');
+  } else {
+    chip.className = 'chip ok';
+    chip.innerHTML = `<i class="punto"></i>una sola pantalla`;
+    if (nota) nota.textContent =
+      'Con una sola copia el domo tiene un frente: quien esté de espaldas ve el fondo. Subí las copias a 4 o 6.';
+  }
+  document.getElementById('export').value = exportar();
+}
+
+function exportar(){
+  const filas = [COLS.join('\t')];
+  estado.pantallas.slice(0, MAXSCREENS).forEach(s => {
+    filas.push(COLS.map(c => {
+      if (c === 'name') return s.name;
+      const v = +s[c];
+      return Number.isInteger(v) ? String(v) : v.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+    }).join('\t'));
+  });
+  return filas.join('\n');
+}
+
+/* ---------------- botones ---------------- */
+const selTpl = document.getElementById('tpl');
+Object.keys(TEMPLATES).forEach(n => {
+  const o = document.createElement('option');
+  o.value = n; o.textContent = n.replace(/_/g, ' ');
+  if (n === 'sala_corona') o.selected = true;
+  selTpl.appendChild(o);
+});
+
+document.getElementById('btn-aplicar').addEventListener('click', () => {
+  estado.pantallas = TEMPLATES[selTpl.value].map(s => Object.assign({}, s));
+  estado.sel = 0;
+  pintarConsola();
+});
+document.getElementById('btn-agregar').addEventListener('click', () => {
+  if (estado.pantallas.length >= MAXSCREENS) return;
+  estado.pantallas.push(p({name: 'pantalla' + (estado.pantallas.length + 1)}));
+  estado.sel = estado.pantallas.length - 1;
+  pintarConsola();
+});
+document.getElementById('btn-duplicar').addEventListener('click', () => {
+  if (estado.pantallas.length >= MAXSCREENS) return;
+  const c = Object.assign({}, sel());
+  c.name += '_copia'; c.yaw += 30;
+  estado.pantallas.push(c);
+  estado.sel = estado.pantallas.length - 1;
+  pintarConsola();
+});
+document.getElementById('btn-borrar').addEventListener('click', () => {
+  if (estado.pantallas.length <= 1) return;
+  estado.pantallas.splice(estado.sel, 1);
+  estado.sel = Math.max(0, estado.sel - 1);
+  pintarConsola();
+});
+
+document.getElementById('ver-guias').addEventListener('change', e => estado.guias = e.target.checked);
+document.getElementById('ver-anim').addEventListener('change', e => estado.anim = e.target.checked);
+
+document.getElementById('btn-patron').addEventListener('click', usarPatron);
+document.getElementById('btn-archivo').addEventListener('click', () => document.getElementById('archivo').click());
+document.getElementById('archivo').addEventListener('change', ev => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  if (f.type.startsWith('video')){
+    const v = document.createElement('video');
+    v.src = url; v.loop = true; v.muted = true; v.playsInline = true;
+    v.addEventListener('loadeddata', () => {
+      aspectoFuente = v.videoWidth / v.videoHeight;
+      fuenteVideo = v;
+      v.play();
+    });
+  } else {
+    const img = new Image();
+    img.onload = () => {
+      fuenteVideo = null;
+      aspectoFuente = img.width / img.height;
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    };
+    img.src = url;
+  }
+});
+
+document.getElementById('btn-copiar').addEventListener('click', async (ev) => {
+  const b = ev.currentTarget;
+  try {
+    await navigator.clipboard.writeText(exportar());
+    b.textContent = 'Copiada';
+  } catch (e) {
+    const t = document.getElementById('export');
+    t.select(); document.execCommand('copy');
+    b.textContent = 'Copiada';
+  }
+  setTimeout(() => b.textContent = 'Copiar la tabla', 1600);
+});
+
+document.getElementById('btn-seleccionar').addEventListener('click', () => {
+  const t = document.getElementById('export');
+  t.focus(); t.select();
+});
+
+/* ---------------- ensayos: un click, una idea ---------------- */
+const ENSAYOS = [
+  ['Corona cosida', () => { aplicar('sala_corona'); estado.animspin = 0; }],
+  ['La misma, sin costura', () => {
+      aplicar('sala_corona');
+      estado.pantallas[0].blend = 0;
+      estado.pantallas[0].hfov = 58;
+      estado.pantallas[0].feather = 0.06;
+  }],
+  ['Panorama repartido', () => aplicar('sala_corona_panorama')],
+  ['Cilindro llevándose', () => { aplicar('cilindro'); estado.animtravel = 0.06; estado.animspin = 0; }],
+  ['Túnel (para comparar)', () => { aplicar('tunel'); estado.animtravel = 0.06; }],
+  ['Anillo girando', () => {
+      aplicar('anillo');
+      estado.pantallas[0].spin = 1;
+      estado.animspin = 6;
+  }],
+  ['Una sola al frente', () => { aplicar('cine'); estado.animspin = 0; }]
+];
+
+function aplicar(nombre){
+  estado.pantallas = TEMPLATES[nombre].map(s => Object.assign({}, s));
+  estado.sel = 0;
+  selTpl.value = nombre;
+}
+
+const contEnsayos = document.getElementById('ensayos');
+ENSAYOS.forEach(([txt, fn]) => {
+  const b = document.createElement('button');
+  b.textContent = txt;
+  b.addEventListener('click', () => { fn(); pintarConsola(); });
+  contEnsayos.appendChild(b);
+});
+
+/* ---------------- arranque ---------------- */
+pintarEspacio();
+pintarConsola();
+document.getElementById('lectura').innerHTML =
+  'arrastrá para mover · rueda para el ancho · <b>shift</b>+click para elegir otra';
+</script>
+</body>
+</html>

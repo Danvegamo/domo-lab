@@ -52,20 +52,26 @@ import sys
 
 import unreal
 
-MAP_PACKAGE_PATH = "/Game/Maps/DomoVR"
+# Reusa la lista de materiales de la sala, el arreglo de Nanite y la
+# resolucion del modelo de sala (DOMO_FOV) de importar_sala.py, para no
+# duplicar esa logica.
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+import importar_sala as sala  # noqa: E402
+
+# Modelo de sala: sin DOMO_FOV (o 180) es /Game/Maps/DomoVR; con DOMO_FOV=90
+# es /Game/Maps/DomoVR_90, etc. MI_Domo es compartido por todos los modelos:
+# cada nivel tiene su propio SpoutDomeReceiver, que crea su instancia
+# dinamica a partir del mismo MI_Domo. Ver 04_Docs/05_Modelos_de_sala.md.
+MAP_PACKAGE_PATH = sala.MAP_PACKAGE_PATH
+ES_MEDIA_ESFERA = sala.ES_MEDIA_ESFERA
 MI_DOMO_PATH = "/Game/Sala/Materials/MI_Domo"
 BP_SPOUT_RECEIVER_PATH = "/Game/Sala/BP_SpoutDomoReceiver"
 
 # TD_Domo_Final = Pantallas (SPOUT_UNREAL). El de dosis.45 manda "TDSyphonSpoutOut".
 SPOUT_SENDER_NAME = "TD_Domo_Lab"
 PARAMETRO_TEXTURA_DOMO = "SpoutTexture"
-
-# Reusa la lista de materiales de la sala y el arreglo de Nanite de
-# importar_sala.py, para no duplicar esa logica.
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-if SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, SCRIPT_DIR)
-import importar_sala as sala  # noqa: E402
 
 
 def log(msg):
@@ -218,6 +224,7 @@ def generar_config_mcp(level_subsystem):
 
 def main():
     log("=== Conectar Spout en C++ (TouchDesigner -> MI_Domo) + MCP ===")
+    log("Modelo de sala: FOV {:g} -> nivel {}".format(sala.FOV_DOMO, MAP_PACKAGE_PATH))
 
     if not hasattr(unreal, "SpoutBPFunctionLibrary"):
         fallar("SpoutPlugin no cargo (unreal.SpoutBPFunctionLibrary no existe).")
@@ -236,14 +243,19 @@ def main():
 
     colocar_spout_dome_receiver(actor_subsystem, mi_domo, domo_mesh_comp)
 
-    re_marcar_nanite_en_materiales()
+    if ES_MEDIA_ESFERA:
+        # Solo en el modelo base: los materiales son compartidos y ya estan
+        # marcados; en los casquetes no se resalvan assets del 180.
+        re_marcar_nanite_en_materiales()
 
     ok = level_subsystem.save_current_level()
     if not ok:
         aviso("save_current_level devolvio False.")
-    unreal.EditorAssetLibrary.save_directory("/Game/Sala", False, True)
-
-    generar_config_mcp(level_subsystem)
+    if ES_MEDIA_ESFERA:
+        unreal.EditorAssetLibrary.save_directory("/Game/Sala", False, True)
+        generar_config_mcp(level_subsystem)
+    else:
+        log("Casquete: se guarda solo el nivel; .mcp.json y materiales quedan como los dejo el 180.")
 
     log("=== Fin conectar_spout.py ===")
 

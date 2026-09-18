@@ -238,11 +238,16 @@ los usa.
   U = 0,5 cae en +X (el frente del público, opuesto a la zona de control en
   −X), y los meridianos dibujados cada 45° salieron equiespaciados. Es decir,
   TouchDesigner debe seguir mandando el equirectangular 2:1 completo con el
-  horizonte en V = 0,5, tal como hace hoy. Lo que sigue sin explicación es el
-  código: `01_Blender/generar_sala_domo.py` escribe V = elevación / 90° (todo el
-  rango 0 a 1 sobre la media esfera) y no se ha encontrado dónde se remapea a
-  la mitad superior. Queda como pendiente de investigación, pero el
-  comportamiento medido manda.
+  horizonte en V = 0,5, tal como hace hoy. **Resuelto también en el código**
+  (18 de septiembre de 2026): la cúpula se creaba con
+  `primitive_uv_sphere_add`, que ya traía una capa `UVMap` (canal 0) con
+  `U = azimut/360 + 0,5` y `V = 0,5 + elevación/180`; el script de
+  `01_Blender/generar_sala_domo.py` escribía su fórmula `V = elevación / 90` en
+  una segunda capa (`UVMap.001`, canal 1), y Unreal muestrea el canal 0. Por
+  eso la cúpula leía la mitad superior. Ahora la cúpula se construye a mano con
+  una sola capa y esa misma fórmula (`V = 0,5 + elevación/180`) en los tres
+  modelos de sala (180, 90 y 45), sin normalizar al casquete. Detalle en
+  [05_Modelos_de_sala.md](05_Modelos_de_sala.md), sección 3.
 - **Verificación visual final.** Con datos duros quedó demostrado que el frame
   de Spout llega hasta la instancia dinámica de `MI_Domo`. Las notas del 17 de
   septiembre de 2026 indican que con `is_sky` y `SkyLight_Domo` la sala deja de

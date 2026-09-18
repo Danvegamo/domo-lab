@@ -8,6 +8,29 @@ EEVEE leyendo el FBX exportado de vuelta para verificar dimensiones.
 
 Se ejecuta asi (headless, sin abrir la interfaz):
     blender.exe --background --python generar_sala_domo.py
+    blender.exe --background --python generar_sala_domo.py -- --fov 90
+    set DOMO_FOV=45 && blender.exe --background --python generar_sala_domo.py
+
+MODELOS DE SALA (FOV_DOMO): el mismo script genera tres salas que solo se
+diferencian en la cupula y en la altura del muro (ver 04_Docs/05_Modelos_de_sala.md):
+
+    FOV 180  media esfera (planetario clasico). Salida sin sufijo
+             (sala_domo.fbx, sala_domo.blend, vista_*.png) para no romper
+             nada de lo que ya consume esos nombres.
+    FOV 90   casquete esferico que cubre de 45 grados de elevacion al cenit.
+    FOV 45   casquete que cubre de 67,5 grados de elevacion al cenit.
+             Salida con sufijo: sala_domo_90.fbx, sala_domo_45.blend,
+             vista_planta_cenital_90.png, etc.
+
+El FOV se lee de la variable de entorno DOMO_FOV o del argumento --fov que
+va despues de "--" (el argumento manda si estan los dos). La geometria del
+casquete se deriva de FOV_DOMO en las constantes de abajo: el borde del
+casquete siempre tiene el radio del muro (RADIO_DOMO) y la cupula siempre
+llega a la misma altura de cenit que la media esfera (ALTURA_CENIT), asi que
+la esfera de la que se recorta el casquete es mas grande y el muro sube hasta
+donde arranca el casquete. Con FOV distinto de 180 no se hornean texturas
+(son las mismas de la media esfera y Unreal reutiliza los materiales M_*);
+--hornear las fuerza.
 
 Cada corrida borra la escena entera (bpy.ops.wm.read_factory_settings con
 use_empty=True) y la reconstruye desde las constantes de abajo, asi que
@@ -51,6 +74,7 @@ import bpy
 import bmesh
 import math
 import os
+import sys
 from mathutils import Matrix, Vector
 
 # ---------------------------------------------------------------------------
@@ -59,12 +83,87 @@ from mathutils import Matrix, Vector
 
 # Escala de la sala (a escala del Planetario de Bogota).
 RADIO_DOMO = 11.5          # metros, radio de la cupula y del muro
-ALTURA_ARRANQUE = 3.0      # metros, altura del ecuador de la cupula sobre el piso
+ALTURA_ARRANQUE = 3.0      # metros, altura del ecuador de la cupula (media esfera) sobre el piso
 
 # Teselado de la cupula.
 SEGMENTOS_AZIMUT = 128     # divisiones en la vuelta completa (U)
-SEGMENTOS_ELEVACION = 64   # divisiones del ecuador al cenit (V), sobre media esfera
+SEGMENTOS_ELEVACION = 64   # divisiones del borde de la cupula al cenit (V)
 SEGMENTOS_MURO = SEGMENTOS_AZIMUT   # el muro comparte resolucion acimutal con la cupula
+
+
+# ---------------------------------------------------------------------------
+# MODELO DE SALA: FOV de la cupula y geometria derivada
+# ---------------------------------------------------------------------------
+
+def _argumentos_propios():
+    """Argumentos que vienen despues de '--' en la linea de Blender (Blender
+    se queda con los de antes)."""
+    if "--" not in sys.argv:
+        return []
+    return sys.argv[sys.argv.index("--") + 1:]
+
+
+def _leer_fov_domo():
+    """FOV_DOMO: argumento '--fov N' (o '--fov=N') tras '--', si no la
+    variable de entorno DOMO_FOV, si no 180 (media esfera)."""
+    valor = os.environ.get("DOMO_FOV")
+    extra = _argumentos_propios()
+    for i, arg in enumerate(extra):
+        if arg == "--fov" and i + 1 < len(extra):
+            valor = extra[i + 1]
+        elif arg.startswith("--fov="):
+            valor = arg.split("=", 1)[1]
+    if valor is None or valor.strip() == "":
+        return 180.0
+    fov = float(valor)
+    if not (10.0 <= fov <= 180.0):
+        raise SystemExit("DOMO_FOV / --fov tiene que estar entre 10 y 180 grados; llego {}".format(valor))
+    return fov
+
+
+FOV_DOMO = _leer_fov_domo()
+ES_MEDIA_ESFERA = abs(FOV_DOMO - 180.0) < 1e-6
+
+# Sufijo de los archivos de salida: la media esfera no lleva sufijo (es el
+# modelo original y varios scripts/docs ya usan sala_domo.fbx); los demas
+# modelos llevan el FOV (sala_domo_90.fbx, sala_domo_45.fbx).
+SUFIJO_MODELO = "" if ES_MEDIA_ESFERA else "_{:g}".format(FOV_DOMO)
+
+# Geometria del casquete. Convencion: la elevacion se mide desde el centro
+# de la esfera de la cupula (el mismo punto desde el que se define la UV),
+# no desde el ojo del espectador.
+#   - ELEVACION_MIN_DEG: borde del casquete. 0 en la media esfera, 45 en el
+#     domo 90, 67,5 en el domo 45.
+#   - El borde del casquete tiene siempre el radio del muro (RADIO_DOMO), para
+#     que el muro cilindrico suba hasta el y cierre la sala sin anillo plano.
+#     Por eso la esfera de la que se recorta el casquete crece:
+#     RADIO_ESFERA = RADIO_DOMO / cos(elev_min).
+#   - La altura del cenit se mantiene igual en todos los modelos
+#     (ALTURA_CENIT = ALTURA_ARRANQUE + RADIO_DOMO = 14,5 m): la sala no cambia
+#     de envolvente, solo cambia cuanto de esa altura es muro y cuanto cupula.
+#     SAGITA_DOMO es la altura del casquete y ALTURA_PARED lo que queda para
+#     el muro. En la media esfera todo esto se reduce a los valores originales
+#     (RADIO_ESFERA = 11,5, SAGITA = 11,5, ALTURA_PARED = 3).
+#   - Z_CENTRO_ESFERA queda por debajo del piso en los casquetes (-1,76 m en
+#     el domo 90, -15,55 m en el domo 45): es un punto virtual, no una cota
+#     construible. Eso quiere decir que desde el centro del piso el borde del
+#     casquete se ve algo mas bajo que el FOV nominal (unos 40 grados en el
+#     domo 90 y 47 en el domo 45). Documentado en 05_Modelos_de_sala.md como
+#     limitacion conocida.
+ELEVACION_MIN_DEG = 90.0 - FOV_DOMO / 2.0
+_ELEV_MIN_RAD = math.radians(ELEVACION_MIN_DEG)
+ALTURA_CENIT = ALTURA_ARRANQUE + RADIO_DOMO
+RADIO_ESFERA = RADIO_DOMO / math.cos(_ELEV_MIN_RAD)
+SAGITA_DOMO = RADIO_ESFERA * (1.0 - math.sin(_ELEV_MIN_RAD))
+ALTURA_PARED = ALTURA_CENIT - SAGITA_DOMO
+Z_CENTRO_ESFERA = ALTURA_CENIT - RADIO_ESFERA
+
+# Horneado de texturas PBR: solo en la media esfera (o con --hornear). Las
+# texturas son por material y no dependen del modelo de sala; el importador
+# de Unreal reutiliza los M_* que ya existen para los casquetes. Asi generar
+# un casquete tarda un minuto en vez de diez y no reescribe las texturas de
+# la media esfera.
+HORNEAR_TEXTURAS = ES_MEDIA_ESFERA or ("--hornear" in _argumentos_propios())
 
 # Tarima central.
 RADIO_TARIMA = 1.5         # metros (3 m de diametro)
@@ -129,11 +228,17 @@ RES_Y = 720
 
 # Rutas de salida (ya existen las carpetas segun el encargo).
 CARPETA_BASE = r"C:\Users\Danvegamo\Documents\Domo_VR_Unreal"
-RUTA_BLEND = os.path.join(CARPETA_BASE, "01_Blender", "sala_domo.blend")
-RUTA_FBX = os.path.join(CARPETA_BASE, "02_Export", "sala_domo.fbx")
-RUTA_GLB = os.path.join(CARPETA_BASE, "02_Export", "sala_domo.glb")
+NOMBRE_SALIDA = "sala_domo" + SUFIJO_MODELO
+RUTA_BLEND = os.path.join(CARPETA_BASE, "01_Blender", NOMBRE_SALIDA + ".blend")
+RUTA_FBX = os.path.join(CARPETA_BASE, "02_Export", NOMBRE_SALIDA + ".fbx")
+RUTA_GLB = os.path.join(CARPETA_BASE, "02_Export", NOMBRE_SALIDA + ".glb")
 CARPETA_TEXTURAS = os.path.join(CARPETA_BASE, "02_Export", "texturas")
 RUTA_PREVIEW = os.path.join(CARPETA_BASE, "05_Preview")
+
+
+def ruta_preview(nombre_base):
+    """vista_x.png para la media esfera, vista_x_90.png para el domo 90."""
+    return os.path.join(RUTA_PREVIEW, "{}{}.png".format(nombre_base, SUFIJO_MODELO))
 
 
 # ---------------------------------------------------------------------------
@@ -310,9 +415,11 @@ def crear_muro(puertas_deg):
     """Construye el muro a mano (no con primitive_cone) para poder dejar
     huecos reales donde van las puertas: dos anillos bajos (0 y
     ALTURA_PUERTA) que se saltan en el tramo de cada puerta, y un tercer
-    anillo hasta ALTURA_ARRANQUE que siempre se rellena (hace de dintel)."""
+    anillo hasta ALTURA_PARED que siempre se rellena (hace de dintel).
+    ALTURA_PARED es donde arranca la cupula: 3 m en la media esfera, mas en
+    los casquetes (ver la seccion MODELO DE SALA arriba)."""
     bm = bmesh.new()
-    alturas = [0.0, ALTURA_PUERTA, ALTURA_ARRANQUE]
+    alturas = [0.0, ALTURA_PUERTA, ALTURA_PARED]
     anillos = []
     for z in alturas:
         anillo = []
@@ -377,7 +484,7 @@ def crear_listones(puertas_deg):
             continue
         centro = Vector((radio_liston * math.cos(ang), radio_liston * math.sin(ang), 0.0))
         m = Matrix.Translation(centro) @ Matrix.Rotation(ang, 4, 'Z')
-        agregar_caja(bm, (FONDO_LISTON, ANCHO_LISTON, ALTURA_ARRANQUE), (0.0, 0.0, 0.0), 0.0, m)
+        agregar_caja(bm, (FONDO_LISTON, ANCHO_LISTON, ALTURA_PARED), (0.0, 0.0, 0.0), 0.0, m)
     obj = nuevo_objeto_desde_bmesh(bm, "SM_Listones")
     obj.data.materials.append(crear_material("M_Madera", (0.30, 0.17, 0.08), rugosidad=0.55))
     return obj
@@ -411,42 +518,88 @@ def construir_madera(mat):
 
 
 # ---------------------------------------------------------------------------
-# CUPULA (con UV explicito: U = azimut, V = elevacion) — sin cambios de logica
+# CUPULA (media esfera o casquete) con UV equirectangular explicita
 # ---------------------------------------------------------------------------
 
-def crear_domo():
-    """U = azimut/360 (vuelta completa), V = elevacion/90 (0 en el arranque,
-    1 en el cenit), calculado a mano por esquina de cara, con correccion de
-    costura en U=0/1 y promedio de U en el vertice de polo."""
-    anillos_esfera_completa = SEGMENTOS_ELEVACION * 2
-    bpy.ops.mesh.primitive_uv_sphere_add(
-        segments=SEGMENTOS_AZIMUT, ring_count=anillos_esfera_completa,
-        radius=RADIO_DOMO, location=(0, 0, 0),
-    )
-    obj = bpy.context.active_object
-    obj.name = "SM_Domo"
+def uv_equirectangular(co, eps):
+    """UV de un punto de la cupula en coordenadas locales (esfera centrada en
+    el origen, radio RADIO_ESFERA). Es la convencion que lee Unreal y que
+    espera el lienzo equirectangular 2:1 que manda TouchDesigner por Spout
+    (04_Docs/04_Senal_TouchDesigner.md, seccion 3):
 
+        U = azimut/360 + 0,5     U = 0,5 en +X (el frente de la sala), la
+                                 costura U = 0/1 en -X (detras, zona de control)
+        V = 0,5 + elevacion/180  V = 0,5 en el horizonte, 1 en el cenit: la
+                                 cupula lee la MITAD SUPERIOR del lienzo
+
+    Por que esta formula y no V = elevacion/90: la version anterior de este
+    script escribia V = elevacion/90 en una capa nueva, pero
+    primitive_uv_sphere_add ya traia una capa "UVMap" propia, asi que la
+    nueva quedaba como "UVMap.001" (canal 1). Unreal muestrea el canal 0, o
+    sea la UV por defecto de la esfera de Blender, que es exactamente esta
+    (U con la costura en -X, V de 0 a 1 sobre la esfera COMPLETA, y por
+    tanto 0,5..1 en la mitad superior). Medido el 17 sep 2026 leyendo el FBX
+    exportado de vuelta (canal 0: U = 0,5 en +X, V = 0,75 a 45 grados) y
+    en Unreal con el patron de bandas. Ahora la cupula se construye a mano y
+    esta es la UNICA capa, con la formula que siempre se leyo en la practica.
+    Para los casquetes NO se normaliza al casquete: V sigue siendo la
+    elevacion absoluta, asi el mismo lienzo cae en el mismo sitio del cielo
+    en los tres modelos (el domo 90 muestra solo V de 0,75 a 1)."""
+    radio_xy = math.hypot(co.x, co.y)
+    es_polo = radio_xy < eps
+    azimut = math.atan2(co.y, co.x)
+    u = (azimut / (2.0 * math.pi) + 0.5) % 1.0
+    elevacion = math.asin(max(-1.0, min(1.0, co.z / RADIO_ESFERA)))
+    v = 0.5 + elevacion / math.pi
+    return u, max(0.5, min(1.0, v)), es_polo
+
+
+def crear_domo():
+    """Construye la cupula a mano con bmesh: SEGMENTOS_ELEVACION anillos de
+    SEGMENTOS_AZIMUT vertices desde ELEVACION_MIN_DEG (0 en la media esfera,
+    45 en el domo 90, 67,5 en el domo 45) hasta el cenit, mas el vertice de
+    polo. Con FOV 180 los vertices coinciden con los de la media esfera de
+    primitive_uv_sphere_add que usaba la version anterior (misma malla, mismo
+    conteo de triangulos). Normales hacia adentro. UV segun uv_equirectangular,
+    con correccion de costura en U=0/1 y promedio de U en el polo."""
     bm = bmesh.new()
-    bm.from_mesh(obj.data)
+    anillos = []
+    for j in range(SEGMENTOS_ELEVACION):
+        elev = _ELEV_MIN_RAD + (math.pi / 2.0 - _ELEV_MIN_RAD) * j / SEGMENTOS_ELEVACION
+        r_xy = RADIO_ESFERA * math.cos(elev)
+        z = RADIO_ESFERA * math.sin(elev)
+        anillo = []
+        for i in range(SEGMENTOS_AZIMUT):
+            ang = 2.0 * math.pi * i / SEGMENTOS_AZIMUT
+            anillo.append(bm.verts.new((r_xy * math.cos(ang), r_xy * math.sin(ang), z)))
+        anillos.append(anillo)
+    polo = bm.verts.new((0.0, 0.0, RADIO_ESFERA))
     bm.verts.ensure_lookup_table()
 
-    eps = RADIO_DOMO * 1e-4
-    verts_a_borrar = [v for v in bm.verts if v.co.z < -eps]
-    bmesh.ops.delete(bm, geom=verts_a_borrar, context='VERTS')
+    for j in range(SEGMENTOS_ELEVACION - 1):
+        for i in range(SEGMENTOS_AZIMUT):
+            k = (i + 1) % SEGMENTOS_AZIMUT
+            bm.faces.new((anillos[j][i], anillos[j][k], anillos[j + 1][k], anillos[j + 1][i]))
+    for i in range(SEGMENTOS_AZIMUT):
+        k = (i + 1) % SEGMENTOS_AZIMUT
+        bm.faces.new((anillos[-1][i], anillos[-1][k], polo))
 
+    bm.faces.ensure_lookup_table()
     bm.normal_update()
-    voltear_normales(bm)
+    # La sala se ve desde adentro: normales hacia el centro de la esfera.
+    f0 = bm.faces[0]
+    if f0.normal.dot(f0.calc_center_median()) > 0:
+        voltear_normales(bm)
 
+    eps = RADIO_ESFERA * 1e-4
     uv_layer = bm.loops.layers.uv.new("UVMap")
     for f in bm.faces:
-        us_crudos = []
-        es_polo = []
+        us_crudos, vs, es_polo = [], [], []
         for loop in f.loops:
-            co = loop.vert.co
-            radio_xy = math.hypot(co.x, co.y)
-            es_polo.append(radio_xy < eps)
-            azimut = math.atan2(co.y, co.x)
-            us_crudos.append((azimut / (2.0 * math.pi)) % 1.0)
+            u, v, p = uv_equirectangular(loop.vert.co, eps)
+            us_crudos.append(u)
+            vs.append(v)
+            es_polo.append(p)
 
         us_validos = [u for u, p in zip(us_crudos, es_polo) if not p]
         us_corregidos = list(us_crudos)
@@ -458,16 +611,11 @@ def crear_domo():
         no_polo_corregidos = [u for u, p in zip(us_corregidos, es_polo) if not p]
         promedio = sum(no_polo_corregidos) / len(no_polo_corregidos) if no_polo_corregidos else 0.0
 
-        for loop, u, p in zip(f.loops, us_corregidos, es_polo):
-            co = loop.vert.co
-            elevacion = math.asin(max(-1.0, min(1.0, co.z / RADIO_DOMO)))
-            v = max(0.0, min(1.0, elevacion / (math.pi / 2.0)))
+        for loop, u, v, p in zip(f.loops, us_corregidos, vs, es_polo):
             loop[uv_layer].uv = (promedio if p else u, v)
 
-    bm.to_mesh(obj.data)
-    bm.free()
-
-    obj.location = (0, 0, ALTURA_ARRANQUE)
+    obj = nuevo_objeto_desde_bmesh(bm, "SM_Domo")
+    obj.location = (0, 0, Z_CENTRO_ESFERA)
 
     obj.data.materials.append(
         crear_material("M_Domo", (0.6, 0.6, 0.65), emision_color=(0.5, 0.55, 0.65), emision_fuerza=1.2)
@@ -797,12 +945,22 @@ def hornear_material_pbr(obj, material, nombre_archivo):
     print(f"Texturas horneadas: {material.name} -> {CARPETA_TEXTURAS}\\{nombre_archivo}_[BaseColor|Roughness|Normal].png")
 
 
-def hornear_todas_las_texturas(piso, muro, butaca_rep, tarima, puerta_rep):
-    hornear_material_pbr(piso, piso.data.materials[0], "M_Piso")
-    hornear_material_pbr(muro, muro.data.materials[0], "M_Muro")
-    hornear_material_pbr(butaca_rep, butaca_rep.data.materials[0], "M_Butaca")
-    hornear_material_pbr(tarima, tarima.data.materials[0], "M_Tarima")
-    hornear_material_pbr(puerta_rep, puerta_rep.data.materials[0], "M_Puerta")
+def hornear_todas_las_texturas(piso, muro, butaca_rep, tarima, puerta_rep, listones):
+    """Con HORNEAR_TEXTURAS apagado (casquetes) solo se desenvuelve el UV de
+    las mismas piezas, para que el FBX salga con UV valido igual que en la
+    media esfera; las texturas PNG ya existen de la corrida del 180."""
+    piezas = [
+        (piso, "M_Piso"), (muro, "M_Muro"), (butaca_rep, "M_Butaca"),
+        (tarima, "M_Tarima"), (puerta_rep, "M_Puerta"), (listones, "M_Madera"),
+    ]
+    for obj, nombre in piezas:
+        if HORNEAR_TEXTURAS:
+            hornear_material_pbr(obj, obj.data.materials[0], nombre)
+        else:
+            desenvolver_uv_cube(obj)
+    if not HORNEAR_TEXTURAS:
+        print("Horneado de texturas omitido (FOV {:g}); se reutilizan las PNG de {}".format(
+            FOV_DOMO, CARPETA_TEXTURAS))
 
 
 # ---------------------------------------------------------------------------
@@ -855,7 +1013,7 @@ def verificar_export():
         return (max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
 
     print("\n--- Verificacion leyendo el FBX exportado de vuelta ---")
-    for nombre in ("SM_Domo", "SM_Butacas_01", "SM_Tarima"):
+    for nombre in ("SM_Domo", "SM_Muro", "SM_Butacas_01", "SM_Tarima"):
         obj = bpy.data.objects.get(nombre)
         if obj is None:
             print(f"{nombre}: NO SE ENCONTRO EN EL FBX IMPORTADO")
@@ -866,6 +1024,15 @@ def verificar_export():
             diametro_esperado = RADIO_DOMO * 2.0
             ok = abs(dx - diametro_esperado) < 0.05 and abs(dy - diametro_esperado) < 0.05
             print(f"  diametro esperado {diametro_esperado:.2f} m -> {'OK' if ok else 'DESAJUSTADO'}")
+            ok_z = abs(dz - SAGITA_DOMO) < 0.05
+            print(f"  altura de cupula (sagita) esperada {SAGITA_DOMO:.2f} m -> {'OK' if ok_z else 'DESAJUSTADO'}")
+            capas = [l.name for l in obj.data.uv_layers]
+            vs = [d.uv.y for d in obj.data.uv_layers[0].data]
+            print(f"  capas UV: {capas} (Unreal lee la primera); V del canal 0 de {min(vs):.3f} a {max(vs):.3f}"
+                  f" (esperado {0.5 + ELEVACION_MIN_DEG / 180.0:.3f} a 1.000)")
+        if nombre == "SM_Muro":
+            ok = abs(dz - ALTURA_PARED) < 0.05
+            print(f"  altura de muro esperada {ALTURA_PARED:.2f} m -> {'OK' if ok else 'DESAJUSTADO'}")
 
     for obj in importados:
         bpy.data.objects.remove(obj, do_unlink=True)
@@ -900,7 +1067,7 @@ def preparar_render():
     relleno.energy = 400.0
     relleno.size = RADIO_DOMO
     obj_relleno = bpy.data.objects.new("Relleno_Preview", relleno)
-    obj_relleno.location = (0, 0, ALTURA_ARRANQUE + RADIO_DOMO * 0.6)
+    obj_relleno.location = (0, 0, ALTURA_PARED + SAGITA_DOMO * 0.6)
     bpy.context.collection.objects.link(obj_relleno)
 
     cam_data = bpy.data.cameras.new("Camara_Preview")
@@ -919,9 +1086,9 @@ def renderizar_vistas(cam_obj, domo_obj, layout):
     domo_obj.hide_render = True
     cam_obj.data.type = 'ORTHO'
     cam_obj.data.ortho_scale = RADIO_DOMO * 2.2
-    cam_obj.location = (0, 0, ALTURA_ARRANQUE + RADIO_DOMO + 4.0)
+    cam_obj.location = (0, 0, ALTURA_CENIT + 4.0)
     apuntar_camara(cam_obj, Vector((0, 0, 0)))
-    escena.render.filepath = os.path.join(RUTA_PREVIEW, "vista_planta_cenital.png")
+    escena.render.filepath = ruta_preview("vista_planta_cenital")
     bpy.ops.render.render(write_still=True)
     domo_obj.hide_render = False
 
@@ -938,16 +1105,16 @@ def renderizar_vistas(cam_obj, domo_obj, layout):
     cam_obj.data.type = 'PERSP'
     cam_obj.data.lens = 20.0
     cam_obj.location = (fila_ref["radio"] - ojo_local_x, 0.0, ojo_local_z)
-    apuntar_camara(cam_obj, Vector((0.0, 0.0, ALTURA_ARRANQUE + RADIO_DOMO * 0.8)))
+    apuntar_camara(cam_obj, Vector((0.0, 0.0, ALTURA_CENIT - RADIO_DOMO * 0.2)))
     cam_obj.rotation_euler.x -= math.radians(12)
-    escena.render.filepath = os.path.join(RUTA_PREVIEW, "vista_desde_butaca.png")
+    escena.render.filepath = ruta_preview("vista_desde_butaca")
     bpy.ops.render.render(write_still=True)
 
     # 3) Vista general en perspectiva, desde dentro de la sala.
     cam_obj.data.lens = 16.0
     cam_obj.location = (1.0, -1.0, ALTURA_ARRANQUE + 2.2)
     apuntar_camara(cam_obj, Vector((RADIO_DOMO * 0.75, RADIO_DOMO * 0.75, 0.5)))
-    escena.render.filepath = os.path.join(RUTA_PREVIEW, "vista_general_perspectiva.png")
+    escena.render.filepath = ruta_preview("vista_general_perspectiva")
     bpy.ops.render.render(write_still=True)
 
     # 4) Vista hacia el sector de control, desde el lado opuesto de la
@@ -957,7 +1124,7 @@ def renderizar_vistas(cam_obj, domo_obj, layout):
     ang_centro_control = math.radians(ANGULO_CENTRO_CONTROL_DEG)
     objetivo_control = Vector((8.5 * math.cos(ang_centro_control), 8.5 * math.sin(ang_centro_control), 1.4))
     apuntar_camara(cam_obj, objetivo_control)
-    escena.render.filepath = os.path.join(RUTA_PREVIEW, "vista_zona_control.png")
+    escena.render.filepath = ruta_preview("vista_zona_control")
     bpy.ops.render.render(write_still=True)
 
 
@@ -990,6 +1157,15 @@ def reportar_poligonos(objetos_relevantes):
 
 def main():
     limpiar_escena()
+
+    print("\n=== Modelo de sala: FOV {:g} ({}) ===".format(
+        FOV_DOMO, "media esfera" if ES_MEDIA_ESFERA else "casquete esferico"))
+    print("radio del muro {:.2f} m | borde de cupula a {:.1f} grados de elevacion | "
+          "radio de esfera {:.2f} m | muro de {:.2f} m | cupula de {:.2f} m de alto | "
+          "cenit a {:.2f} m | centro de esfera en z={:.2f} m".format(
+              RADIO_DOMO, ELEVACION_MIN_DEG, RADIO_ESFERA, ALTURA_PARED, SAGITA_DOMO,
+              ALTURA_CENIT, Z_CENTRO_ESFERA))
+    print("salida: {}.fbx / .glb / .blend, previews con sufijo '{}'".format(NOMBRE_SALIDA, SUFIJO_MODELO))
 
     layout = calcular_layout_sala()
     print(f"Sector de control: {layout['angulo_control_deg']:.2f} grados de arco "
@@ -1024,9 +1200,9 @@ def main():
     print(f"\nConteo de objetos en la escena: {len(todos_los_objetos)}")
     print(f"Conteo de butacas totales: {TOTAL_BUTACAS} (en {NUM_MODULOS} cunas de {BUTACAS_POR_MODULO})")
 
-    # Horneado de texturas PBR (una sola vez por material compartido).
-    hornear_todas_las_texturas(piso, muro, modulos_butacas[0], tarima, puertas[0])
-    hornear_material_pbr(listones, listones.data.materials[0], "M_Madera")
+    # Horneado de texturas PBR (una sola vez por material compartido; solo
+    # en la media esfera, ver HORNEAR_TEXTURAS).
+    hornear_todas_las_texturas(piso, muro, modulos_butacas[0], tarima, puertas[0], listones)
 
     aplicar_transformaciones(todos_los_objetos)
 
@@ -1040,7 +1216,8 @@ def main():
 
     verificar_export()
 
-    print("\nListo: sala_domo.blend, sala_domo.fbx, sala_domo.glb, texturas PBR y 4 PNG de previsualizacion generados.")
+    print("\nListo: {0}.blend, {0}.fbx, {0}.glb{1} y 4 PNG de previsualizacion generados.".format(
+        NOMBRE_SALIDA, ", texturas PBR" if HORNEAR_TEXTURAS else ""))
 
 
 if __name__ == "__main__":

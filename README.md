@@ -92,6 +92,10 @@ Spout), Blender 4 solo si se quiere regenerar la sala.
   queda con el último frame que pudo leer y no avisa.
 - Unreal en segundo plano frena el editor; para ver la señal en vivo hay que
   tenerlo al frente.
+- Desde TouchDesigner se mueve el cénit, se escala, se rota y se elige cuántos
+  grados de contenido caben en la cúpula (página *Mapping* de `DOMO`; 230
+  grados sobre una cúpula de 180 verificado con el patrón), sin tocar Unreal,
+  igual que en el mapping en vivo de un domo real.
 
 La lista completa, con fechas, está en la sección 5 de
 [01_Proceso_y_matematica.md](04_Docs/01_Proceso_y_matematica.md).

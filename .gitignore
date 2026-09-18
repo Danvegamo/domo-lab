@@ -14,9 +14,10 @@
 # Blender: el .blend se regenera con generar_sala_domo.py; el .blend1 es autosave
 01_Blender/*.blend1
 
-# Export: el FBX sí va (1 MB); el GLB de 14 MB y las texturas duplicadas del .fbm no
+# Export: los FBX sí van (~1 MB cada uno: sala_domo.fbx, sala_domo_90.fbx, sala_domo_45.fbx);
+# los GLB (3 a 14 MB) y las texturas duplicadas de los .fbm no
 02_Export/*.glb
-02_Export/sala_domo.fbm/
+02_Export/*.fbm/
 
 # respaldos de scripts y basura
 *.bak_*

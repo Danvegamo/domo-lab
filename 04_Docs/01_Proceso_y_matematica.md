@@ -519,6 +519,15 @@ sus pendientes están en [../06_Modelos/Domos_de_Colombia.md](../06_Modelos/Domo
   final.
 - **17 sep 2026 · Dos TouchDesigner abiertos no pueden compartir nombre de
   sender**, ni Spout ni NDI. El de la sala VR se llama `TD_Domo_Lab`.
+- **18 sep 2026 · Por qué Unreal leía la mitad superior del equirectangular
+  aunque el generador escribía `V = elevación / 90`.** La cúpula se creaba con
+  `primitive_uv_sphere_add`, que ya traía una capa `UVMap` (canal 0) con
+  `U = azimut/360 + 0,5` y `V = 0,5 + elevación/180`; el script escribía su
+  fórmula en una segunda capa (`UVMap.001`, canal 1), y Unreal muestrea el
+  canal 0. Ahora la cúpula se construye a mano con una sola capa y esa misma
+  fórmula (`V = 0,5 + elevación/180`) en los tres modelos de sala (180, 90 y
+  45), sin normalizar al casquete. Ver
+  [05_Modelos_de_sala.md](05_Modelos_de_sala.md), sección 3.
 - **Sector de control: 7 m de arco.** La constante `ANCHO_CONTROL` vale 7,0 m
   (unos 35° con radio 11,5 m), pero la cabecera del script de Blender y el
   documento antiguo `Unreal_sala_domo.md` todavía hablan de 5 m y 25°. Manda

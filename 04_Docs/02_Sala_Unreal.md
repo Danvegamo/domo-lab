@@ -245,10 +245,15 @@ aproximación de la altura de ojo de alguien casi acostado, no un dato medido.
   en 45° de elevación y V = 1 en el cénit. U = 0,5 cae en +X (el frente del
   público, opuesto a la zona de control en −X), y los meridianos dibujados cada
   45° salieron equiespaciados. Lo que sigue sin explicación es el código:
-  `crear_domo()` en `01_Blender/generar_sala_domo.py` escribe
-  `v = elevación / 90°` (todo el rango 0 a 1 sobre la media esfera) y no se ha
-  encontrado dónde se remapea a la mitad superior. Queda como pendiente de
-  investigación, pero el comportamiento medido manda.
+  `crear_domo()` en `01_Blender/generar_sala_domo.py` escribía
+  `v = elevación / 90°` y no se veía dónde se remapeaba a la mitad superior.
+  **Resuelto también en el código** (misma noche): `primitive_uv_sphere_add`
+  ya traía una capa `UVMap` y el script escribía en una segunda capa
+  (`UVMap.001`); Unreal leía el canal 0, la UV por defecto de la esfera
+  (`U = azimut/360 + 0,5`, `V = 0,5 + elevación/180`). Ahora la cúpula se
+  construye a mano con una sola capa y esa fórmula explícita, igual para los
+  tres modelos de sala. Detalle en [05_Modelos_de_sala.md](05_Modelos_de_sala.md),
+  sección 3.
 - **`EmissiveIntensity`.** Documentado en la sección 5: valor inicial 1,0
   (`importar_sala.py`, línea 185), expuesto en `MI_Domo`. El valor que de verdad
   se ve bien no quedó confirmado a ojo.

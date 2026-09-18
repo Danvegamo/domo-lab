@@ -42,7 +42,7 @@ except NameError:
 
 RAIZ = op('/project1')
 NOMBRE = 'DOMO'
-VERSION = '1.0 (17 sep 2026)'
+VERSION = '1.1 (18 sep 2026)'
 
 # ---------------------------------------------------------------- utilidades
 
@@ -242,6 +242,17 @@ p.normMin, p.normMax = 1024, 8192
 p = pg.appendStr('Version', label='Version')[0]
 p.val = VERSION
 p.readOnly = True
+
+# Mapping: lo que en la sala real se ajusta desde TouchDesigner mientras el
+# servidor del domo solo recibe. Aqui pasa lo mismo: Unreal recibe y estos
+# pars mueven lo que se ve, sin tocar el nivel.
+pmap = D.appendCustomPage('Mapping')
+toggle(pmap, 'Fovauto', 'FOV del contenido = FOV del modelo de sala', True)
+flotante(pmap, 'Fovcontenido', 'FOV del contenido si no es automatico (grados)', 230, 90, 360)
+flotante(pmap, 'Centrox', 'Mover el cenit en X (fraccion del domemaster)', 0, -0.5, 0.5)
+flotante(pmap, 'Centroy', 'Mover el cenit en Y (fraccion del domemaster)', 0, -0.5, 0.5)
+flotante(pmap, 'Escala', 'Escala del domemaster', 1.0, 0.5, 2.0)
+flotante(pmap, 'Rotar', 'Rotar el domemaster (grados)', 0, -180, 180)
 
 ps = D.appendCustomPage('Salidas')
 toggle(ps, 'Spoutunreal', 'Spout a la sala VR (equirectangular)', True)
@@ -515,15 +526,31 @@ wire(equi, giro)
 # gira el domemaster para que el frente quede ABAJO del cuadro (convencion
 # domemaster), y el Pitch va restando de rx: 90 - Pitch inclina el contenido
 # del frente hacia el cenit.
+# FOV del contenido: normalmente el del modelo de sala. Con Fovauto apagado y
+# Fovcontenido = 230, el domemaster mete 230 grados de contenido en el mismo
+# circulo; para_unreal (y el servidor del domo real) lo leen como si fuera el
+# FOV de la sala, asi que en la cupula de 180 se ve tambien lo que estaba
+# hasta 25 grados bajo el horizonte: mas espacio para lo que se creo.
+FOV_SALA = "[180, 90, 45, parent().par.Fovcustom][parent().par.Modelo.menuIndex]"
 domo = mk(D, projectionTOP, 'domo', 400, 250, input='equirectangular', output='fisheye', ry=90, rz=0)
-expr(domo, 'fov', "[180, 90, 45, parent().par.Fovcustom][parent().par.Modelo.menuIndex]")
+expr(domo, 'fov', "(%s) if parent().par.Fovauto else parent().par.Fovcontenido" % FOV_SALA)
 expr(domo, 'rx', '90 - parent().par.Pitch')
 setpar(domo, 'outputresolution', 'custom')
 expr(domo, 'resolutionw', '[1024, 2048, 4096][parent().par.Res.menuIndex]')
 expr(domo, 'resolutionh', '[1024, 2048, 4096][parent().par.Res.menuIndex]')
 wire(giro, domo)
-out_domo = mk(D, nullTOP, 'out_domo', 600, 250)
-wire(domo, out_domo)
+
+# mapping del domemaster: mover el cenit, escalar y rotar, como se hace en
+# vivo sobre el servidor de un domo real. Fuera del cuadro queda negro.
+mapping = mk(D, transformTOP, 'mapping', 600, 250, tunit='fraction', extend='zero')
+expr(mapping, 'tx', 'parent().par.Centrox')
+expr(mapping, 'ty', 'parent().par.Centroy')
+expr(mapping, 'sx', 'parent().par.Escala')
+expr(mapping, 'sy', 'parent().par.Escala')
+expr(mapping, 'rotate', 'parent().par.Rotar')
+wire(domo, mapping)
+out_domo = mk(D, nullTOP, 'out_domo', 800, 250)
+wire(mapping, out_domo)
 D.par.opviewer = out_domo
 
 caja(D, 'nota_mezcla', 'Mezcla y modelo de sala',
@@ -531,23 +558,24 @@ caja(D, 'nota_mezcla', 'Mezcla y modelo de sala',
      'u 0.5 al frente, v 0.5 en el horizonte, v 1 en el cenit. giro aplica Yaw como corrimiento '
      'horizontal. domo lo pasa a fisheye con el FOV del modelo de sala (180 media esfera, 90 y 45 '
      'casquetes): rx 90 pone el cenit en el centro, ry 90 deja el frente abajo, Pitch resta de rx. '
-     'out_domo es el domemaster.',
-     [patron_dat, patron, mez, equi, giro, domo, out_domo], (0.16, 0.20, 0.24))
+     'mapping mueve el cenit, escala y rota el domemaster (pagina Mapping), y con Fovauto apagado '
+     'el contenido puede cubrir mas grados que la sala (230 sobre 180). out_domo es el domemaster.',
+     [patron_dat, patron, mez, equi, giro, domo, mapping, out_domo], (0.16, 0.20, 0.24))
 
 # ------------------------------------------------------------------ salidas
 
-sp_domo = mk(D, syphonspoutoutTOP, 'spout_domo', 800, 400)
+sp_domo = mk(D, syphonspoutoutTOP, 'spout_domo', 1000, 400)
 expr(sp_domo, 'sendername', 'parent().par.Spoutdomonombre')
 expr(sp_domo, 'active', 'parent().par.Spoutdomo')
 wire(out_domo, sp_domo)
 
-ndi = mk(D, ndioutTOP, 'ndi_domo', 800, 250)
+ndi = mk(D, ndioutTOP, 'ndi_domo', 1000, 250)
 expr(ndi, 'name', 'parent().par.Ndinombre')
 expr(ndi, 'active', 'parent().par.Ndi')
 setpar(ndi, 'audiochop', 'AUDIO/out1')
 wire(out_domo, ndi)
 
-grab = mk(D, moviefileoutTOP, 'grabar', 800, 100, type='movie', uniquesuff=True)
+grab = mk(D, moviefileoutTOP, 'grabar', 1000, 100, type='movie', uniquesuff=True)
 setpar(grab, 'videocodec', 'hap')
 expr(grab, 'file', "parent().par.Grabarcarpeta + '/domemaster.mov'")
 expr(grab, 'record', 'parent().par.Grabar')
@@ -559,18 +587,18 @@ wire(out_domo, grab)
 # domemaster con fisheye -> equirect rx -90; como el domemaster va girado 90
 # grados (ry 90 de `domo`), giro_unreal lo devuelve con un corrimiento de -0.25.
 # Medido con el patron: el cuadro blanco del frente vuelve a (u 0.5, v 0.75).
-unreal = mk(D, projectionTOP, 'para_unreal', 800, -100, input='fisheye', output='equirectangular', rx=-90, ry=0, rz=0)
-expr(unreal, 'fov', "op('domo').par.fov")
+unreal = mk(D, projectionTOP, 'para_unreal', 1000, -100, input='fisheye', output='equirectangular', rx=-90, ry=0, rz=0)
+expr(unreal, 'fov', FOV_SALA)   # el de la SALA, no el del contenido: asi 230 grados caben en 180
 lienzo(unreal)
 wire(out_domo, unreal)
-giro_un = mk(D, transformTOP, 'giro_unreal', 1000, -100, tunit='fraction', extend='repeat', tx=-0.25)
+giro_un = mk(D, transformTOP, 'giro_unreal', 1200, -100, tunit='fraction', extend='repeat', tx=-0.25)
 wire(unreal, giro_un)
 # El receptor Spout de Unreal solo lee texturas de 8 bits: con el lienzo en
 # 16-bit float (lo que sale de VIDEO_DOME) se queda con el ultimo frame que
 # pudo leer, sin avisar. Aqui se fija el formato antes del sender.
-alfa = mk(D, reorderTOP, 'alfa_unreal', 1200, -100, outputalphachan='one', format='rgba8fixed')
+alfa = mk(D, reorderTOP, 'alfa_unreal', 1400, -100, outputalphachan='one', format='rgba8fixed')
 wire(giro_un, alfa)
-sp_un = mk(D, syphonspoutoutTOP, 'spout_unreal', 1400, -100)
+sp_un = mk(D, syphonspoutoutTOP, 'spout_unreal', 1600, -100)
 expr(sp_un, 'sendername', 'parent().par.Spoutunrealnombre')
 expr(sp_un, 'active', 'parent().par.Spoutunreal')
 wire(alfa, sp_un)
