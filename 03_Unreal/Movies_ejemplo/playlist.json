@@ -1,0 +1,53 @@
+{
+  "_nota": "Playlist de ejemplo de la version standalone. Los videos van en la misma carpeta que este archivo (03_Unreal/DomoVR/Content/Movies/). Los patron_*.mp4 se generan con python 03_Unreal/generar_video_patron.py (--formato 360, domemaster o vr180); crear_media_domo.ps1 los genera si faltan. Ver 04_Docs/06_Unreal_standalone.md.",
+  "cues": [
+    {
+      "nombre": "Patron de prueba",
+      "archivo": "patron_4096x2048.mp4",
+      "formato": "360",
+      "loop": true
+    },
+    {
+      "nombre": "Patron, costura fuera (Pitch 90)",
+      "archivo": "patron_4096x2048.mp4",
+      "formato": "360",
+      "pitch": 90,
+      "loop": true
+    },
+    {
+      "nombre": "Patron, horizonte a 20 grados",
+      "archivo": "patron_4096x2048.mp4",
+      "formato": "360",
+      "horizonte": 20,
+      "curva": 1,
+      "loop": true
+    },
+    {
+      "nombre": "Patron como domemaster",
+      "archivo": "patron_domemaster_2048.mp4",
+      "formato": "domemaster",
+      "loop": true
+    },
+    {
+      "nombre": "Patron como VR180 (mitad del frente)",
+      "archivo": "patron_vr180_2048.mp4",
+      "formato": "vr180",
+      "loop": true
+    },
+    {
+      "nombre": "Patron en una pantalla 16:9 al frente",
+      "archivo": "patron_4096x2048.mp4",
+      "formato": "169",
+      "pantalla": {
+        "azimut": 0,
+        "elevacion": 30,
+        "ancho": 100,
+        "alto": 56,
+        "curva": false,
+        "borde": 0.02
+      },
+      "volumen": 0.5,
+      "loop": true
+    }
+  ]
+}

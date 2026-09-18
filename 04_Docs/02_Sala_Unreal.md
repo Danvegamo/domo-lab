@@ -28,6 +28,8 @@ cúpula. El resto del proyecto no tiene código propio.
 03_Unreal/conectar_spout.py        coloca el receptor de Spout (ver 03_Puente_Spout.md)
 03_Unreal/abrir_proyecto.ps1       abre el editor gráfico
 03_Unreal/importar_sala.ps1        corre importar_sala.py sin interfaz (headless)
+03_Unreal/crear_media_domo.py      la version sin TouchDesigner: video en la cupula (ver 06_Unreal_standalone.md)
+03_Unreal/empaquetar.ps1           empaqueta la sala como DomoVR.exe (Win64, Development)
 03_Unreal/DomoVR/                  el proyecto de Unreal (uproject, Config, Source, Plugins, Content)
 ```
 

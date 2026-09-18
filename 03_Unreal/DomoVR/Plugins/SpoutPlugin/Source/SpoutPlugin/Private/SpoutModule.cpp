@@ -45,6 +45,16 @@ namespace
 			return ThirdPartyDll;
 		}
 
+		// Build empaquetado (cambio local de domo-lab, 18 sep 2026): el
+		// RuntimeDependencies de SpoutPlugin.Build.cs usa $(BinaryOutputDir),
+		// que en un juego monolitico es la carpeta del .exe
+		// (<build>/DomoVR/Binaries/Win64), no la del plugin.
+		const FString ExeDirDll = FPaths::Combine(FPlatformProcess::GetModulesDirectory(), TEXT("Spout.dll"));
+		if (IFileManager::Get().FileExists(*ExeDirDll))
+		{
+			return FPaths::ConvertRelativePathToFull(ExeDirDll);
+		}
+
 		return FString();
 	}
 

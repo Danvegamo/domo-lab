@@ -17,5 +17,9 @@ public class DomoVR : ModuleRules
 
 		// SpoutPlugin: para USpoutBPFunctionLibrary::SpoutReceiver.
 		PrivateDependencyModuleNames.AddRange(new string[] { "SpoutPlugin" });
+
+		// ADomeMediaController: reproductor de video de la cupula sin
+		// TouchDesigner (Media Framework, playlist en JSON, audio del video).
+		PrivateDependencyModuleNames.AddRange(new string[] { "MediaAssets", "AudioMixer", "Json" });
 	}
 }

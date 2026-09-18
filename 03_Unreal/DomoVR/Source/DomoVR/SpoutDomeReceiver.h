@@ -48,6 +48,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spout")
 	int32 TargetMaterialSlot = 0;
 
+	/** Vuelve a poner en la malla el material de Spout (el dinamico si ya
+	 *  existe, si no TargetMaterial). Lo llama ADomeMediaController al volver
+	 *  de la fuente Media a Spout: Tick() solo aplica el material cuando cambia
+	 *  de puntero, asi que sin esto la cupula seguiria con el del video. */
+	UFUNCTION(BlueprintCallable, Category = "Spout")
+	void ReaplicarMaterial();
+
 	//~ Begin AActor interface
 	virtual void Tick(float DeltaSeconds) override;
 	/** Devuelve true a proposito: es lo que hace que este actor tambien

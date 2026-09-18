@@ -134,3 +134,15 @@ void ASpoutDomeReceiver::ApplyMaterialToMesh()
 		TargetMeshComponent->SetMaterial(TargetMaterialSlot, DynamicMaterial);
 	}
 }
+
+void ASpoutDomeReceiver::ReaplicarMaterial()
+{
+	if (DynamicMaterial)
+	{
+		ApplyMaterialToMesh();
+	}
+	else if (TargetMeshComponent && TargetMaterial)
+	{
+		TargetMeshComponent->SetMaterial(TargetMaterialSlot, TargetMaterial);
+	}
+}

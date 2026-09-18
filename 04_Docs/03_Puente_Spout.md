@@ -38,7 +38,9 @@ el autor o revisar otra rama o tag.
 
 El plugin vendorizado **no es idéntico al del repositorio**: trae el arreglo de
 la sección 7 en `Source/SpoutPlugin/Public/SpoutModule.h`,
-`Private/SpoutModule.cpp` y `Private/SpoutD3DContext.cpp`. Si se actualiza el
+`Private/SpoutModule.cpp` y `Private/SpoutD3DContext.cpp`. Además, `FindSpoutDllPath()` en `Private/SpoutModule.cpp` busca
+`Spout.dll` también junto al `.exe`, que es donde queda en un build empaquetado
+(ver [06_Unreal_standalone.md](06_Unreal_standalone.md), sección 6). Si se actualiza el
 plugin desde el origen hay que volver a aplicar ese cambio.
 
 La compilación (comando de `UnrealBuildTool` con el editor cerrado) está en
@@ -184,6 +186,10 @@ TouchDesigner, sin volcados nuevos.
 1. TouchDesigner abierto con el `Syphon Spout Out` activo y el nombre de sender
    que espera el receptor (`TD_Domo_Lab`).
 2. Abrir el proyecto; el mapa `/Game/Maps/DomoVR` ya trae `SpoutDomeReceiver`.
+   Desde el 18 de septiembre de 2026 los niveles arrancan con la fuente
+   *Media* (los videos de la playlist, ver [06_Unreal_standalone.md](06_Unreal_standalone.md)),
+   que apaga el receptor: poner `Fuente = Spout` en el actor
+   `DomeMediaController` o correr `domo.Fuente Spout` en la consola.
 3. Viewport en **Realtime** (`Ctrl+R`) o en Play. Un viewport pausado, que es el
    estado al abrir el editor o al lanzarlo sin foco, no tickea ningún actor.
 4. Viewport en modo **Lit**: en Unlit los materiales sin iluminación se dibujan

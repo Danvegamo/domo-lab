@@ -34,3 +34,16 @@ Backup*/
 
 # Unreal escribe este perfil de vista previa solo; no es configuracion del proyecto
 03_Unreal/DomoVR/Config/DefaultEditor.ini
+
+# Version standalone: los videos no van al repo (derechos y peso); la playlist
+# de trabajo tampoco (la de ejemplo vive en 03_Unreal/Movies_ejemplo/).
+03_Unreal/DomoVR/Content/Movies/
+Movies/*.mp4
+Movies/*.mov
+# Builds empaquetados (empaquetar.ps1)
+03_Unreal/Build/
+03_Unreal/DomoVR/Saved/StagedBuilds/
+03_Unreal/DomoVR/Build/
+# Archivos locales de Visual Studio
+03_Unreal/DomoVR/*.slnx
+03_Unreal/DomoVR/.vsconfig

@@ -81,9 +81,12 @@ Spout), Blender 4 solo si se quiere regenerar la sala.
    deja `Fuente` en *Patrón de prueba* para calibrar, o elige un módulo y pon
    el archivo en su página de la raíz: *360*, *180* o *16:9*. Solo suena el
    audio del video que está al aire.
-2. Abre la sala con `03_Unreal/abrir_proyecto.ps1`. La cúpula muestra lo que
-   llegue por Spout con el nombre `TD_Domo_Lab`. Si la cúpula se queda negra,
-   revisa la lista de comprobación de [03_Puente_Spout.md](04_Docs/03_Puente_Spout.md).
+2. Abre la sala con `03_Unreal/abrir_proyecto.ps1`. Los niveles arrancan
+   reproduciendo la playlist de `Content/Movies/` (fuente *Media*); para ver
+   lo que llegue por Spout con el nombre `TD_Domo_Lab`, pon `Fuente = Spout`
+   en el actor `DomeMediaController` (o `domo.Fuente Spout` en la consola).
+   Si la cúpula se queda negra, revisa la lista de comprobación de
+   [03_Puente_Spout.md](04_Docs/03_Puente_Spout.md).
 3. Para VR: OpenXR está habilitado; con SteamVR o Virtual Desktop corriendo,
    *Play → VR Preview*.
 
@@ -95,6 +98,7 @@ Spout), Blender 4 solo si se quiere regenerar la sala.
 | mandar un video a la cúpula desde TouchDesigner | [04_Docs/04_Senal_TouchDesigner.md](04_Docs/04_Senal_TouchDesigner.md) |
 | abrir o regenerar la sala en Unreal | [04_Docs/02_Sala_Unreal.md](04_Docs/02_Sala_Unreal.md) |
 | conectar TouchDesigner con Unreal (Spout) | [04_Docs/03_Puente_Spout.md](04_Docs/03_Puente_Spout.md) |
+| reproducir videos en la cúpula sin TouchDesigner y empaquetar la sala como programa suelto | [04_Docs/06_Unreal_standalone.md](04_Docs/06_Unreal_standalone.md) |
 | los otros modelos de sala (45 tipo Maloka, sentado; 90 de pie con barandas) | [04_Docs/05_Modelos_de_sala.md](04_Docs/05_Modelos_de_sala.md) |
 | las cúpulas de Colombia y cómo corregir sus datos | [06_Modelos/Domos_de_Colombia.md](06_Modelos/Domos_de_Colombia.md) |
 | probar montajes de pantallas en el navegador, sin TouchDesigner | [00_TouchDesigner/video_dome/web/estudio_pantallas.html](00_TouchDesigner/video_dome/web/estudio_pantallas.html) |
@@ -158,6 +162,7 @@ La lista completa, con fechas, está en la sección 5 de
 01_Blender/             generar_sala_domo.py y el .blend
 02_Export/              sala_domo.fbx (y los de los otros modelos de sala)
 03_Unreal/              DomoVR (proyecto UE 5.8), importar_sala.py, conectar_spout.py, abrir_proyecto.ps1
+                          crear_media_domo.py/.ps1 y empaquetar.ps1 (la sala sin TouchDesigner), Movies_ejemplo/
 04_Docs/                la documentación, numerada en orden de lectura
 05_Preview/             renders de Blender, capturas de Unreal y las pruebas del patrón
 06_Modelos/             domos_colombia.json y su documento

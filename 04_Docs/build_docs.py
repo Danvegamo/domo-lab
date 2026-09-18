@@ -78,6 +78,8 @@ PAGES = [
      "Como TouchDesigner le manda la senal a la cupula de Unreal por Spout"),
     (DOCS / "05_Modelos_de_sala.md", "Otros modelos de sala",
      "Domo de 90 y 45 grados"),
+    (DOCS / "06_Unreal_standalone.md", "La sala sin TouchDesigner",
+     "Unreal reproduce los videos en la cupula y se empaqueta como programa suelto"),
     (ROOT / "06_Modelos" / "Domos_de_Colombia.md", "Domos de Colombia",
      "Fichas de planetarios y cines domo reales, con sus datos y fuentes"),
     (DOCS / "Unreal_sala_domo.md", "Bitacora: sala de domo en Unreal",
