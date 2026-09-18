@@ -13,11 +13,11 @@ volver a correr tras editar este archivo sin perder la configuracion.
 
 Estructura que deja:
 
-    DOMO                      COMP raiz, atajo `parent.DOMO`, paginas Domo, 16:9, Mapping y Salidas
-      IN_360                  video 360 equirectangular (+ costura opcional)
-      IN_180                  domemaster fisheye, VR180 mono o VR180 lado a lado
-      IN_169                  video plano (16:9 o cualquier aspecto) sobre una pantalla en la cupula
-      AUDIO                   audio del video, de un archivo o de la entrada, con EQ, retardo y limitador
+    DOMO                      COMP raiz, atajo `parent.DOMO`, paginas Domo, 360, 180, 16:9, Mapping y Salidas
+      IN_360                  video 360 equirectangular (+ costura opcional, + giro esferico Yaw/Pitch/Roll)
+      IN_180                  domemaster fisheye, VR180 mono o VR180 lado a lado (+ giro esferico)
+      IN_169                  video plano sobre pantallas en la cupula (VIDEO_DOME adentro)
+      AUDIO                   sigue a la fuente al aire (solo suena ese video), o un archivo, o la entrada
       mezcla -> equi          la fuente elegida, como lienzo equirectangular 2:1
       domo -> out_domo        el domemaster fisheye con el FOV del modelo de sala
       spout_domo / ndi_domo   salidas del domemaster
@@ -42,7 +42,7 @@ except NameError:
 
 RAIZ = op('/project1')
 NOMBRE = 'DOMO'
-VERSION = '1.1 (18 sep 2026)'
+VERSION = '1.2 (18 sep 2026)'
 
 # ---------------------------------------------------------------- utilidades
 
@@ -185,6 +185,49 @@ def negro_y_salida(comp, resultado, x):
     return sw, salida
 
 
+def orientador(comp, entrada, x, guia='0', costura_pos='0', yaw='parent().par.Yaw', corte='-90'):
+    """Rotacion esferica del lienzo (shaders/orientar.frag) gobernada por los
+    pars Yaw, Pitch y Roll del modulo. Con los tres en cero y sin guia, el
+    Switch `orientado` deja pasar la entrada tal cual y el GLSL no cocina."""
+    dat = mk(comp, textDAT, 'orientar_glsl', x, -250)
+    dat.text = leer('orientar.frag')
+    g = mk(comp, glslTOP, 'orientar', x, 0)
+    g.par.pixeldat = dat
+    setpar(g, 'inputextenduv', 'repeat')
+    setpar(g, 'vec', 2)
+    setpar(g, 'vec0name', 'uRot')
+    expr(g, 'vec0valuex', yaw)
+    expr(g, 'vec0valuey', 'parent().par.Pitch')
+    expr(g, 'vec0valuez', 'parent().par.Roll')
+    expr(g, 'vec0valuew', guia)
+    setpar(g, 'vec1name', 'uSeam')
+    expr(g, 'vec1valuex', costura_pos)
+    setpar(g, 'vec1valuey', 0.006)
+    expr(g, 'vec1valuez', corte)
+    setpar(g, 'vec1valuew', 0)
+    wire(entrada, g)
+    sw = mk(comp, switchTOP, 'orientado', x + 200, 0)
+    wire(entrada, sw, 0)
+    wire(g, sw, 1)
+    expr(sw, 'index', 'int(bool((%s) or parent().par.Pitch or parent().par.Roll or (%s)))' % (yaw, guia))
+    return [dat, g, sw], sw
+
+
+def pagina_orientacion(comp, nombre_pagina, con_yaw=True):
+    """Pars Yaw, Pitch y Roll del modulo (quedan en Bind contra la raiz).
+    IN_169 no lleva Yaw propio: su azimut es Yawglobal de VIDEO_DOME."""
+    pg = comp.appendCustomPage(nombre_pagina)
+    if con_yaw:
+        flotante(pg, 'Yaw', 'Girar en azimut (grados)', 0, -180, 180)
+    flotante(pg, 'Pitch', 'Inclinar: el frente hacia el cenit (grados)', 0, -180, 180)
+    flotante(pg, 'Roll', 'Rodar sobre el eje del frente (grados)', 0, -180, 180)
+    for n in ('Yaw', 'Pitch', 'Roll'):
+        p = getattr(comp.par, n, None)
+        if p is not None:
+            p.clampMin = False
+    return pg
+
+
 # ------------------------------------------------- conservar la configuracion
 
 guardado = {}
@@ -322,13 +365,35 @@ expr(sw_cos, 'index', 'int(parent().par.Costura)')
 fit360 = mk(M, fitTOP, 'lienzo', 600, 0, fit='fitbest')
 lienzo(fit360)
 wire(sw_cos, fit360)
-negro_y_salida(M, fit360, 800)
+
+# Orientacion: la costura de un 360 es un meridiano de polo a polo (u = 0), y
+# un corrimiento en u solo la cambia de azimut: siempre sube hasta el cenit.
+# Para sacarla de la cupula hay que girar la esfera (Pitch/Roll). Patron
+# reemplaza el video por el patron de prueba de DOMO (costura gruesa en u = 0)
+# para apuntar sin video; Vercostura pinta de rojo por donde pasa la costura
+# del archivo (Costurapos) despues de girar.
+po = pagina_orientacion(M, 'Orientacion')
+toggle(po, 'Patron', 'Ver el patron de prueba en vez del video', False)
+toggle(po, 'Vercostura', 'Pintar la costura (Costurapos) en rojo', False)
+pat360 = mk(M, selectTOP, 'patron', 600, -150)
+pat360.par.top = '../patron'
+sw_pat = mk(M, switchTOP, 'video_o_patron', 800, 0)
+wire(fit360, sw_pat, 0)
+wire(pat360, sw_pat, 1)
+expr(sw_pat, 'index', 'int(parent().par.Patron)')
+nodos_or, orient360 = orientador(M, sw_pat, 1000, guia='int(parent().par.Vercostura)',
+                                 costura_pos='parent().par.Costurapos')
+negro_y_salida(M, orient360, 1400)
 
 caja(M, 'nota', 'IN_360: video 360 equirectangular',
      'El archivo ya viene en el formato del lienzo (2:1, el frente en el centro), asi que solo se '
      'ajusta al tamano del lienzo. Si el stitching dejo una linea vertical, enciende Costura y mueve '
-     'Costurapos hasta que la guia roja caiga sobre ella; luego apaga la guia.',
-     [video, cos, sw_cos, fit360, M.op('negro'), M.op('activo'), M.op('out1')], (0.13, 0.20, 0.16))
+     'Costurapos hasta que la guia roja caiga sobre ella; luego apaga la guia. orientar gira la '
+     'esfera (Yaw, Pitch, Roll, pagina 360 de DOMO) antes del domemaster: la costura es un meridiano '
+     'de polo a polo, y con Pitch 90 queda entera bajo el horizonte, fuera de la cupula. Patron pone '
+     'el patron de prueba en lugar del video para apuntar; Vercostura pinta la costura en rojo.',
+     [video, cos, sw_cos, fit360, pat360, sw_pat] + nodos_or +
+     [M.op('negro'), M.op('activo'), M.op('out1')], (0.13, 0.20, 0.16))
 
 # ------------------------------------------------------------------ IN_180
 
@@ -369,14 +434,18 @@ sw_fmt = mk(M, switchTOP, 'formato', 800, 0)
 wire(dm, sw_fmt, 0)
 wire(fit180, sw_fmt, 1)
 expr(sw_fmt, 'index', "0 if parent().par.Formato == 'domemaster' else 1")
-negro_y_salida(M, sw_fmt, 1000)
+pagina_orientacion(M, 'Orientacion')
+nodos_or, orient180 = orientador(M, sw_fmt, 1000)
+negro_y_salida(M, orient180, 1400)
 
 caja(M, 'nota', 'IN_180: domemaster o VR180',
      'Un domemaster (fisheye 180) se convierte a equirectangular con el Projection TOP; rx = -90 deja '
      'el cenit arriba, en la mitad superior del lienzo. Un VR180 (media esfera, cuadrado) se centra '
      'en el lienzo con bandas negras a los lados: ocupa el frente, del horizonte al cenit y hacia abajo. '
-     'Sube Pitch en DOMO para llevarlo a la cupula.',
-     [video, dm, sbs, sw_ojo, fit180, sw_fmt, M.op('negro'), M.op('activo'), M.op('out1')], (0.13, 0.17, 0.22))
+     'Para llevarlo a la cupula sube Pitch en la pagina 180 de DOMO (solo este modulo) o en la pagina '
+     'Domo (todas las fuentes). orientar gira la esfera con Yaw, Pitch y Roll antes del domemaster.',
+     [video, dm, sbs, sw_ojo, fit180, sw_fmt] + nodos_or +
+     [M.op('negro'), M.op('activo'), M.op('out1')], (0.13, 0.17, 0.22))
 
 # ------------------------------------------------------------------ IN_169
 #
@@ -429,93 +498,122 @@ caja(M, 'nota', 'IN_169: video plano sobre pantallas en la cupula',
      'estan los templates (una al frente, sala de 4, corona cosida, anillos, cilindro, mosaico), '
      'el fondo desenfocado, el editor con el mouse y las versiones guardadas. Lo principal '
      '(template, fuente, pantallas, fondo) se maneja desde la pagina 16:9 de DOMO. Su domemaster '
-     '(frente abajo) se pasa al lienzo equirectangular igual que para_unreal.',
+     '(frente abajo) se pasa al lienzo equirectangular igual que para_unreal. El audio de '
+     'movie1 no sale por el audio_out de VIDEO_DOME (apagado aqui): lo toma DOMO/AUDIO solo cuando '
+     'el 16:9 esta al aire.',
      [vd, sel_vd, a_equi, giro169, M.op('negro'), M.op('activo'), M.op('out1')], (0.22, 0.17, 0.13))
 
-# ----------------------------------------------- pagina 16:9 en la raiz DOMO
+# ------------------------------- paginas 360, 180 y 16:9 en la raiz DOMO
 #
-# El 16:9 se edita al mismo nivel que 360 y 180: la pagina 16:9 de DOMO tiene
-# los pars que importan en una funcion, y los de VIDEO_DOME quedan en modo Bind
-# apuntando a ellos (parent.DOMO.par.X). El bind va en los dos sentidos: mover
-# un par arriba lo mueve abajo, y cuando VIDEO_DOME escribe sus pars (al
-# aplicar un template o elegir otra pantalla) la pagina 16:9 se pone al dia.
-# El watcher de VIDEO_DOME ve el cambio de Template aunque venga por el bind,
-# asi que el template se aplica solo, sin pulso.
+# Cada fuente se edita al mismo nivel desde la raiz: la pagina 360 (IN_360),
+# la 180 (IN_180) y la 16:9 (IN_169 y su VIDEO_DOME) tienen los pars que
+# importan, y los de abajo quedan en modo Bind apuntando a ellos
+# (parent.DOMO.par.X). El bind va en los dos sentidos: mover un par arriba lo
+# mueve abajo, y cuando VIDEO_DOME escribe sus pars (al aplicar un template o
+# elegir otra pantalla) la pagina 16:9 se pone al dia. El watcher de
+# VIDEO_DOME ve el cambio de Template aunque venga por el bind, asi que el
+# template se aplica solo, sin pulso.
 # Los binds se ponen al final del build, despues de restaurar la configuracion
 # (ver mas abajo), para que reconstruir no dispare un template y pise la tabla.
 #
-# (nombre en DOMO, par en VIDEO_DOME o None para IN_169, etiqueta)
-V169 = [
-    ('Vactivo', None, 'Activo', 'Modulo 16:9 activo'),
-    ('Vfuente', 'Fuente', None, 'Fuente del video plano'),
-    ('Vmoviefile', 'Moviefile', None, 'Archivo de video'),
-    ('Vndinombre', 'Ndinombre', None, 'Fuente NDI (nombre)'),
-    ('Vspoutnombre', 'Spoutnombre', None, 'Sender Spout (nombre)'),
-    ('Vplay', 'Play', None, 'Reproducir'),
-    ('Vtemplate', 'Template', None, 'Template (se aplica al elegirlo, pisa la tabla)'),
-    ('Vyawglobal', 'Yawglobal', None, 'Girar todo el montaje (grados)'),
-    ('Vscreen', 'Screen', None, 'Pantalla que se edita (fila de la tabla)'),
-    ('Vsmode', 'Smode', None, 'Forma / curvatura'),
-    ('Vsyaw', 'Syaw', None, 'Azimut (grados)'),
-    ('Vspitch', 'Spitch', None, 'Elevacion (grados)'),
-    ('Vshfov', 'Shfov', None, 'Ancho angular (grados)'),
-    ('Vsautovfov', 'Sautovfov', None, 'Alto automatico (aspecto del video)'),
-    ('Vsvfov', 'Svfov', None, 'Alto angular (grados)'),
-    ('Vsrep', 'Srep', None, 'Copias en anillo'),
-    ('Vsrepspan', 'Srepspan', None, 'Arco que ocupan las copias (separacion, grados)'),
-    ('Vsblend', 'Sblend', None, 'Costura entre copias (grados)'),
-    ('Vbg', 'Bg', None, 'Fondo'),
-    ('Vbgblur', 'Bgblur', None, 'Fondo: desenfoque'),
-    ('Vbgbright', 'Bgbright', None, 'Fondo: brillo'),
-    ('Vbgsat', 'Bgsat', None, 'Fondo: saturacion'),
-    ('Vbgzoom', 'Bgzoom', None, 'Fondo: zoom del lavado (>= 1.78)'),
-    ('Vbgtile', 'Bgtile', None, 'Fondo: repeticiones del envolvente'),
-    ('Vbgyaw', 'Bgyaw', None, 'Fondo: girar (grados)'),
-    ('Vbgfollow', 'Bgfollow', None, 'Fondo: sigue el giro global'),
+# (nombre en DOMO, COMP de destino relativo a DOMO, par en ese COMP, etiqueta)
+VD = 'IN_169/VIDEO_DOME'
+P360 = [
+    ('Ractivo', 'IN_360', 'Activo', 'Modulo 360 activo'),
+    ('Rarchivo', 'IN_360', 'Archivo', 'Archivo 360 equirectangular (2:1)'),
+    ('Rplay', 'IN_360', 'Play', 'Reproducir'),
+    ('Rvelocidad', 'IN_360', 'Velocidad', 'Velocidad'),
+    ('Ryaw', 'IN_360', 'Yaw', 'Girar la esfera en azimut (grados)'),
+    ('Rpitch', 'IN_360', 'Pitch', 'Inclinar la esfera: el frente hacia el cenit (grados)'),
+    ('Rroll', 'IN_360', 'Roll', 'Rodar la esfera sobre el eje del frente (grados)'),
+    ('Rpatron', 'IN_360', 'Patron', 'Ver el patron de prueba en vez del video'),
+    ('Rvercostura', 'IN_360', 'Vercostura', 'Pintar la costura en rojo (donde cae tras girar)'),
+    ('Rcosturapos', 'IN_360', 'Costurapos', 'Posicion de la costura del archivo (u, 0 a 1)'),
+    ('Rcostura', 'IN_360', 'Costura', 'Fundir la costura del stitching'),
 ]
-CABECERAS = {'Vactivo': 'Fuente', 'Vtemplate': 'Montaje',
-             'Vscreen': 'Pantalla elegida', 'Vbg': 'Fondo'}
+P180 = [
+    ('Mactivo', 'IN_180', 'Activo', 'Modulo 180 activo'),
+    ('Marchivo', 'IN_180', 'Archivo', 'Archivo 180 (domemaster o VR180)'),
+    ('Mplay', 'IN_180', 'Play', 'Reproducir'),
+    ('Mformato', 'IN_180', 'Formato', 'Formato del archivo'),
+    ('Myaw', 'IN_180', 'Yaw', 'Girar en azimut (grados)'),
+    ('Mpitch', 'IN_180', 'Pitch', 'Inclinar: el frente hacia el cenit (grados)'),
+    ('Mroll', 'IN_180', 'Roll', 'Rodar sobre el eje del frente (grados)'),
+]
+V169 = [
+    ('Vactivo', 'IN_169', 'Activo', 'Modulo 16:9 activo'),
+    ('Vfuente', VD, 'Fuente', 'Fuente del video plano'),
+    ('Vmoviefile', VD, 'Moviefile', 'Archivo de video'),
+    ('Vndinombre', VD, 'Ndinombre', 'Fuente NDI (nombre)'),
+    ('Vspoutnombre', VD, 'Spoutnombre', 'Sender Spout (nombre)'),
+    ('Vplay', VD, 'Play', 'Reproducir'),
+    ('Vtemplate', VD, 'Template', 'Template (se aplica al elegirlo, pisa la tabla)'),
+    ('Vyawglobal', VD, 'Yawglobal', 'Girar todo el montaje (grados)'),
+    ('Vscreen', VD, 'Screen', 'Pantalla que se edita (fila de la tabla)'),
+    ('Vsmode', VD, 'Smode', 'Forma / curvatura'),
+    ('Vsyaw', VD, 'Syaw', 'Azimut (grados)'),
+    ('Vspitch', VD, 'Spitch', 'Elevacion (grados)'),
+    ('Vshfov', VD, 'Shfov', 'Ancho angular (grados)'),
+    ('Vsautovfov', VD, 'Sautovfov', 'Alto automatico (aspecto del video)'),
+    ('Vsvfov', VD, 'Svfov', 'Alto angular (grados)'),
+    ('Vsrep', VD, 'Srep', 'Copias en anillo'),
+    ('Vsrepspan', VD, 'Srepspan', 'Arco que ocupan las copias (separacion, grados)'),
+    ('Vsblend', VD, 'Sblend', 'Costura entre copias (grados)'),
+    ('Vbg', VD, 'Bg', 'Fondo'),
+    ('Vbgblur', VD, 'Bgblur', 'Fondo: desenfoque'),
+    ('Vbgbright', VD, 'Bgbright', 'Fondo: brillo'),
+    ('Vbgsat', VD, 'Bgsat', 'Fondo: saturacion'),
+    ('Vbgzoom', VD, 'Bgzoom', 'Fondo: zoom del lavado (>= 1.78)'),
+    ('Vbgtile', VD, 'Bgtile', 'Fondo: repeticiones del envolvente'),
+    ('Vbgyaw', VD, 'Bgyaw', 'Fondo: girar (grados)'),
+    ('Vbgfollow', VD, 'Bgfollow', 'Fondo: sigue el giro global'),
+]
+PAGINAS = [
+    ('360', P360, {'Ractivo': 'Video', 'Ryaw': 'Orientacion de la esfera (antes del domemaster)',
+                   'Rpatron': 'Costura'}),
+    ('180', P180, {'Mactivo': 'Video', 'Myaw': 'Orientacion (antes del domemaster)'}),
+    ('16:9', V169, {'Vactivo': 'Fuente', 'Vtemplate': 'Montaje',
+                    'Vscreen': 'Pantalla elegida', 'Vbg': 'Fondo'}),
+]
 
 
-M169 = M
+def destino(ruta, par):
+    return getattr(D.op(ruta).par, par)
 
 
-def destino169(vpar, mpar):
-    return getattr(M169.op('VIDEO_DOME').par, vpar) if vpar else getattr(M169.par, mpar)
-
-
-p169 = D.appendCustomPage('16:9')
-for nombre, vpar, mpar, etiqueta in V169:
-    if nombre in CABECERAS:
-        p169.appendHeader('H' + nombre[1:], label=CABECERAS[nombre])
-    src = destino169(vpar, mpar)
-    estilo = src.style
-    if estilo == 'Menu':
-        p = p169.appendMenu(nombre, label=etiqueta)[0]
-        p.menuNames = list(src.menuNames)
-        p.menuLabels = list(src.menuLabels)
-    elif estilo == 'File':
-        p = p169.appendFile(nombre, label=etiqueta)[0]
-    elif estilo == 'Str':
-        p = p169.appendStr(nombre, label=etiqueta)[0]
-    elif estilo == 'Toggle':
-        p = p169.appendToggle(nombre, label=etiqueta)[0]
-    elif estilo == 'Int':
-        p = p169.appendInt(nombre, label=etiqueta)[0]
-    else:
-        p = p169.appendFloat(nombre, label=etiqueta)[0]
-    if estilo in ('Float', 'Int'):
-        p.normMin, p.normMax = src.normMin, src.normMax
-        if src.clampMin:
-            p.min, p.clampMin = src.min, True
-        if src.clampMax:
-            p.max, p.clampMax = src.max, True
-    p.val = src.eval()
-    try:
-        p.default = src.default
-    except Exception:
-        pass
-D.sortCustomPages('Domo', '16:9', 'Mapping', 'Salidas')
+for nombre_pag, filas, cabeceras in PAGINAS:
+    pagina = D.appendCustomPage(nombre_pag)
+    for nombre, ruta, par, etiqueta in filas:
+        if nombre in cabeceras:
+            pagina.appendHeader('H' + nombre.lower(), label=cabeceras[nombre])
+        src = destino(ruta, par)
+        estilo = src.style
+        if estilo == 'Menu':
+            p = pagina.appendMenu(nombre, label=etiqueta)[0]
+            p.menuNames = list(src.menuNames)
+            p.menuLabels = list(src.menuLabels)
+        elif estilo == 'File':
+            p = pagina.appendFile(nombre, label=etiqueta)[0]
+        elif estilo == 'Str':
+            p = pagina.appendStr(nombre, label=etiqueta)[0]
+        elif estilo == 'Toggle':
+            p = pagina.appendToggle(nombre, label=etiqueta)[0]
+        elif estilo == 'Int':
+            p = pagina.appendInt(nombre, label=etiqueta)[0]
+        else:
+            p = pagina.appendFloat(nombre, label=etiqueta)[0]
+        if estilo in ('Float', 'Int'):
+            p.normMin, p.normMax = src.normMin, src.normMax
+            if src.clampMin:
+                p.min, p.clampMin = src.min, True
+            if src.clampMax:
+                p.max, p.clampMax = src.max, True
+        p.val = src.eval()
+        try:
+            p.default = src.default
+        except Exception:
+            pass
+D.sortCustomPages('Domo', '360', '180', '16:9', 'Mapping', 'Salidas')
 
 # ------------------------------------------------------------------- AUDIO
 
@@ -739,11 +837,12 @@ caja(D, 'nota_salidas', 'Salidas',
 caja(D, 'nota_modulos', 'Modulos de entrada',
      'Cada modulo lee su propio archivo y entrega el mismo lienzo equirectangular. Su parametro '
      'Activo apagado entrega negro y deja de cocinar. Solo el modulo elegido en DOMO.Fuente llega '
-     'a la salida; los demas no gastan GPU aunque esten activos.',
+     'a la salida; los demas no gastan GPU aunque esten activos, y solo ese suena (AUDIO). Cada uno '
+     'tiene su pagina en la raiz (360, 180, 16:9) con su orientacion esferica.',
      [D.op('IN_360'), D.op('IN_180'), D.op('IN_169'), D.op('AUDIO')], (0.14, 0.14, 0.18))
 
 caja(D, 'nota_169', 'Pagina 16:9: el video plano desde aqui',
-     'El 16:9 se maneja desde la pagina 16:9 de DOMO, igual que 360 y 180 desde Domo. Template '
+     'El 16:9 se maneja desde la pagina 16:9 de DOMO, igual que el 360 y el 180 desde sus paginas. Template '
      'cambia el montaje de pantallas al elegirlo (sala_corona, anillo_doble, sala_4...), sin pulso; '
      'ojo que pisa la tabla de pantallas. Fuente elige archivo, NDI o Spout. Pantalla elegida '
      'dice que fila se edita: azimut, elevacion, ancho, forma (plana, curva, banda, tunel, cilindro), '
@@ -762,7 +861,7 @@ for rel, pares in guardado.items():
         continue
     for nombre, val in pares.items():
         p = getattr(comp.par, nombre, None)
-        if p is not None and p.mode == ParMode.CONSTANT:
+        if p is not None and p.mode == ParMode.CONSTANT and not p.readOnly:
             try:
                 p.val = val
                 restaurados += 1
@@ -805,25 +904,34 @@ if vd is not None and (vd_previo['pars'] or vd_previo['screens']):
             vd.op(t).text = vd_previo[t]
     print('[DOMO] VIDEO_DOME: %d pars y sus tablas restaurados' % n)
 
-# Pagina 16:9: primero se copian los valores de abajo hacia arriba (VIDEO_DOME
-# ya tiene su configuracion restaurada y la tabla que le corresponde), y solo
-# despues se ponen los binds. Como los dos lados ya valen lo mismo, el bind no
-# cambia nada y el watcher no vuelve a aplicar el template sobre la tabla.
-for nombre, vpar, mpar, etiqueta in V169:
-    abajo = destino169(vpar, mpar)
-    arriba = getattr(D.par, nombre)
-    try:
-        arriba.val = abajo.eval()
-        abajo.bindExpr = 'parent.DOMO.par.' + nombre
-        abajo.mode = ParMode.BIND
-    except Exception as e:
-        print('[DOMO] no se pudo enlazar %s -> %s.%s: %s' % (nombre, abajo.owner.path, abajo.name, e))
-print('[DOMO] pagina 16:9: %d pars enlazados a IN_169/VIDEO_DOME' % len(V169))
+# Paginas 360, 180 y 16:9: se decide que lado manda y solo despues se ponen
+# los binds, para que al enlazar no cambie nada.
+# - Pars de VIDEO_DOME: manda abajo. VIDEO_DOME ya tiene su configuracion y
+#   la tabla que le corresponde; como los dos lados quedan iguales, el
+#   watcher no vuelve a aplicar el template sobre la tabla.
+# - Pars de los modulos (IN_360, IN_180, IN_169): manda arriba si la raiz ya
+#   tenia ese par guardado (el modulo nace con su valor por defecto, porque un
+#   par en Bind no se guarda); si es la primera vez, sube el valor del modulo.
+guardado_raiz = guardado.get('.', {})
+enlazados = 0
+for nombre_pag, filas, cabeceras in PAGINAS:
+    for nombre, ruta, par, etiqueta in filas:
+        abajo = destino(ruta, par)
+        arriba = getattr(D.par, nombre)
+        try:
+            if ruta == VD or nombre not in guardado_raiz:
+                arriba.val = abajo.eval()
+            abajo.bindExpr = 'parent.DOMO.par.' + nombre
+            abajo.mode = ParMode.BIND
+            enlazados += 1
+        except Exception as e:
+            print('[DOMO] no se pudo enlazar %s -> %s.%s: %s' % (nombre, abajo.owner.path, abajo.name, e))
+print('[DOMO] paginas 360, 180 y 16:9: %d pars enlazados' % enlazados)
 
 # El sonido de DOMO sale solo por AUDIO/salida. El audio_out propio de
 # VIDEO_DOME sonaba siempre (aunque el 16:9 no estuviera al aire): aqui se
 # apaga. Su audio_movie y audio_gain siguen vivos para AUDIO/de_169.
-vd = D.op('IN_169/VIDEO_DOME')
+vd = D.op(VD)
 if vd is not None and vd.op('audio_out') is not None:
     ao = vd.op('audio_out').par.active
     ao.expr = ''
