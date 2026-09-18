@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Genera docs/index.html a partir de los .md del proyecto domo-lab.
 
-Adaptado del generador de Domo_Pantallas (04_Docs/build_docs.py de ese otro
-proyecto): se reutiliza tal cual su render de Markdown (titulos, listas,
+Adaptado del generador de documentacion de un proyecto anterior del autor
+(su 04_Docs/build_docs.py): se reutiliza tal cual su render de Markdown (titulos, listas,
 tablas, citas, bloques de codigo con boton de copiar) y su plantilla HTML de
 una sola pagina con barra lateral y buscador. Lo que cambia frente a aquel
 script:

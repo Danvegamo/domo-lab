@@ -65,7 +65,7 @@ Propiedades editables en el panel de detalles, sin recompilar:
 
 | Propiedad | Valor por defecto | Qué es |
 |---|---|---|
-| `Spout Sender Name` | `TD_Domo_Lab` (constante de `conectar_spout.py`, línea 60, y valor en el nivel) | nombre exacto del sender de TouchDesigner. Los nombres anteriores fueron `TD_Domo_Final` (Pantallas) y `TDSyphonSpoutOut` (dosis.45, sigue como valor por defecto en el código C++). Se lee en cada Tick, así que se cambia en vivo |
+| `Spout Sender Name` | `TD_Domo_Lab` (constante de `conectar_spout.py`, línea 60, y valor en el nivel) | nombre exacto del sender de TouchDesigner. Los nombres anteriores fueron `TD_Domo_Final` (un proyecto anterior del autor) y `TDSyphonSpoutOut` (dosis.45, sigue como valor por defecto en el código C++). Se lee en cada Tick, así que se cambia en vivo |
 | `Target Material` | `MI_Domo` | material del que se crea la instancia dinámica |
 | `Texture Parameter Name` | `SpoutTexture` | parámetro de textura de `M_Domo` que recibe el frame |
 | `Target Mesh Component` | el `StaticMeshComponent` de `Domo_Actor` | malla a la que se aplica el material |
@@ -105,7 +105,7 @@ receptor. Pasos:
 
 | Dato | Valor |
 |---|---|
-| Nombre del sender | `TD_Domo_Lab` (actual, `conectar_spout.py` línea 60). Nombres anteriores: `TD_Domo_Final` (proyecto Pantallas) y `TDSyphonSpoutOut` (proyecto `dosis.45`). El receptor lee el nombre en cada Tick: se cambia en vivo desde el panel de detalles |
+| Nombre del sender | `TD_Domo_Lab` (actual, `conectar_spout.py` línea 60). Nombres anteriores: `TD_Domo_Final` (un proyecto anterior del autor) y `TDSyphonSpoutOut` (proyecto `dosis.45`). El receptor lee el nombre en cada Tick: se cambia en vivo desde el panel de detalles |
 | Formato | equirectangular 2:1 completo, 4096 × 2048 |
 | Contenido útil | la mitad superior: horizonte en V = 0,5, 45° de elevación en V = 0,75, cénit en V = 1,0; la mitad inferior no se ve en la cúpula (verificado el 17 de septiembre de 2026, ver sección 10) |
 | Origen | fisheye 180 (domemaster) convertido a equirectangular con un `Projection TOP`, fov 180, rx = −90 |

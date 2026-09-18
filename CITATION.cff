@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "Si usas domo-lab, cítalo con estos datos. El contenido (documentación, imágenes, renders y modelos 3D) se atribuye así: domo-lab por David Vega (davidvega.org), CC BY 4.0."
+title: "domo-lab: laboratorio abierto de domo con TouchDesigner y Unreal Engine"
+abstract: "Sistema de TouchDesigner que lleva video 360, 180 y plano 16:9 a una cúpula, sala de planetario en realidad virtual en Unreal Engine 5.8 que recibe la señal por Spout, modelos de sala de 180, 45 y 90 grados, y fichas de los domos de Colombia."
+type: software
+authors:
+  - family-names: Vega
+    given-names: David
+    website: "https://davidvega.org"
+repository-code: "https://github.com/Danvegamo/domo-lab"
+url: "https://github.com/Danvegamo/domo-lab"
+license:
+  - MIT
+  - CC-BY-4.0
+keywords:
+  - fulldome
+  - domemaster
+  - planetario
+  - realidad virtual
+  - TouchDesigner
+  - Unreal Engine
+  - Spout
+  - Blender

@@ -532,8 +532,8 @@ sus pendientes están en [../06_Modelos/Domos_de_Colombia.md](../06_Modelos/Domo
   (unos 35° con radio 11,5 m), pero la cabecera del script de Blender y el
   documento antiguo `Unreal_sala_domo.md` todavía hablan de 5 m y 25°. Manda
   la constante; las butacas se reparten el arco que sobra por programa.
-- **Costura normalizada en el anillo** (medido en `Domo_Pantallas`, sin fecha
-  en la fuente). La mezcla secuencial dejaba 0,75 de cobertura y una banda
+- **Costura normalizada en el anillo** (medido en el sistema de pantallas de un proyecto
+  anterior del autor, sin fecha en la fuente). La mezcla secuencial dejaba 0,75 de cobertura y una banda
   oscura en cada costura. Ver 3.7.
 - **`DAT to CHOP` de la tabla de pantallas.** Necesita `Output = chanpercol` y
   `First Column = values`; un `True` en la celda `on` se lee como 0 y la
