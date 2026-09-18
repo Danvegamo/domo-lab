@@ -1,0 +1,32 @@
+# Unreal: todo lo que el editor regenera solo
+03_Unreal/DomoVR/Binaries/
+03_Unreal/DomoVR/Intermediate/
+03_Unreal/DomoVR/Saved/
+03_Unreal/DomoVR/DerivedDataCache/
+03_Unreal/DomoVR/.vs/
+03_Unreal/DomoVR/*.sln
+03_Unreal/DomoVR/Plugins/*/Binaries/
+03_Unreal/DomoVR/Plugins/*/Intermediate/
+03_Unreal/DomoVR_backup_preCpp/
+03_Unreal/Saved_Logs/
+03_Unreal/__pycache__/
+
+# Blender: el .blend se regenera con generar_sala_domo.py; el .blend1 es autosave
+01_Blender/*.blend1
+
+# Export: el FBX sí va (1 MB); el GLB de 14 MB y las texturas duplicadas del .fbm no
+02_Export/*.glb
+02_Export/sala_domo.fbm/
+
+# respaldos de scripts y basura
+*.bak_*
+*.pyc
+__pycache__/
+Thumbs.db
+.DS_Store
+
+# TouchDesigner
+*.toe.orig
+*.dir/
+Backup*/
+*.tmp
