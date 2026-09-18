@@ -525,7 +525,8 @@ M.viewer = True
 pm = M.appendCustomPage('Audio')
 toggle(pm, 'Activo', 'Activo', True)
 menu(pm, 'Fuente', 'Fuente de audio', ['video', 'archivo', 'entrada'],
-     ['El audio del video al aire', 'Un archivo de audio', 'La entrada de audio del equipo'], 0)
+     ['Sigue a la fuente al aire (solo suena el video de DOMO.Fuente)', 'Un archivo de audio',
+      'La entrada de audio del equipo'], 0)
 p = pm.appendFile('Archivo', label='Archivo de audio')[0]
 p.val = ''
 flotante(pm, 'Ganancia', 'Ganancia', 1.0, 0, 4)
@@ -535,26 +536,54 @@ flotante(pm, 'Agudos', 'Agudos 8 kHz (dB)', 0, -12, 12)
 flotante(pm, 'Retardo', 'Retardo para sincronizar con la imagen (ms)', 0, 0, 2000)
 toggle(pm, 'Limitador', 'Limitador de picos', True)
 
-a_video = mk(M, audiomovieCHOP, 'del_video', 0, 100)
-expr(a_video, 'moviefileintop',
-     "[op('../IN_360/video'), op('../IN_180/video'), op('../IN_169/VIDEO_DOME/movie1'), op('../IN_360/video')][parent.DOMO.par.Fuente.menuIndex]")
-a_arch = mk(M, audiofileinCHOP, 'archivo', 0, -50, repeat=True)
+# Sigue a la fuente: un Audio Movie CHOP por modulo, atado a su Movie File In
+# (asi el sonido va sincronizado con ESE video, incluso con otra velocidad), y
+# un Switch CHOP que solo cocina la entrada elegida. Los modulos que no estan
+# al aire no suenan; el patron, un modulo apagado o un 16:9 que viene por NDI
+# o Spout dan silencio. El 16:9 se toma de VIDEO_DOME/audio_gain (su propio
+# Audio Movie por Volume y Audio), y el audio_out de VIDEO_DOME se apaga al
+# final del build: antes sonaba siempre, aunque el 16:9 no estuviera al aire.
+a360 = mk(M, audiomovieCHOP, 'de_360', 0, 250)
+setpar(a360, 'moviefileintop', '../IN_360/video')
+a180 = mk(M, audiomovieCHOP, 'de_180', 0, 150)
+setpar(a180, 'moviefileintop', '../IN_180/video')
+a169 = mk(M, selectCHOP, 'de_169', 0, 50)
+setpar(a169, 'chop', '../IN_169/VIDEO_DOME/audio_gain')
+silencio = mk(M, constantCHOP, 'silencio', 0, -50)
+silencio.par.name0 = 'chan1'
+silencio.par.name1 = 'chan2'
+setpar(silencio, 'value0', 0)
+setpar(silencio, 'value1', 0)
+setpar(silencio, 'rate', 44100)
+al_aire = mk(M, switchCHOP, 'al_aire', 200, 150)
+wire(a360, al_aire, 0)
+wire(a180, al_aire, 1)
+wire(a169, al_aire, 2)
+wire(silencio, al_aire, 3)
+expr(al_aire, 'index',
+     "(lambda D, f: 3 if f == 'patron' else "
+     "(0 if D.op('IN_360').par.Activo else 3) if f == 'v360' else "
+     "(1 if D.op('IN_180').par.Activo else 3) if f == 'v180' else "
+     "(2 if D.op('IN_169').par.Activo and D.op('IN_169/VIDEO_DOME').par.Fuente == 'archivo' else 3))"
+     "(parent.DOMO, parent.DOMO.par.Fuente.eval())")
+a_video = al_aire
+a_arch = mk(M, audiofileinCHOP, 'archivo', 0, -200, repeat=True)
 expr(a_arch, 'file', 'parent().par.Archivo')
 expr(a_arch, 'play', "parent().par.Activo and parent().par.Fuente == 'archivo'")
-a_in = mk(M, audiodeviceinCHOP, 'entrada', 0, -200)
+a_in = mk(M, audiodeviceinCHOP, 'entrada', 0, -350)
 expr(a_in, 'active', "parent().par.Activo and parent().par.Fuente == 'entrada'")
 
-sw_a = mk(M, switchCHOP, 'fuente', 200, 0)
+sw_a = mk(M, switchCHOP, 'fuente', 400, 0)
 wire(a_video, sw_a, 0)
 wire(a_arch, sw_a, 1)
 wire(a_in, sw_a, 2)
 expr(sw_a, 'index', 'parent().par.Fuente.menuIndex')
 
-gan = mk(M, mathCHOP, 'ganancia', 400, 0)
+gan = mk(M, mathCHOP, 'ganancia', 600, 0)
 expr(gan, 'gain', 'parent().par.Ganancia')
 wire(sw_a, gan)
 
-eq = mk(M, audioparaeqCHOP, 'eq', 600, 0, units='frequency',
+eq = mk(M, audioparaeqCHOP, 'eq', 800, 0, units='frequency',
         enableeq1=True, frequencyhz1=100, bandwidth1=1.0,
         enableeq2=True, frequencyhz2=1000, bandwidth2=1.0,
         enableeq3=True, frequencyhz3=8000, bandwidth3=1.0)
@@ -563,26 +592,30 @@ expr(eq, 'boost2', 'parent().par.Medios')
 expr(eq, 'boost3', 'parent().par.Agudos')
 wire(gan, eq)
 
-ret = mk(M, delayCHOP, 'retardo', 800, 0, delayunit='seconds')
+ret = mk(M, delayCHOP, 'retardo', 1000, 0, delayunit='seconds')
 expr(ret, 'delay', 'parent().par.Retardo / 1000.0')
 wire(eq, ret)
 
-din = mk(M, audiodynamicsCHOP, 'dinamica', 1000, 0, enablecompressor=False, thresholdlimiter=-1.0)
+din = mk(M, audiodynamicsCHOP, 'dinamica', 1200, 0, enablecompressor=False, thresholdlimiter=-1.0)
 expr(din, 'enablelimiter', 'parent().par.Limitador')
 wire(ret, din)
 
-a_out = mk(M, outCHOP, 'out1', 1200, 100)
+a_out = mk(M, outCHOP, 'out1', 1400, 100)
 wire(din, a_out)
-dev = mk(M, audiodeviceoutCHOP, 'salida', 1200, -100)
+dev = mk(M, audiodeviceoutCHOP, 'salida', 1400, -100)
 expr(dev, 'active', 'parent().par.Activo')
 wire(din, dev)
 
 caja(M, 'nota', 'AUDIO: la cadena de sonido',
-     'Fuente elige entre el audio del video que esta al aire (sigue a DOMO.Fuente), un archivo '
-     'aparte o la entrada del equipo. Luego ganancia, EQ de tres bandas, retardo en milisegundos '
-     'para cuadrar con la imagen y un limitador que evita picos. Sale por el dispositivo por '
-     'defecto y por out1 para quien quiera grabarlo o analizarlo.',
-     [a_video, a_arch, a_in, sw_a, gan, eq, ret, din, a_out, dev], (0.20, 0.13, 0.20))
+     'Por defecto sigue a la fuente al aire: al_aire elige el audio del video de DOMO.Fuente '
+     '(de_360, de_180 o de_169, cada uno atado a su Movie File In y sincronizado con el) y los '
+     'demas modulos no suenan. El patron, un modulo apagado o un 16:9 por NDI o Spout dan '
+     'silencio. Fuente tambien puede ser un archivo aparte o la entrada del equipo. Luego '
+     'ganancia, EQ de tres bandas, retardo en milisegundos para cuadrar con la imagen y un '
+     'limitador. Sale por el dispositivo por defecto y por out1 (NDI y grabacion). El audio_out '
+     'de VIDEO_DOME queda apagado: el unico sonido sale de aqui.',
+     [a360, a180, a169, silencio, al_aire, a_arch, a_in, sw_a, gan, eq, ret, din, a_out, dev],
+     (0.20, 0.13, 0.20))
 
 # --------------------------------------------------------- mezcla y modelo
 
@@ -786,5 +819,15 @@ for nombre, vpar, mpar, etiqueta in V169:
     except Exception as e:
         print('[DOMO] no se pudo enlazar %s -> %s.%s: %s' % (nombre, abajo.owner.path, abajo.name, e))
 print('[DOMO] pagina 16:9: %d pars enlazados a IN_169/VIDEO_DOME' % len(V169))
+
+# El sonido de DOMO sale solo por AUDIO/salida. El audio_out propio de
+# VIDEO_DOME sonaba siempre (aunque el 16:9 no estuviera al aire): aqui se
+# apaga. Su audio_movie y audio_gain siguen vivos para AUDIO/de_169.
+vd = D.op('IN_169/VIDEO_DOME')
+if vd is not None and vd.op('audio_out') is not None:
+    ao = vd.op('audio_out').par.active
+    ao.expr = ''
+    ao.mode = ParMode.CONSTANT
+    ao.val = False
 
 print('[DOMO] construido: %s, %d operadores' % (D.path, len(D.findChildren())))
