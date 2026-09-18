@@ -19,7 +19,8 @@ de pantallas; el archivo `.toe` es el resultado de correrlo y de guardar.
 ```
 00_TouchDesigner/build_domo.py              el constructor de DOMO
 00_TouchDesigner/shaders/costura.frag       fundido de la costura de un 360
-00_TouchDesigner/shaders/orientar.frag      giro esférico del lienzo (Yaw, Pitch, Roll) antes del domemaster
+00_TouchDesigner/shaders/orientar.frag      giro esférico del lienzo (Yaw, Pitch, Roll) y altura del horizonte, antes del domemaster
+00_TouchDesigner/shaders/domo_mapping.frag  el domemaster y el lienzo de la sala VR, con FOV, Pitch y mapping, en un solo paso
 00_TouchDesigner/shaders/patron.frag        el patrón de prueba del lienzo
 00_TouchDesigner/shaders/pantalla169.frag   una pantalla plana sobre el lienzo (disponible, ya no está en la red)
 00_TouchDesigner/video_dome/                el sistema de pantallas (VIDEO_DOME), ver sección 5.3
@@ -59,10 +60,10 @@ DOMO                          COMP raíz, atajo parent.DOMO, páginas Domo, 360,
   patron                      el patrón de prueba, cuarta entrada de la mezcla
   mezcla -> equi              la fuente elegida, como lienzo equirectangular 2:1
   giro                        Yaw, como corrimiento horizontal del lienzo
-  domo -> mapping -> out_domo el domemaster fisheye; mapping mueve el cénit, escala y rota
+  domo -> out_domo            el domemaster fisheye (GLSL): FOV, Pitch y mapping antes de recortar
   spout_domo / ndi_domo       salidas del domemaster
   grabar                      Movie File Out del domemaster (HAP)
-  para_unreal -> giro_unreal -> alfa_unreal -> spout_unreal   el equirectangular que espera la sala VR
+  para_unreal -> alfa_unreal -> spout_unreal   el equirectangular que espera la sala VR (mismo shader que domo)
 ```
 
 Cada módulo de entrada es un Base COMP con su parámetro `Activo`, su `out1` y
@@ -184,6 +185,34 @@ horizonte marcado (pintura, abstracto, partículas). Para una grabación con
 horizonte, lo que se puede hacer es llevarla lo más atrás posible con `Yaw` y,
 si hace falta, fundirla con `Costura`.
 
+**Subir el horizonte y meter el piso.** Un domo de 180 grados muestra solo lo
+que está sobre el horizonte del lienzo, así que un video pintado o filmado con
+el motivo cruzando el horizonte se ve cortado a la mitad. `orientar` tiene, además
+del giro, un remapeo de la elevación con el cénit fijo, que se maneja con
+`Horizonte` y `Curva` (en la raíz, `Rhorizonte` y `Rcurva`). `Horizonte` es la
+elevación a la que queda el horizonte del video dentro de la cúpula: con 20, el
+horizonte sube a 20 grados y lo que había debajo se comprime entre ahí y el borde,
+de modo que en el borde de la cúpula se ve lo que estaba 26 grados bajo el
+horizonte. Negativo hace lo contrario: baja el horizonte y deja fuera la parte
+baja del cielo. `Curva` reparte esa compresión: 1 es pareja; mayor que 1 aprieta
+el piso contra el borde y deja el cielo más natural; menor que 1 aprieta el cielo.
+La fórmula, con `t` la distancia al cénit (0 en el cénit, 1 en el borde) y
+`th = (90 − Horizonte) / 90`, es `elevación leída = 90 − 90 · (t / th)^Curva`, y
+en el borde entran `90 · (th^−Curva − 1)` grados de piso. La página 360 lo
+muestra en el campo de solo lectura `Rpiso`. El remapeo va después del giro:
+primero se orienta la esfera y después se comprime la elevación respecto de la
+cúpula, así que las dos cosas se combinan sin pisarse.
+
+Medido el 18 de septiembre de 2026 con el patrón (la banda amarilla es la franja
+de 0 a 45 grados bajo el horizonte, y no debería verse sin ajuste): con
+`Horizonte` 20 aparecen 1 254 842 píxeles amarillos en el domemaster de 2048 y
+899 601 en la mitad superior del lienzo que recibe Unreal; con `Horizonte` 20 y
+`Curva` 2 entra también la franja roja (más de 45 grados bajo el horizonte), y
+`Rpiso` marca 58,8.
+
+![Horizonte 20: la franja amarilla bajo el horizonte entra por el borde](../05_Preview/pruebas/td_patron_horizonte20.png)
+![Lo mismo en la sala VR](../05_Preview/pruebas/unreal_patron_horizonte20.png)
+
 ![La costura sin girar: la línea roja sube desde atrás hasta el cénit](../05_Preview/pruebas/td_360_costura_sin_rotar.png)
 ![Con Pitch 90 la costura no llega al domemaster](../05_Preview/pruebas/td_360_rotado.png)
 ![El lienzo girado: la costura queda en la mitad inferior](../05_Preview/pruebas/td_360_rotado_equirect.png)
@@ -201,6 +230,7 @@ si hace falta, fundirla con `Costura`.
 | `Costuraganancia` | ganancia del lado derecho (0.5 a 1.5) |
 | `Costuraguia` | pinta la costura en rojo para ubicarla (dentro del fundido) |
 | `Yaw`, `Pitch`, `Roll` | página Orientacion: giro esférico del lienzo, en grados |
+| `Horizonte`, `Curva` | página Orientacion: altura del horizonte en la cúpula (grados, cénit fijo) y reparto de la compresión |
 | `Patron` | reemplaza el video por el patrón de prueba de DOMO, para apuntar sin video |
 | `Vercostura` | pinta de rojo la costura del archivo (`Costurapos`) donde cae después de girar |
 
@@ -226,7 +256,7 @@ Tres formatos de archivo, elegidos con `Formato`:
 | `Archivo` | archivo 180 (domemaster o VR180) |
 | `Play`, `Velocidad` | reproducir y velocidad |
 | `Formato` | `domemaster`, `vr180`, `vr180sbs` |
-| `Yaw`, `Pitch`, `Roll` | página Orientacion: el mismo giro esférico que el 360, con su propio `orientar` |
+| `Yaw`, `Pitch`, `Roll`, `Horizonte`, `Curva` | página Orientacion: el mismo giro esférico y la misma altura del horizonte que el 360, con su propio `orientar` |
 
 Se maneja desde la **página 180 de la raíz**. Para llevar un VR180 a la cúpula,
 `Mpitch` en esa página lo inclina solo a él, mientras que el `Pitch` de la
@@ -235,11 +265,11 @@ página Domo mueve todas las fuentes.
 ### 5.3 IN_169: video plano sobre pantallas en la cúpula (VIDEO_DOME)
 
 El video plano no va sobre una sola pantalla. Adentro de `IN_169` se construye
-`VIDEO_DOME`, el sistema de pantallas del proyecto Domo_Pantallas, con su
+`VIDEO_DOME`, el sistema de pantallas de un proyecto anterior del autor, con su
 propio constructor `video_dome/build_video_dome.py` (recibe `TEMPLATE_TARGET`,
 `VIDEO_DOME_DIR` y `RESET_DEFAULTS = True` desde `build_domo.py`). Su
-documentación completa está en `Domo_Pantallas/04_Docs/Video_en_domo.md`
-(otro repositorio); esto es lo esencial.
+documentación completa está en el repositorio de ese proyecto; esto es lo
+esencial.
 
 **El mapeo va al revés que un render.** `video_dome/dome_map.frag` recorre los
 píxeles del domemaster, calcula la dirección de cada uno en la cúpula (azimut y
@@ -317,8 +347,6 @@ la sala. Probado el 18 de septiembre de 2026: con `Vdpitch` 20 y la rejilla
 encendida, el círculo del domo interno se ve inclinado en `out_domo`; mover
 `Viewpitch` dentro de VIDEO_DOME actualiza `Vviewpitch` arriba, y los valores
 sobreviven a una reconstrucción.
-
-![El domo interno inclinado 20 grados con la rejilla encendida](../05_Preview/pruebas/td_169_tracking.png)
 
 Los parámetros de abajo están en modo **Bind** contra los de arriba
 (`parent.DOMO.par.Vtemplate`, etc.), y el bind funciona en los dos sentidos:
@@ -446,23 +474,63 @@ defecto y por `out1`, que es lo que graban `grabar` y `ndi_domo`.
    `repeat`) aplica el Yaw como corrimiento horizontal del lienzo. Es un giro
    puro en azimut, independiente del orden de rotaciones del Projection TOP.
    Por eso el Yaw NO va en el Projection TOP.
-2. **`domo`** (Projection TOP `equirectangular → fisheye`) hace el domemaster.
-   Sin rotación, ese modo deja el centro del fisheye en el horizonte del
-   frente; `rx = 90` sube el cénit al centro, `ry = 90` gira el domemaster para
-   que el frente quede ABAJO del cuadro (la convención domemaster), y el Pitch
-   se aplica como `rx = 90 - Pitch`: un Pitch positivo inclina el contenido del
-   frente hacia el cénit. El fov es el del contenido: con `Fovauto` encendido
-   (por defecto) es el del modelo de sala, 180 para `domo180` (media esfera,
-   planetario) y también 180 para `domo90` y `domo45`, que son pantallas de media
-   esfera inclinadas, y `Fovcustom` para `custom`; con
+2. **`domo`** (GLSL TOP con `shaders/domo_mapping.frag`) hace el domemaster
+   en un solo paso: el cénit al centro, el frente ABAJO del cuadro (la
+   convención domemaster), el `Pitch` de la página Domo (positivo inclina el
+   contenido del frente hacia el cénit), el FOV del contenido y el mapping.
+   Cada píxel de salida deshace el mapping, calcula su dirección con el FOV del
+   contenido y va a buscarla al lienzo completo. El FOV del contenido es el del
+   modelo de sala con `Fovauto` encendido (por defecto): 180 para `domo180`
+   (media esfera, planetario) y también 180 para `domo90` y `domo45`, que son
+   pantallas de media esfera inclinadas, y `Fovcustom` para `custom`; con
    `Fovauto` apagado es `Fovcontenido`. La resolución es la de `Res`, cuadrada.
-3. **`mapping`** (Transform TOP, unidades en fracción, extensión `zero`) es el
-   ajuste que en una sala real se hace en vivo sobre el servidor del domo:
-   `Centrox` y `Centroy` mueven el cénit, `Escala` agranda o encoge el
-   domemaster y `Rotar` lo gira. Lo que queda fuera del cuadro es negro.
+   Fuera del círculo de la sala queda negro.
+3. **El mapping** (página Mapping) es el ajuste que en una sala real se hace en
+   vivo sobre el servidor del domo: `Centrox` y `Centroy` corren el cénit,
+   `Escala` agranda o encoge la imagen y `Rotar` la gira (positivo, en sentido
+   antihorario). Como se aplica antes de recortar al círculo de la sala, lo que
+   aparece en el borde al encoger o al correr el cénit es contenido del video
+   (el piso), no negro.
 4. **`out_domo`** es el domemaster terminado y el visor del COMP.
 
-**El truco del FOV.** `domo` usa el FOV del contenido, pero `para_unreal` (y el
+**Por qué antes no se podía ver el piso.** Hasta la versión 1.2 del constructor,
+`domo` era un Projection TOP `equirectangular → fisheye` seguido de un Transform
+TOP `mapping`. El Projection TOP solo dibujaba los grados del FOV del contenido y
+dejaba negro todo lo demás, así que el mapping movía un círculo ya recortado:
+`Escala` menor que 1 encogía la imagen y dejaba un anillo negro, `Centroy`
+dejaba una media luna negra, y el piso del video no aparecía nunca. `Fovcontenido`
+tampoco hacía nada mientras `Fovauto` estuviera encendido, que es lo que viene
+por defecto. Lo único que metía algo de piso era el `Pitch` (de la página Domo o
+del 360), que inclina la esfera y por lo tanto sube el piso de un lado a costa
+del otro. Además, `Rotar` deformaba el círculo en una elipse, porque el Transform
+TOP no conservaba el aspecto al girar. Desde la versión 1.3 el shader
+`domo_mapping` resuelve las cuatro cosas en un solo paso, y el 360 suma
+`Horizonte` y `Curva` (sección 5.1), que son la forma pareja de meter el piso
+en toda la vuelta sin inclinar nada.
+
+Medido el 18 de septiembre de 2026 con el patrón, contando la banda amarilla
+(de 0 a 45 grados bajo el horizonte) en el domemaster y en la mitad superior del
+lienzo de Unreal:
+
+| Ajuste | Amarillo en el domemaster | Amarillo en Unreal | Grados de piso en el borde |
+|---|---|---|---|
+| nada | 0 | 0 | 0 |
+| `Rhorizonte` 20 | 1 254 842 | 899 601 | 25,7 (`Rpiso`) |
+| `Rhorizonte` 30, `Rcurva` 0,6 | 1 766 292 | 1 351 383 | 24,8 |
+| `Escala` 0,8 | 1 144 214 | 812 415 | 22,5 (`Pisoborde`) |
+| `Fovauto` apagado, `Fovcontenido` 230 | 1 231 924 | 879 786 | 25 |
+| `Centroy` 0,1 | 407 330 | 282 192 | solo adelante |
+| `Rpitch` −30 | 593 155 | 435 645 | solo adelante |
+
+Con `Escala` 0,8 el negro del domemaster es el mismo que sin ajuste (el de fuera
+del círculo): ya no aparece un anillo. Con todo en cero, el nuevo `domo` y el
+anterior dan la misma imagen (diferencia media de 0,0006 por canal) y en
+`para_unreal` el cuadro blanco del frente cae en `u 0.500, v 0.750`, igual que
+antes.
+
+![Centroy 0,1: el cénit se corre hacia atrás y el piso entra adelante](../05_Preview/pruebas/td_patron_centroy.png)
+
+**El truco del FOV.** `domo` usa el FOV del contenido, pero la sala (y el
 servidor de un domo real, que solo recibe) leen el domemaster con el FOV de la
 sala. Con `Fovauto` apagado y `Fovcontenido = 230`, el domemaster mete 230
 grados de contenido en el mismo círculo, y la cúpula de 180 muestra también lo
@@ -481,17 +549,19 @@ a `Grabarcarpeta/domemaster.mov`, también con el audio). Los tres están apagad
 por defecto salvo lo que diga la página Salidas.
 
 La sala VR no quiere el domemaster sino el lienzo equirectangular con la cúpula
-en la mitad superior, ya con Yaw, Pitch y el FOV del modelo aplicados. Se
-reconstruye desde el domemaster: `para_unreal` (Projection TOP `fisheye →
-equirectangular`, `rx = -90`, fov el del modelo de sala, no el del contenido),
-`giro_unreal` (Transform
-TOP, `tx = -0.25`, `repeat`) que deshace el `ry = 90` del domemaster,
-`alfa_unreal` (Reorder TOP, alfa en uno y formato fijado a `rgba8fixed`, porque
-el receptor de Unreal solo lee 8 bits por canal; ver la sección 8) y
-`spout_unreal`, que lo manda con el nombre que lee el `SpoutDomeReceiver` del
-nivel de Unreal. Medido con el patrón:
-el cuadro blanco del frente vuelve a `u 0.5, v 0.75`. La mitad inferior del
-lienzo queda sin imagen, que es lo que corresponde a un domo de 180.
+en la mitad superior, ya con Yaw, Pitch, FOV y mapping aplicados. `para_unreal`
+es el mismo shader que `domo` en su segundo modo: cada píxel del lienzo de la
+sala calcula su punto en el domemaster con el FOV de la sala (no el del
+contenido) y sigue desde ahí el mismo camino hasta el lienzo de entrada. Así
+Unreal ve exactamente lo que vería el domo, y sin pasar por el domemaster
+intermedio de 2048, que antes se volvía a estirar a 4096 (hasta la versión 1.2
+eran un Projection TOP `fisheye → equirectangular` con `rx = -90` y el Transform
+`giro_unreal` con `tx = -0.25`). Después vienen `alfa_unreal` (Reorder TOP, alfa
+en uno y formato fijado a `rgba8fixed`, porque el receptor de Unreal solo lee 8
+bits por canal; ver la sección 8) y `spout_unreal`, que lo manda con el nombre
+que lee el `SpoutDomeReceiver` del nivel de Unreal. Medido con el patrón: el
+cuadro blanco del frente cae en `u 0.5, v 0.75`. La mitad inferior del lienzo
+queda sin imagen, que es lo que corresponde a un domo de 180.
 
 ![Lo que recibe Unreal](../05_Preview/pruebas/td_patron_para_unreal.png)
 
@@ -506,18 +576,21 @@ Parámetros del COMP raíz:
 | `Pitch` | inclinar el contenido hacia el cénit (±90) |
 | `Res` | lado del domemaster: `r1024` (ensayo), `r2048` (tiempo real, por defecto), `r4096` (grabar) |
 | `Ancho` | ancho del lienzo equirectangular (4096 por defecto; el alto es la mitad) |
-| `Version` | solo lectura, la versión del constructor (1.2, 18 sep 2026) |
+| `Version` | solo lectura, la versión del constructor (1.3, 18 sep 2026) |
 
 | Página 360 | Van a (modo Bind en IN_360) |
 |---|---|
 | `Ractivo`, `Rarchivo`, `Rplay`, `Rvelocidad` | `Activo`, `Archivo`, `Play`, `Velocidad` |
 | `Ryaw`, `Rpitch`, `Rroll` | `Yaw`, `Pitch`, `Roll`: el giro esférico del lienzo (sección 5.1) |
+| `Rhorizonte`, `Rcurva` | `Horizonte`, `Curva`: subir el horizonte con el cénit fijo y meter el piso (sección 5.1) |
+| `Rpiso` | solo lectura, en la raíz: grados de piso que llegan al borde de la cúpula |
 | `Rpatron`, `Rvercostura`, `Rcosturapos`, `Rcostura` | `Patron`, `Vercostura`, `Costurapos`, `Costura` |
 
 | Página 180 | Van a (modo Bind en IN_180) |
 |---|---|
 | `Mactivo`, `Marchivo`, `Mplay`, `Mformato` | `Activo`, `Archivo`, `Play`, `Formato` |
 | `Myaw`, `Mpitch`, `Mroll` | `Yaw`, `Pitch`, `Roll` |
+| `Mhorizonte`, `Mcurva` | `Horizonte`, `Curva` |
 
 La página 16:9 está en la sección 5.3. El `Yaw` y el `Pitch` de la página Domo
 siguen existiendo y se aplican después, a todas las fuentes por igual.
@@ -525,10 +598,11 @@ siguen existiendo y se aplican después, a todas las fuentes por igual.
 | Página Mapping | Qué hace |
 |---|---|
 | `Fovauto` | encendido por defecto: el FOV del contenido es el del modelo de sala |
-| `Fovcontenido` | FOV del contenido en grados (230 por defecto); se usa con `Fovauto` apagado |
-| `Centrox`, `Centroy` | mover el cénit, en fracción del domemaster (−0.5 a 0.5) |
-| `Escala` | escala del domemaster (0.5 a 2) |
-| `Rotar` | rotar el domemaster en grados (±180) |
+| `Fovcontenido` | FOV del contenido en grados (230 por defecto); solo cuenta con `Fovauto` apagado |
+| `Centrox`, `Centroy` | correr el cénit, en fracción del domemaster; `Centroy` positivo lo lleva hacia atrás y mete piso adelante |
+| `Escala` | menor que 1 mete más grados en el círculo (el piso entra parejo por el borde); mayor que 1 acerca |
+| `Rotar` | girar el domemaster en grados (positivo, antihorario) |
+| `Pisoborde` | solo lectura: grados de piso que llegan al borde con el cénit centrado |
 
 | Página Salidas | Qué hace |
 |---|---|
@@ -561,8 +635,10 @@ sala nueva, sea física o virtual:
 5. Si la cúpula real corta la imagen o le sobra borde, ajustar `Centrox`,
    `Centroy`, `Escala` y `Rotar` (página Mapping) mirando el patrón, hasta que
    el círculo del domemaster coincida con la cúpula. Si se quiere que entre más
-   contenido del que cubre la sala, apagar `Fovauto` y subir `Fovcontenido`
-   (230 sobre 180 está verificado).
+   contenido del que cubre la sala, bajar `Escala`, o apagar `Fovauto` y subir
+   `Fovcontenido` (230 sobre 180 está verificado). Para un 360 con el motivo
+   cruzando el horizonte, lo más limpio es `Rhorizonte` en la página 360: el
+   amarillo del patrón tiene que aparecer como un anillo parejo en el borde.
 6. En la sala VR, con `Spoutunreal` encendido, comprobar las tres vistas: el
    frente (cuadro blanco y, arriba, la marca azul del cénit), el cénit y la
    parte de atrás con la columna negra de la costura.
@@ -574,6 +650,28 @@ sala nueva, sea física o virtual:
 Lo que se verificó con estas capturas: en la sala VR solo se ve el verde (la
 cúpula lee la mitad superior del lienzo), el frente `u 0.5` cae en +X, el cénit
 queda en el centro del domemaster y la costura del lienzo va a parar detrás.
+
+### Un caso real: 3gracias
+
+`loop entrando acuarela test.mp4` (4096 × 2048, 24 cuadros por segundo, 18,6
+segundos) es pintura a mano cuadro a cuadro en formato 360. La figura principal
+está al frente y ocupa del cénit hasta casi el nadir, así que sin ajuste la
+cúpula la corta a la cintura: es exactamente el caso que no se podía resolver
+antes de la versión 1.3. Con `Rhorizonte` 35, `Rcurva` 1 y `Rpitch` −8 (un poco
+de inclinación para bajar el frente) entra la figura entera; `Rpiso` marca 57
+grados de piso en el borde. `Costura` queda apagada: el papel no casa en `u = 0`
+y el fundido emborrona la figura de atrás, mientras que sin fundir queda solo una
+línea fina detrás del público.
+
+![3gracias como domemaster](../05_Preview/renders/3gracias_domemaster.png)
+![3gracias desde las butacas en la sala VR](../05_Preview/renders/3gracias_unreal_desde_butacas.png)
+![3gracias, vista general de la sala](../05_Preview/renders/3gracias_unreal_general.png)
+
+Las capturas de Unreal (`05_Preview/renders/3gracias_unreal_*`, cuadros 190, 60
+y 330 del video) se hicieron en Simulate y miden 1775 × 1216: es el tamaño del
+viewport del editor con los paneles abiertos en una pantalla de 2560.
+`3gracias_equirect.png` es el lienzo que recibe Unreal, con la cúpula en la
+mitad superior.
 
 ## 8. Trampas medidas
 
@@ -629,6 +727,18 @@ queda en el centro del domemaster y la costura del lienzo va a parar detrás.
 - **Los Annotate COMP de VIDEO_DOME se perdían.** `build_video_dome.py` los
   creaba con nombre y con `utility` encendido, y desaparecían solos. Ahora se
   crean sin nombre, sin `utility`, y se renombran al final, como en `caja()`.
+- **El mapping tiene que ir antes del recorte.** Un Transform TOP detrás de un
+  Projection TOP mueve una imagen que ya perdió todo lo que pasaba del FOV: encoger
+  o correr el cénit muestra negro, nunca el piso. Por eso desde la versión 1.3 el
+  mapping vive dentro del shader `domo_mapping`, que lee el lienzo completo.
+  `Fovcontenido` solo cuenta con `Fovauto` apagado.
+- **Un TouchDesigner minimizado no atiende el MCP.** Con la ventana minimizada,
+  el servidor de ejecución del MCP deja de contestar ("exec_server unreachable:
+  timed out") aunque el proceso esté vivo. Se arregla restaurando la ventana.
+- **Unreal en segundo plano no refresca la cúpula en el editor.** El receptor
+  tickea en el editor solo con el viewport en tiempo real y el editor al frente.
+  Para capturar sin tocar el foco sirve Simulate (`StartPIE` con `bSimulate`),
+  que tickea el mundo; `CaptureViewport` con `captureTransform` funciona igual.
 - **La costura de un 360 no se saca con Yaw.** Es un meridiano de polo a polo:
   en azimut solo se mueve, y siempre llega al cénit. Hace falta un giro
   esférico (`Rpitch`, `Rroll`; sección 5.1).

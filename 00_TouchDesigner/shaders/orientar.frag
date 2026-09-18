@@ -19,12 +19,28 @@
 //                          IN_169 la usa: bajo 90 - Domefov/2 el lienzo que sale
 //                          del domemaster de VIDEO_DOME no tiene imagen, y el
 //                          Projection TOP estira ahi el borde del circulo en rayas.
+// uniform vec4 uElev : x = Horizonte: elevacion (grados) a la que queda el horizonte
+//                          del video, con el cenit fijo. Positivo lo sube y mete
+//                          en la cupula lo que estaba bajo el horizonte (el piso);
+//                          negativo lo baja y deja fuera la parte baja del cielo.
+//                      y = Curva (1 = compresion pareja). Mayor que 1 aprieta el
+//                          piso contra el borde y deja el cielo mas natural; menor
+//                          que 1 hace lo contrario. Con Horizonte 0 solo reparte
+//                          el cielo entre el horizonte y el cenit.
+//
+// El remapeo de elevacion va DESPUES del giro (en el sentido de la imagen): se
+// gira la esfera del video y luego se comprime la elevacion respecto de la
+// cupula. Con t = (90 - e) / 90 la distancia al cenit de la salida (0 en el
+// cenit, 1 en el borde de la cupula) y th = (90 - Horizonte) / 90, la
+// elevacion que se lee es 90 - 90 (t / th)^Curva. En el borde de la cupula
+// entra hasta 90 (th^-Curva - 1) grados bajo el horizonte.
 //
 // Se lee con textureLod nivel 0: con mipmaps, el salto de u de 1 a 0 en la
 // costura dispara el nivel de mip y deja una linea gris de un pixel.
 
 uniform vec4 uRot;
 uniform vec4 uSeam;
+uniform vec4 uElev;
 
 out vec4 fragColor;
 
@@ -66,7 +82,19 @@ vec3 roll_inv(vec3 d, float a)
 
 void main()
 {
-    vec3 d = dir_de_uv(vUV.st);
+    vec2 uv = vUV.st;
+    float H = min(uElev.x, 80.0);
+    float g = max(uElev.y, 0.05);
+    if (abs(H) > 1e-4 || abs(g - 1.0) > 1e-4) {
+        float t = (0.5 - (uv.y - 0.5)) * 2.0;        // 0 cenit, 1 horizonte de la sala, 2 nadir
+        float el = 90.0 - 90.0 * pow(t / ((90.0 - H) / 90.0), g);
+        if (el < -90.0) {
+            fragColor = TDOutputSwizzle(vec4(0.0, 0.0, 0.0, 1.0));
+            return;
+        }
+        uv.y = el / 180.0 + 0.5;
+    }
+    vec3 d = dir_de_uv(uv);
     d = yaw_inv(d, radians(uRot.x));
     d = pitch_inv(d, radians(uRot.y));
     d = roll_inv(d, radians(uRot.z));

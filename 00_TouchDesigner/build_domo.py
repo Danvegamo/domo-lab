@@ -19,9 +19,9 @@ Estructura que deja:
       IN_169                  video plano sobre pantallas en la cupula (VIDEO_DOME adentro, + Pitch/Roll)
       AUDIO                   sigue a la fuente al aire (solo suena ese video), o un archivo, o la entrada
       mezcla -> equi          la fuente elegida, como lienzo equirectangular 2:1
-      domo -> out_domo        el domemaster fisheye con el FOV del modelo de sala
+      domo -> out_domo        el domemaster fisheye (GLSL domo_mapping: FOV, Pitch y mapping sin recortar)
       spout_domo / ndi_domo   salidas del domemaster
-      para_unreal -> spout_unreal   la version equirectangular que espera la sala VR
+      para_unreal -> alfa_unreal -> spout_unreal   el equirectangular que espera la sala VR (mismo shader)
       grabar                  Movie File Out del domemaster
 
 Cada modulo tiene su parametro `Activo`: apagado, el modulo entrega negro y
@@ -42,7 +42,7 @@ except NameError:
 
 RAIZ = op('/project1')
 NOMBRE = 'DOMO'
-VERSION = '1.2 (18 sep 2026)'
+VERSION = '1.3 (18 sep 2026)'
 
 # ---------------------------------------------------------------- utilidades
 
@@ -194,7 +194,7 @@ def orientador(comp, entrada, x, guia='0', costura_pos='0', yaw='parent().par.Ya
     g = mk(comp, glslTOP, 'orientar', x, 0)
     g.par.pixeldat = dat
     setpar(g, 'inputextenduv', 'repeat')
-    setpar(g, 'vec', 2)
+    setpar(g, 'vec', 3)
     setpar(g, 'vec0name', 'uRot')
     expr(g, 'vec0valuex', yaw)
     expr(g, 'vec0valuey', 'parent().par.Pitch')
@@ -205,11 +205,19 @@ def orientador(comp, entrada, x, guia='0', costura_pos='0', yaw='parent().par.Ya
     setpar(g, 'vec1valuey', 0.006)
     expr(g, 'vec1valuez', corte)
     setpar(g, 'vec1valuew', 0)
+    # Horizonte y Curva: remapeo de la elevacion respecto de la cupula (ver
+    # orientar.frag). Horizonte > 0 sube el horizonte y mete el piso.
+    setpar(g, 'vec2name', 'uElev')
+    expr(g, 'vec2valuex', 'parent().par.Horizonte')
+    expr(g, 'vec2valuey', 'parent().par.Curva')
+    setpar(g, 'vec2valuez', 0)
+    setpar(g, 'vec2valuew', 0)
     wire(entrada, g)
     sw = mk(comp, switchTOP, 'orientado', x + 200, 0)
     wire(entrada, sw, 0)
     wire(g, sw, 1)
-    expr(sw, 'index', 'int(bool((%s) or parent().par.Pitch or parent().par.Roll or (%s)))' % (yaw, guia))
+    expr(sw, 'index', 'int(bool((%s) or parent().par.Pitch or parent().par.Roll or (%s) '
+                      'or parent().par.Horizonte or parent().par.Curva != 1))' % (yaw, guia))
     return [dat, g, sw], sw
 
 
@@ -225,6 +233,12 @@ def pagina_orientacion(comp, nombre_pagina, con_yaw=True):
         p = getattr(comp.par, n, None)
         if p is not None:
             p.clampMin = False
+    # Elevacion respecto de la cupula, con el cenit fijo (orientar.frag, uElev)
+    p = flotante(pg, 'Horizonte', 'Subir el horizonte (grados; + mete el piso en la cupula)', 0, -45, 60)
+    p.clampMin, p.min = True, -60
+    p.clampMax, p.max = True, 80
+    p = flotante(pg, 'Curva', 'Curva de la elevacion (1 pareja; >1 aprieta el piso)', 1.0, 0.25, 3.0)
+    p.clampMin, p.min = True, 0.05
     return pg
 
 
@@ -294,13 +308,19 @@ p.readOnly = True
 # Mapping: lo que en la sala real se ajusta desde TouchDesigner mientras el
 # servidor del domo solo recibe. Aqui pasa lo mismo: Unreal recibe y estos
 # pars mueven lo que se ve, sin tocar el nivel.
+# Desde la version 1.3 todo esto lo hace el shader domo_mapping antes de
+# recortar al circulo de la sala: encoger o correr el cenit mete contenido de
+# verdad (el piso del video), no negro.
 pmap = D.appendCustomPage('Mapping')
-toggle(pmap, 'Fovauto', 'FOV del contenido = FOV del modelo de sala', True)
-flotante(pmap, 'Fovcontenido', 'FOV del contenido si no es automatico (grados)', 230, 90, 360)
-flotante(pmap, 'Centrox', 'Mover el cenit en X (fraccion del domemaster)', 0, -0.5, 0.5)
-flotante(pmap, 'Centroy', 'Mover el cenit en Y (fraccion del domemaster)', 0, -0.5, 0.5)
-flotante(pmap, 'Escala', 'Escala del domemaster', 1.0, 0.5, 2.0)
-flotante(pmap, 'Rotar', 'Rotar el domemaster (grados)', 0, -180, 180)
+toggle(pmap, 'Fovauto', 'FOV del contenido = el de la sala (apagar para usar el de abajo)', True)
+flotante(pmap, 'Fovcontenido', 'FOV del contenido (grados; 230 mete 25 bajo el horizonte)', 230, 90, 360)
+flotante(pmap, 'Centrox', 'Correr el cenit a los lados (fraccion del domemaster)', 0, -0.5, 0.5)
+flotante(pmap, 'Centroy', 'Correr el cenit: + hacia atras, el piso entra adelante (fraccion)', 0, -0.5, 0.5)
+p = flotante(pmap, 'Escala', 'Escala (<1 mete mas grados: el piso entra por el borde)', 1.0, 0.3, 2.0)
+p.min = 0.1
+flotante(pmap, 'Rotar', 'Rotar el domemaster (grados, + antihorario)', 0, -180, 180)
+for n in ('Centrox', 'Centroy', 'Rotar'):
+    getattr(D.par, n).clampMin = False
 
 ps = D.appendCustomPage('Salidas')
 toggle(ps, 'Spoutunreal', 'Spout a la sala VR (equirectangular)', True)
@@ -390,8 +410,10 @@ caja(M, 'nota', 'IN_360: video 360 equirectangular',
      'ajusta al tamano del lienzo. Si el stitching dejo una linea vertical, enciende Costura y mueve '
      'Costurapos hasta que la guia roja caiga sobre ella; luego apaga la guia. orientar gira la '
      'esfera (Yaw, Pitch, Roll, pagina 360 de DOMO) antes del domemaster: la costura es un meridiano '
-     'de polo a polo, y con Pitch 90 queda entera bajo el horizonte, fuera de la cupula. Patron pone '
-     'el patron de prueba en lugar del video para apuntar; Vercostura pinta la costura en rojo.',
+     'de polo a polo, y con Pitch 90 queda entera bajo el horizonte, fuera de la cupula. Horizonte '
+     'sube el horizonte del video con el cenit fijo y mete el piso en la cupula; Curva reparte esa '
+     'compresion. Patron pone el patron de prueba en lugar del video para apuntar; Vercostura pinta '
+     'la costura en rojo.',
      [video, cos, sw_cos, fit360, pat360, sw_pat] + nodos_or +
      [M.op('negro'), M.op('activo'), M.op('out1')], (0.13, 0.20, 0.16))
 
@@ -450,7 +472,7 @@ caja(M, 'nota', 'IN_180: domemaster o VR180',
 # ------------------------------------------------------------------ IN_169
 #
 # El video plano no va sobre una sola pantalla: es el sistema de pantallas de
-# Domo_Pantallas (video_dome/build_video_dome.py), que se construye aqui
+# un proyecto anterior del autor (video_dome/build_video_dome.py), que se construye aqui
 # adentro. Sus montajes (una pantalla al frente, cuatro salas, corona cosida,
 # anillos, cilindro, mosaico...) viven en la tabla `screens` y en los templates
 # y versiones; el fondo desenfocado, el editor con el mouse y los momentos
@@ -499,7 +521,7 @@ nodos_or169, orient169 = orientador(M, giro169, 900, yaw='0',
 negro_y_salida(M, orient169, 1300)
 
 caja(M, 'nota', 'IN_169: video plano sobre pantallas en la cupula',
-     'VIDEO_DOME es el sistema de pantallas de Domo_Pantallas: el shader recorre el domemaster y '
+     'VIDEO_DOME es el sistema de pantallas de un proyecto anterior del autor: el shader recorre el domemaster y '
      'pregunta que pantalla cubre cada pixel; las pantallas son filas de la tabla screens. Ahi '
      'estan los templates (una al frente, sala de 4, corona cosida, anillos, cilindro, mosaico), '
      'el fondo desenfocado, el editor con el mouse y las versiones guardadas. Lo principal '
@@ -534,6 +556,8 @@ P360 = [
     ('Ryaw', 'IN_360', 'Yaw', 'Girar la esfera en azimut (grados)'),
     ('Rpitch', 'IN_360', 'Pitch', 'Inclinar la esfera: el frente hacia el cenit (grados)'),
     ('Rroll', 'IN_360', 'Roll', 'Rodar la esfera sobre el eje del frente (grados)'),
+    ('Rhorizonte', 'IN_360', 'Horizonte', 'Subir el horizonte (grados; + mete el piso en la cupula)'),
+    ('Rcurva', 'IN_360', 'Curva', 'Curva de la elevacion (1 pareja; >1 aprieta el piso, <1 el cielo)'),
     ('Rpatron', 'IN_360', 'Patron', 'Ver el patron de prueba en vez del video'),
     ('Rvercostura', 'IN_360', 'Vercostura', 'Pintar la costura en rojo (donde cae tras girar)'),
     ('Rcosturapos', 'IN_360', 'Costurapos', 'Posicion de la costura del archivo (u, 0 a 1)'),
@@ -547,6 +571,8 @@ P180 = [
     ('Myaw', 'IN_180', 'Yaw', 'Girar en azimut (grados)'),
     ('Mpitch', 'IN_180', 'Pitch', 'Inclinar: el frente hacia el cenit (grados)'),
     ('Mroll', 'IN_180', 'Roll', 'Rodar sobre el eje del frente (grados)'),
+    ('Mhorizonte', 'IN_180', 'Horizonte', 'Subir el horizonte (grados; + mete lo de abajo en la cupula)'),
+    ('Mcurva', 'IN_180', 'Curva', 'Curva de la elevacion (1 pareja)'),
 ]
 V169 = [
     ('Vactivo', 'IN_169', 'Activo', 'Modulo 16:9 activo'),
@@ -589,7 +615,8 @@ V169 = [
     ('Vpreview', VD, 'Preview', 'Simulador de domo (mirar desde adentro)'),
 ]
 PAGINAS = [
-    ('360', P360, {'Ractivo': 'Video', 'Ryaw': 'Orientacion de la esfera (antes del domemaster)',
+    ('360', P360, {'Ractivo': 'Video', 'Ryaw': 'Mover la esfera (antes del domemaster)',
+                   'Rhorizonte': 'Horizonte y piso: comprimir la elevacion en la cupula',
                    'Rpatron': 'Costura'}),
     ('180', P180, {'Mactivo': 'Video', 'Myaw': 'Orientacion (antes del domemaster)'}),
     ('16:9', V169, {'Vactivo': 'Fuente', 'Vtemplate': 'Montaje',
@@ -636,6 +663,20 @@ for nombre_pag, filas, cabeceras in PAGINAS:
         except Exception:
             pass
 D.sortCustomPages('Domo', '360', '180', '16:9', 'Mapping', 'Salidas')
+
+# Lecturas: cuantos grados bajo el horizonte llegan al borde de la cupula. Son
+# de solo lectura y van por expresion; el restaurar de abajo no las toca.
+def pagina(nombre):
+    return [pg for pg in D.customPages if pg.name == nombre][0]
+
+
+p = pagina('360').appendFloat('Rpiso', label='Piso que entra al borde de la cupula (grados, calculado)')[0]
+p.expr = '90 * (((90 - min(me.par.Rhorizonte, 80)) / 90) ** -max(me.par.Rcurva, 0.05) - 1)'
+p.readOnly = True
+p = pagina('Mapping').appendFloat('Pisoborde', label='Piso que entra al borde con el cenit centrado (grados, calculado)')[0]
+p.expr = ('(((%s) if me.par.Fovauto else me.par.Fovcontenido) / 2.0 / max(me.par.Escala, 0.1) - 90)'
+          % "[180, 180, 180, me.par.Fovcustom][me.par.Modelo.menuIndex]")
+p.readOnly = True
 
 # ------------------------------------------------------------------- AUDIO
 
@@ -777,35 +818,68 @@ wire(equi, giro)
 # Las salas 90 y 45 son pantallas de 180 grados inclinadas; la inclinacion va
 # en la geometria de la sala, no en el Pitch.
 FOV_SALA = "[180, 180, 180, parent().par.Fovcustom][parent().par.Modelo.menuIndex]"
-domo = mk(D, projectionTOP, 'domo', 400, 250, input='equirectangular', output='fisheye', ry=90, rz=0)
-expr(domo, 'fov', "(%s) if parent().par.Fovauto else parent().par.Fovcontenido" % FOV_SALA)
-expr(domo, 'rx', '90 - parent().par.Pitch')
+FOV_CONTENIDO = "(%s) if parent().par.Fovauto else parent().par.Fovcontenido" % FOV_SALA
+
+
+def domo_glsl(nombre, x, y, modo):
+    """GLSL TOP con shaders/domo_mapping.frag. modo 0 = domemaster, 1 = el
+    equirectangular de la sala VR. Lee el lienzo completo (giro) y aplica el FOV
+    del contenido, el Pitch y el mapping ANTES de recortar al circulo de la sala.
+
+    Antes eran un Projection TOP (equirect -> fisheye con el FOV del contenido)
+    seguido de un Transform TOP (mapping). El Projection TOP ya dejaba negro todo
+    lo que pasaba de ese FOV, asi que Escala < 1 o correr el cenit mostraban un
+    anillo negro y nunca el piso del video; y el Transform TOP deformaba el
+    circulo en elipse al rotar (medido el 18 sep 2026)."""
+    g = mk(D, glslTOP, nombre, x, y)
+    g.par.pixeldat = D.op('domo_glsl')
+    setpar(g, 'inputextenduv', 'repeat')
+    setpar(g, 'vec', 2)
+    setpar(g, 'vec0name', 'uMap')
+    expr(g, 'vec0valuex', 'parent().par.Centrox')
+    expr(g, 'vec0valuey', 'parent().par.Centroy')
+    expr(g, 'vec0valuez', 'parent().par.Escala')
+    expr(g, 'vec0valuew', 'parent().par.Rotar')
+    setpar(g, 'vec1name', 'uFov')
+    expr(g, 'vec1valuex', FOV_CONTENIDO)
+    expr(g, 'vec1valuey', FOV_SALA)
+    expr(g, 'vec1valuez', 'parent().par.Pitch')
+    setpar(g, 'vec1valuew', modo)
+    wire(giro, g)
+    return g
+
+
+domo_dat = mk(D, textDAT, 'domo_glsl', 400, 450)
+domo_dat.text = leer('domo_mapping.frag')
+domo = domo_glsl('domo', 400, 250, 0)
 setpar(domo, 'outputresolution', 'custom')
 expr(domo, 'resolutionw', '[1024, 2048, 4096][parent().par.Res.menuIndex]')
 expr(domo, 'resolutionh', '[1024, 2048, 4096][parent().par.Res.menuIndex]')
-wire(giro, domo)
-
-# mapping del domemaster: mover el cenit, escalar y rotar, como se hace en
-# vivo sobre el servidor de un domo real. Fuera del cuadro queda negro.
-mapping = mk(D, transformTOP, 'mapping', 600, 250, tunit='fraction', extend='zero')
-expr(mapping, 'tx', 'parent().par.Centrox')
-expr(mapping, 'ty', 'parent().par.Centroy')
-expr(mapping, 'sx', 'parent().par.Escala')
-expr(mapping, 'sy', 'parent().par.Escala')
-expr(mapping, 'rotate', 'parent().par.Rotar')
-wire(domo, mapping)
 out_domo = mk(D, nullTOP, 'out_domo', 800, 250)
-wire(mapping, out_domo)
+wire(domo, out_domo)
 D.par.opviewer = out_domo
 
-caja(D, 'nota_mezcla', 'Mezcla y modelo de sala',
+caja(D, 'nota_mezcla', 'Mezcla, modelo de sala y mapping',
      'mezcla elige el modulo al aire (DOMO.Fuente) y equi es el lienzo equirectangular comun: '
      'u 0.5 al frente, v 0.5 en el horizonte, v 1 en el cenit. giro aplica Yaw como corrimiento '
-     'horizontal. domo lo pasa a fisheye con el FOV del modelo de sala (180 media esfera, 90 y 45 '
-     'casquetes): rx 90 pone el cenit en el centro, ry 90 deja el frente abajo, Pitch resta de rx. '
-     'mapping mueve el cenit, escala y rota el domemaster (pagina Mapping), y con Fovauto apagado '
-     'el contenido puede cubrir mas grados que la sala (230 sobre 180). out_domo es el domemaster.',
-     [patron_dat, patron, mez, equi, giro, domo, mapping, out_domo], (0.16, 0.20, 0.24))
+     'horizontal. domo (GLSL, shaders/domo_mapping.frag) hace el domemaster en un solo paso: cenit '
+     'al centro, frente abajo, Pitch de la pagina Domo, FOV del contenido y el mapping (Centrox, '
+     'Centroy, Escala, Rotar). Como lee el lienzo completo antes de recortar al circulo de la sala, '
+     'encoger o correr el cenit mete contenido de verdad, tambien el piso. out_domo es el domemaster.',
+     [patron_dat, patron, mez, equi, giro, domo_dat, domo, out_domo], (0.16, 0.20, 0.24))
+
+caja(D, 'nota_piso', 'Como ver el piso del video en la cupula',
+     'Un domo de 180 muestra solo del horizonte para arriba; lo que esta bajo el horizonte del video '
+     '(el piso) no entra si no se le hace espacio. Hay tres maneras, y todas se ven igual en out_domo y '
+     'en Unreal. 1) Pagina 360, Horizonte: sube el horizonte del video a esa elevacion con el cenit '
+     'fijo y comprime lo de abajo hacia el borde; Rpiso dice cuantos grados de piso llegan al borde '
+     '(Horizonte 20 con Curva 1 mete unos 26). Curva mayor que 1 aprieta el piso y deja el cielo mas '
+     'natural. 2) Pagina 360, Pitch y Roll: giran la esfera; Pitch negativo baja el frente y deja ver '
+     'el piso adelante, pero sube el de atras. 3) Pagina Mapping: Escala menor que 1 (o Fovauto apagado '
+     'y Fovcontenido mayor que 180) mete mas grados en el mismo circulo, parejo en toda la vuelta; '
+     'Centroy corre el cenit y mete piso de un solo lado. Pisoborde dice cuanto entra. Antes de la '
+     'version 1.3 Escala y Centro mostraban negro en el borde: el recorte ocurria antes del mapping.',
+     [], (0.24, 0.16, 0.12), rect=(-400, 700, 1000, 1000))
 
 # ------------------------------------------------------------------ salidas
 
@@ -828,16 +902,16 @@ setpar(grab, 'audiochop', 'AUDIO/out1')
 wire(out_domo, grab)
 
 # La sala VR quiere el lienzo equirectangular (cupula en la mitad superior),
-# ya con Yaw, Pitch y el FOV del modelo aplicados. Se reconstruye desde el
-# domemaster con fisheye -> equirect rx -90; como el domemaster va girado 90
-# grados (ry 90 de `domo`), giro_unreal lo devuelve con un corrimiento de -0.25.
-# Medido con el patron: el cuadro blanco del frente vuelve a (u 0.5, v 0.75).
-unreal = mk(D, projectionTOP, 'para_unreal', 1000, -100, input='fisheye', output='equirectangular', rx=-90, ry=0, rz=0)
-expr(unreal, 'fov', FOV_SALA)   # el de la SALA, no el del contenido: asi 230 grados caben en 180
+# ya con Yaw, Pitch, FOV y mapping aplicados. para_unreal es el mismo shader
+# que domo en modo 1: cada pixel del lienzo de la sala busca su punto en el
+# domemaster (con el FOV de la SALA) y sigue el mismo camino hasta el lienzo de
+# entrada. Unreal ve exactamente lo que veria el domo, sin pasar por el
+# domemaster intermedio de 2048 (antes: Projection fisheye -> equirect rx -90
+# y giro_unreal tx -0.25). Medido con el patron: el cuadro blanco del frente
+# cae en (u 0.5, v 0.75), igual que antes.
+unreal = domo_glsl('para_unreal', 1200, -100, 1)
 lienzo(unreal)
-wire(out_domo, unreal)
-giro_un = mk(D, transformTOP, 'giro_unreal', 1200, -100, tunit='fraction', extend='repeat', tx=-0.25)
-wire(unreal, giro_un)
+giro_un = unreal
 # El receptor Spout de Unreal solo lee texturas de 8 bits: con el lienzo en
 # 16-bit float (lo que sale de VIDEO_DOME) se queda con el ultimo frame que
 # pudo leer, sin avisar. Aqui se fija el formato antes del sender.
@@ -851,10 +925,11 @@ wire(alfa, sp_un)
 caja(D, 'nota_salidas', 'Salidas',
      'Del domemaster salen Spout y NDI (para un servidor de domo o Resolume) y la grabacion en HAP. '
      'La sala VR en Unreal no quiere el domemaster sino el lienzo equirectangular con la cupula en '
-     'la mitad superior: para_unreal lo reconstruye desde el domemaster (rx -90), giro_unreal '
-     'deshace el giro de 90 del domemaster y spout_unreal lo manda con el nombre que lee el '
+     'la mitad superior: para_unreal es el mismo shader de domo en modo equirectangular (mismo '
+     'FOV, Pitch y mapping, sin domemaster intermedio), alfa_unreal lo deja en 8 bits (el receptor '
+     'de Unreal no lee 16-bit float) y spout_unreal lo manda con el nombre que lee el '
      'SpoutDomeReceiver (TD_Domo_Lab). Los toggles estan en la pagina Salidas.',
-     [sp_domo, ndi, grab, unreal, giro_un, alfa, sp_un], (0.24, 0.20, 0.14))
+     [sp_domo, ndi, grab, unreal, alfa, sp_un], (0.24, 0.20, 0.14))
 
 caja(D, 'nota_modulos', 'Modulos de entrada',
      'Cada modulo lee su propio archivo y entrega el mismo lienzo equirectangular. Su parametro '

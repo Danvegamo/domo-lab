@@ -1,6 +1,6 @@
 {
   "__pars__": {
-    "Moviefile": "C:/Users/Danvegamo/Downloads/_Videos/",
+    "Moviefile": "",
     "Play": true,
     "Speed": 1.0,
     "Loopvideo": true,
@@ -50,7 +50,7 @@
     "Guidering": 15.0,
     "Guideray": 30.0,
     "Preview": true,
-    "Recfile": "C:/Users/Danvegamo/Documents/Domo_Pantallas/05_Media/planet_city_domemaster.mov",
+    "Recfile": "",
     "Record": false,
     "Recres": 2048
   },
