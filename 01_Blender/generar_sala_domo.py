@@ -11,16 +11,28 @@ Se ejecuta asi (headless, sin abrir la interfaz):
     blender.exe --background --python generar_sala_domo.py -- --fov 90
     set DOMO_FOV=45 && blender.exe --background --python generar_sala_domo.py
 
-MODELOS DE SALA (FOV_DOMO): el mismo script genera tres salas que solo se
-diferencian en la cupula y en la altura del muro (ver 04_Docs/05_Modelos_de_sala.md):
+MODELOS DE SALA (ver 04_Docs/05_Modelos_de_sala.md):
 
-    FOV 180  media esfera (planetario clasico). Salida sin sufijo
-             (sala_domo.fbx, sala_domo.blend, vista_*.png) para no romper
-             nada de lo que ya consume esos nombres.
-    FOV 90   casquete esferico que cubre de 45 grados de elevacion al cenit.
-    FOV 45   casquete que cubre de 67,5 grados de elevacion al cenit.
-             Salida con sufijo: sala_domo_90.fbx, sala_domo_45.blend,
-             vista_planta_cenital_90.png, etc.
+    --fov 180  media esfera (planetario clasico, butacas concentricas). Salida
+               sin sufijo (sala_domo.fbx, sala_domo.blend, vista_*.png) para
+               no romper nada de lo que ya consume esos nombres.
+    --fov 45   SALA FRONTAL tipo Cine Domo de Maloka / IMAX Dome: pantalla de
+               180 grados de 22 m inclinada 27 grados hacia el frente, grada
+               tipo estadio con 314 butacas reclinadas mirando a +X.
+    --fov 90   SALA FRONTAL de pie tipo museo / parque: pantalla de 180 grados
+               de 20 m inclinada 45 grados, plataformas escalonadas con
+               barandas, publico de pie mirando a +X.
+               Los numeros 45 y 90 son claves del modelo (heredadas de los
+               casquetes que generaba antes), no el FOV: ver SALAS_FRONTALES
+               y main_frontal(). Salida con sufijo: sala_domo_45.fbx,
+               sala_domo_90.blend, 02_Export/sala_domo_90.json (datos que lee
+               importar_sala.py), vista_planta_cenital_90.png, etc.
+    otro N     casquete horizontal que cubre de 90 - N/2 grados al cenit (el
+               comportamiento que tenian el 45 y el 90 hasta el 18 sep 2026).
+
+Todo lo que sigue sobre casquetes, muro cilindrico, cunas, puertas en el
+cilindro y horneado vale para el 180 y para los casquetes de otro N; las
+salas frontales tienen su propia seccion (SALAS FRONTALES, casi al final).
 
 El FOV se lee de la variable de entorno DOMO_FOV o del argumento --fov que
 va despues de "--" (el argumento manda si estan los dos). La geometria del
@@ -521,7 +533,7 @@ def construir_madera(mat):
 # CUPULA (media esfera o casquete) con UV equirectangular explicita
 # ---------------------------------------------------------------------------
 
-def uv_equirectangular(co, eps):
+def uv_equirectangular(co, eps, radio=None):
     """UV de un punto de la cupula en coordenadas locales (esfera centrada en
     el origen, radio RADIO_ESFERA). Es la convencion que lee Unreal y que
     espera el lienzo equirectangular 2:1 que manda TouchDesigner por Spout
@@ -544,12 +556,19 @@ def uv_equirectangular(co, eps):
     esta es la UNICA capa, con la formula que siempre se leyo en la practica.
     Para los casquetes NO se normaliza al casquete: V sigue siendo la
     elevacion absoluta, asi el mismo lienzo cae en el mismo sitio del cielo
-    en los tres modelos (el domo 90 muestra solo V de 0,75 a 1)."""
+    en los tres modelos (el domo 90 muestra solo V de 0,75 a 1).
+
+    Las salas frontales (modelos 45 y 90, ver SALAS_FRONTALES) llaman esta
+    misma funcion con su propio radio y ANTES de inclinar la cupula: la UV
+    queda en el marco propio de la pantalla (su arranque es el horizonte de
+    la UV), que es lo que espera un domemaster de 180 grados."""
+    if radio is None:
+        radio = RADIO_ESFERA
     radio_xy = math.hypot(co.x, co.y)
     es_polo = radio_xy < eps
     azimut = math.atan2(co.y, co.x)
     u = (azimut / (2.0 * math.pi) + 0.5) % 1.0
-    elevacion = math.asin(max(-1.0, min(1.0, co.z / RADIO_ESFERA)))
+    elevacion = math.asin(max(-1.0, min(1.0, co.z / radio)))
     v = 0.5 + elevacion / math.pi
     return u, max(0.5, min(1.0, v)), es_polo
 
@@ -562,18 +581,47 @@ def crear_domo():
     primitive_uv_sphere_add que usaba la version anterior (misma malla, mismo
     conteo de triangulos). Normales hacia adentro. UV segun uv_equirectangular,
     con correccion de costura en U=0/1 y promedio de U en el polo."""
+    bm = construir_bmesh_cupula(RADIO_ESFERA, _ELEV_MIN_RAD)
+    obj = nuevo_objeto_desde_bmesh(bm, "SM_Domo")
+    obj.location = (0, 0, Z_CENTRO_ESFERA)
+    _material_domo_checker(obj)
+    return obj
+
+
+def _material_domo_checker(obj):
+    obj.data.materials.append(
+        crear_material("M_Domo", (0.6, 0.6, 0.65), emision_color=(0.5, 0.55, 0.65), emision_fuerza=1.2)
+    )
+    mat = obj.data.materials[0]
+    nodos = mat.node_tree.nodes
+    enlaces = mat.node_tree.links
+    nodo_uv = nodos.new("ShaderNodeUVMap")
+    nodo_uv.uv_map = "UVMap"
+    nodo_checker = nodos.new("ShaderNodeTexChecker")
+    nodo_checker.inputs["Scale"].default_value = 24.0
+    principled = nodos.get("Principled BSDF")
+    enlaces.new(nodo_uv.outputs["UV"], nodo_checker.inputs["Vector"])
+    enlaces.new(nodo_checker.outputs["Color"], principled.inputs["Base Color"])
+    enlaces.new(nodo_checker.outputs["Color"], principled.inputs["Emission Color"])
+
+
+def construir_bmesh_cupula(radio_esfera, elev_min_rad):
+    """Malla de la cupula centrada en el origen de su esfera, polo en +Z,
+    frente (U = 0,5) en +X, normales hacia adentro y una sola capa UV
+    ("UVMap", canal 0) segun uv_equirectangular. Devuelve el bmesh sin
+    convertir a objeto, para que las salas frontales lo puedan inclinar."""
     bm = bmesh.new()
     anillos = []
     for j in range(SEGMENTOS_ELEVACION):
-        elev = _ELEV_MIN_RAD + (math.pi / 2.0 - _ELEV_MIN_RAD) * j / SEGMENTOS_ELEVACION
-        r_xy = RADIO_ESFERA * math.cos(elev)
-        z = RADIO_ESFERA * math.sin(elev)
+        elev = elev_min_rad + (math.pi / 2.0 - elev_min_rad) * j / SEGMENTOS_ELEVACION
+        r_xy = radio_esfera * math.cos(elev)
+        z = radio_esfera * math.sin(elev)
         anillo = []
         for i in range(SEGMENTOS_AZIMUT):
             ang = 2.0 * math.pi * i / SEGMENTOS_AZIMUT
             anillo.append(bm.verts.new((r_xy * math.cos(ang), r_xy * math.sin(ang), z)))
         anillos.append(anillo)
-    polo = bm.verts.new((0.0, 0.0, RADIO_ESFERA))
+    polo = bm.verts.new((0.0, 0.0, radio_esfera))
     bm.verts.ensure_lookup_table()
 
     for j in range(SEGMENTOS_ELEVACION - 1):
@@ -591,12 +639,12 @@ def crear_domo():
     if f0.normal.dot(f0.calc_center_median()) > 0:
         voltear_normales(bm)
 
-    eps = RADIO_ESFERA * 1e-4
+    eps = radio_esfera * 1e-4
     uv_layer = bm.loops.layers.uv.new("UVMap")
     for f in bm.faces:
         us_crudos, vs, es_polo = [], [], []
         for loop in f.loops:
-            u, v, p = uv_equirectangular(loop.vert.co, eps)
+            u, v, p = uv_equirectangular(loop.vert.co, eps, radio_esfera)
             us_crudos.append(u)
             vs.append(v)
             es_polo.append(p)
@@ -614,25 +662,7 @@ def crear_domo():
         for loop, u, v, p in zip(f.loops, us_corregidos, vs, es_polo):
             loop[uv_layer].uv = (promedio if p else u, v)
 
-    obj = nuevo_objeto_desde_bmesh(bm, "SM_Domo")
-    obj.location = (0, 0, Z_CENTRO_ESFERA)
-
-    obj.data.materials.append(
-        crear_material("M_Domo", (0.6, 0.6, 0.65), emision_color=(0.5, 0.55, 0.65), emision_fuerza=1.2)
-    )
-    mat = obj.data.materials[0]
-    nodos = mat.node_tree.nodes
-    enlaces = mat.node_tree.links
-    nodo_uv = nodos.new("ShaderNodeUVMap")
-    nodo_uv.uv_map = "UVMap"
-    nodo_checker = nodos.new("ShaderNodeTexChecker")
-    nodo_checker.inputs["Scale"].default_value = 24.0
-    principled = nodos.get("Principled BSDF")
-    enlaces.new(nodo_uv.outputs["UV"], nodo_checker.inputs["Vector"])
-    enlaces.new(nodo_checker.outputs["Color"], principled.inputs["Base Color"])
-    enlaces.new(nodo_checker.outputs["Color"], principled.inputs["Emission Color"])
-
-    return obj
+    return bm
 
 
 # ---------------------------------------------------------------------------
@@ -689,12 +719,19 @@ def agregar_caja(bm, dimensiones, posicion_local, rotacion_local_grados, matriz_
     return verts
 
 
-def agregar_butaca(bm, matriz_mundo):
+def agregar_butaca(bm, matriz_mundo, reclinacion_deg=None, inclinacion_asiento_deg=None,
+                   altura_respaldo=None):
     """Butaca reclinada de domo, piso plano (sin grada): base, asiento
     inclinado hacia atras, respaldo MUY echado (63 grados desde la
     vertical por defecto, editable arriba), reposacabezas al final del
     respaldo, y dos apoyabrazos. Todo cajas: 6 x 12 = 72 triangulos por
-    butaca, muy por debajo del limite de ~200."""
+    butaca, muy por debajo del limite de ~200. Los tres parametros
+    opcionales los usa la sala 45 (butaca tipo IMAX Dome, menos echada);
+    sin ellos la butaca es la de siempre."""
+    ANGULO_RECLINACION_RESPALDO = reclinacion_deg if reclinacion_deg is not None else globals()["ANGULO_RECLINACION_RESPALDO"]
+    ANGULO_INCLINACION_ASIENTO = (inclinacion_asiento_deg if inclinacion_asiento_deg is not None
+                                  else globals()["ANGULO_INCLINACION_ASIENTO"])
+    ALTURA_RESPALDO = altura_respaldo if altura_respaldo is not None else globals()["ALTURA_RESPALDO"]
     alto_asiento_z = ALTO_BASE
     # Convencion: +X local es el frente (hacia la tarima). En agregar_caja
     # un angulo positivo en Y inclina la pieza hacia +X; por eso el asiento
@@ -858,7 +895,11 @@ def crear_puerta(indice, angulo_deg, mat_puerta):
     ang = math.radians(angulo_deg)
     centro_pared = Vector((RADIO_DOMO * math.cos(ang), RADIO_DOMO * math.sin(ang), 0.0))
     matriz_mundo = Matrix.Translation(centro_pared) @ Matrix.Rotation(ang, 4, 'Z')
+    return crear_puerta_en(indice, matriz_mundo, mat_puerta)
 
+
+def crear_puerta_en(indice, matriz_mundo, mat_puerta):
+    """Marco + hoja de una puerta; +X local es la normal del muro."""
     bm = bmesh.new()
     for signo in (+1.0, -1.0):
         y = signo * (ANCHO_PUERTA / 2.0 + GROSOR_MARCO / 2.0)
@@ -1152,10 +1193,825 @@ def reportar_poligonos(objetos_relevantes):
 
 
 # ---------------------------------------------------------------------------
+# SALAS FRONTALES: modelo 45 (cine domo inclinado tipo Maloka / IMAX Dome) y
+# modelo 90 (domo frontal de pie, tipo museo o parque tematico)
+# ---------------------------------------------------------------------------
+#
+# Desde el 18 sep 2026 "--fov 45" y "--fov 90" ya no generan casquetes
+# horizontales: generan dos salas FRONTALES, donde todo el publico mira hacia
+# +X. Los numeros 45 y 90 se conservan como claves del modelo (nombres de
+# archivo, niveles DomoVR_45 / DomoVR_90, carpetas /Game/Sala/Domo_45|90), no
+# describen el FOV. Cualquier otro --fov (distinto de 180, 45 y 90) sigue
+# generando el casquete horizontal de antes.
+#
+# Geometria comun:
+#   - La pantalla es una media esfera (180 grados) de radio "radio", construida
+#     con construir_bmesh_cupula en su marco propio (polo +Z, frente +X, UV
+#     V = 0,5 + elev/180, U = az/360 + 0,5, una sola capa) y DESPUES inclinada
+#     "inclinacion" grados alrededor de Y, de modo que el polo se echa hacia el
+#     frente (+X) y el borde delantero baja hasta el piso. La UV viaja con la
+#     malla: el horizonte de la UV (V = 0,5) es el arranque de la pantalla, el
+#     frente (U = 0,5) sigue en +X y el cuadro blanco del patron cae delante
+#     del publico. Es lo mismo que recibe un domo inclinado real: un
+#     domemaster de 180 grados con el cenit en el polo de la pantalla.
+#   - El centro de la esfera queda en (0, 0, z_centro) con
+#     z_centro = z_borde_frente + radio * sin(inclinacion): el punto mas bajo
+#     del borde (el del frente) queda a z_borde_frente del piso.
+#   - La planta de la sala es la proyeccion del borde de la pantalla: una
+#     elipse de semiejes radio*cos(inclinacion) en X y radio en Y. Un muro
+#     vertical (SM_Muro) baja de cada punto del borde hasta el piso: en el
+#     frente mide casi cero, atras es la pared alta de la cabina.
+#   - Graderias y plataformas son franjas en arco con centro de curvatura
+#     delante de la pantalla (x = centro_curvatura_x), recortadas contra la
+#     elipse, asi que las filas son curvas y miran al frente.
+
+SALAS_FRONTALES = {
+    45: {
+        "titulo": "Cine domo inclinado tipo Maloka (IMAX Dome)",
+        "tipo": "butacas",
+        "radio": 11.0,                 # 22 m de diametro (Maloka)
+        "altura_pantalla": 16.0,       # 16 m de alto (Maloka); de aqui sale la inclinacion
+        "z_borde_frente": 0.0,
+        "centro_curvatura_x": 16.0,    # filas en arco con centro 16 m delante del centro del domo
+        "x_primera_fila": 3.2,
+        "paso_fila": 1.05,             # butaca reclinada: 1,05 m de fila a fila
+        "contrahuella": 0.42,          # grada tipo estadio
+        "total_butacas": 314,          # aforo de Maloka (reapertura 2024)
+        "paso_butaca": 0.60,
+        "pasillo_central": 1.20,
+        "margen_lateral": 1.00,        # pasillo contra el muro a cada lado
+        "reclinacion_deg": 30.0,       # respaldo tipo IMAX Dome (no acostado como el planetario)
+        "inclinacion_asiento_deg": 8.0,
+        "altura_respaldo": 0.85,
+        "fila_ojo": 6,                 # fila de la camara (0 = primera)
+        "altura_ojo": 1.20,            # sentado, sobre el piso de la grada
+        "x_puerta": 4.5,
+    },
+    90: {
+        "titulo": "Domo frontal de pie (museo / parque tematico)",
+        "tipo": "de_pie",
+        "radio": 10.0,                 # 20 m de diametro
+        "inclinacion_deg": 45.0,       # pantalla muy echada hacia el frente: se mira de frente
+        "z_borde_frente": 0.0,
+        "centro_curvatura_x": 14.0,
+        "x_primera_plataforma": 2.5,
+        "profundidad_plataforma": 1.5, # dos filas de gente de pie
+        "num_plataformas": 5,
+        "z_primera_plataforma": 0.20,
+        "contrahuella": 0.45,
+        "pasillo_central": 1.20,
+        "margen_lateral": 0.0,
+        "altura_baranda": 1.05,
+        "altura_riel_medio": 0.55,
+        "paso_postes": 1.5,
+        "plataforma_ojo": 2,
+        "altura_ojo": 1.60,            # de pie
+        "x_puerta": 3.6,
+    },
+}
+
+ES_SALA_FRONTAL = (not ES_MEDIA_ESFERA) and any(abs(FOV_DOMO - k) < 1e-6 for k in SALAS_FRONTALES)
+
+# Colores de trabajo (lineales) de cada material de las salas frontales. Se
+# eligieron para que cada pieza se distinga en Unreal aunque la unica luz sea
+# la de la cupula: piso oscuro azulado, grada gris medio, baranda metal claro,
+# butacas rojo tela, muro casi negro (pantalla de domo real), LED de paso
+# ambar emisivo. importar_sala.py los lee del JSON de la sala.
+MATERIALES_FRONTALES = {
+    "M_Piso":       {"color": (0.035, 0.040, 0.060), "rugosidad": 0.95, "metalico": 0.0},
+    "M_Grada":      {"color": (0.140, 0.140, 0.150), "rugosidad": 0.85, "metalico": 0.0},
+    "M_Muro":       {"color": (0.025, 0.025, 0.030), "rugosidad": 0.95, "metalico": 0.0},
+    "M_Baranda":    {"color": (0.620, 0.620, 0.650), "rugosidad": 0.35, "metalico": 0.6},
+    "M_Butaca":     {"color": (0.300, 0.025, 0.030), "rugosidad": 0.90, "metalico": 0.0},
+    "M_Puerta":     {"color": (0.250, 0.250, 0.270), "rugosidad": 0.40, "metalico": 0.5},
+    "M_LedPaso":    {"color": (1.000, 0.550, 0.150), "rugosidad": 0.50, "metalico": 0.0,
+                     "emision": (1.000, 0.550, 0.150), "fuerza_emision": 4.0},
+    "M_Referencia": {"color": (0.550, 0.550, 0.520), "rugosidad": 0.70, "metalico": 0.0},
+}
+
+# Maniquies de escala (1,75 m): solo para los renders de verificacion, no se
+# exportan al FBX.
+ALTURA_PERSONA = 1.75
+
+
+class GeometriaFrontal:
+    """Constantes derivadas de un preset de SALAS_FRONTALES."""
+
+    def __init__(self, preset):
+        self.p = preset
+        self.radio = preset["radio"]
+        if "inclinacion_deg" in preset:
+            self.inclinacion = math.radians(preset["inclinacion_deg"])
+        else:
+            # Maloka: la pantalla mide altura_pantalla desde el borde delantero
+            # hasta lo mas alto, y eso es radio * (1 + sin(inclinacion)).
+            s = (preset["altura_pantalla"] - self.radio) / self.radio
+            self.inclinacion = math.asin(max(0.0, min(1.0, s)))
+        self.z_centro = preset["z_borde_frente"] + self.radio * math.sin(self.inclinacion)
+        self.centro = Vector((0.0, 0.0, self.z_centro))
+        self.semieje_x = self.radio * math.cos(self.inclinacion)
+        self.semieje_y = self.radio
+        self.xf = preset["centro_curvatura_x"]
+        self.rotacion = Matrix.Rotation(self.inclinacion, 4, 'Y')
+
+    def punto_pantalla(self, az_deg, elev_deg):
+        """Punto de la pantalla en coordenadas de mundo a partir de su
+        azimut/elevacion PROPIOS (los de la UV)."""
+        az, el = math.radians(az_deg), math.radians(elev_deg)
+        local = Vector((math.cos(el) * math.cos(az), math.cos(el) * math.sin(az), math.sin(el))) * self.radio
+        return self.centro + (self.rotacion.to_3x3() @ local)
+
+    def z_borde(self, t):
+        """Altura del borde de la pantalla en el azimut propio t (radianes);
+        su proyeccion en planta es (semieje_x cos t, semieje_y sin t)."""
+        return self.z_centro - self.radio * math.cos(t) * math.sin(self.inclinacion)
+
+    def punto_arco(self, rho, phi, z=0.0):
+        return Vector((self.xf - rho * math.cos(phi), rho * math.sin(phi), z))
+
+    def cortes_elipse(self, phi, margen=0.02):
+        """Distancias (entrada, salida) a lo largo del rayo que sale del
+        centro de curvatura con angulo phi, contra la elipse de la planta
+        reducida en 'margen'. None si el rayo no la cruza."""
+        a, b = self.semieje_x - margen, self.semieje_y - margen
+        c, s = math.cos(phi), math.sin(phi)
+        qa = c * c / (a * a) + s * s / (b * b)
+        qb = -2.0 * self.xf * c / (a * a)
+        qc = self.xf * self.xf / (a * a) - 1.0
+        disc = qb * qb - 4.0 * qa * qc
+        if disc <= 0.0:
+            return None
+        r = math.sqrt(disc)
+        return ((-qb - r) / (2.0 * qa), (-qb + r) / (2.0 * qa))
+
+    def dentro(self, x, y, margen=0.0):
+        a, b = self.semieje_x - margen, self.semieje_y - margen
+        return (x / a) ** 2 + (y / b) ** 2 <= 1.0
+
+
+def agregar_prisma_arco(bm, g, rho_in, rho_out, z_top, z_base=0.0, paso_m=0.35):
+    """Franja en arco (grada o plataforma) de z_base a z_top, recortada contra
+    la elipse de la planta. rho_in es el borde delantero (hacia la pantalla).
+    Devuelve (phi_max, lista de (phi, rho_in_recortado)) para colocar luces y
+    barandas sobre el borde delantero, o None si no cabe."""
+    validos = []
+    n_busqueda = 720
+    for k in range(n_busqueda + 1):
+        phi = (math.pi / 2.0) * k / n_busqueda
+        cortes = g.cortes_elipse(phi)
+        if cortes is None:
+            break
+        ri, ro = max(rho_in, cortes[0]), min(rho_out, cortes[1])
+        if ri >= ro - 0.05:
+            break
+        validos.append(phi)
+    if len(validos) < 2:
+        return None
+    phi_max = validos[-1]
+    arco_medio = phi_max * (rho_in + min(rho_out, rho_in + 6.0)) / 2.0
+    n = max(8, int(2.0 * arco_medio / paso_m))
+    anillos = []
+    borde = []
+    for k in range(n + 1):
+        phi = -phi_max + 2.0 * phi_max * k / n
+        cortes = g.cortes_elipse(abs(phi))
+        ri, ro = max(rho_in, cortes[0]), min(rho_out, cortes[1])
+        borde.append((phi, ri))
+        anillos.append((
+            bm.verts.new(g.punto_arco(ri, phi, z_base)),
+            bm.verts.new(g.punto_arco(ri, phi, z_top)),
+            bm.verts.new(g.punto_arco(ro, phi, z_top)),
+            bm.verts.new(g.punto_arco(ro, phi, z_base)),
+        ))
+    caras = []
+    for k in range(n):
+        a0, a1 = anillos[k], anillos[k + 1]
+        for m in range(4):
+            mm = (m + 1) % 4
+            caras.append(bm.faces.new((a0[m], a1[m], a1[mm], a0[mm])))
+    caras.append(bm.faces.new(anillos[0]))
+    caras.append(bm.faces.new(tuple(reversed(anillos[-1]))))
+    bmesh.ops.recalc_face_normals(bm, faces=caras)
+    return phi_max, borde
+
+
+def agregar_barra(bm, p0, p1, grosor):
+    """Caja de seccion cuadrada 'grosor' de p0 a p1 (tubo de baranda o poste)."""
+    d = p1 - p0
+    largo = d.length
+    if largo < 1e-4:
+        return
+    ret = bmesh.ops.create_cube(bm, size=1.0)
+    verts = ret["verts"]
+    bmesh.ops.scale(bm, vec=(largo, grosor, grosor), verts=verts)
+    arriba = 'Z' if abs(d.normalized().z) < 0.99 else 'Y'
+    rot = d.normalized().to_track_quat('X', arriba).to_matrix().to_4x4()
+    bmesh.ops.transform(bm, matrix=Matrix.Translation((p0 + p1) / 2.0) @ rot, verts=verts)
+
+
+def agregar_baranda_arco(bm, g, rho, phi_ini, phi_fin, z_piso, altura, riel_medio, paso_postes, grosor=0.05):
+    """Baranda sobre un arco: postes cada ~paso_postes, pasamanos a 'altura'
+    y riel medio a 'riel_medio' sobre z_piso."""
+    largo = abs(phi_fin - phi_ini) * rho
+    if largo < 0.3:
+        return
+    n_postes = max(2, int(math.ceil(largo / paso_postes)) + 1)
+    n_tramos = max(2, int(math.ceil(largo / 0.5)))
+    for k in range(n_postes):
+        phi = phi_ini + (phi_fin - phi_ini) * k / (n_postes - 1)
+        base = g.punto_arco(rho, phi, z_piso)
+        agregar_barra(bm, base, base + Vector((0, 0, altura + grosor / 2.0)), grosor)
+    for h in (altura, riel_medio):
+        if h is None:
+            continue
+        for k in range(n_tramos):
+            f0 = phi_ini + (phi_fin - phi_ini) * k / n_tramos
+            f1 = phi_ini + (phi_fin - phi_ini) * (k + 1) / n_tramos
+            agregar_barra(bm, g.punto_arco(rho, f0, z_piso + h), g.punto_arco(rho, f1, z_piso + h),
+                          grosor if h == altura else grosor * 0.7)
+
+
+def agregar_led_arco(bm, g, borde, z, alto=0.03, fondo=0.04, excluir_centro=0.0):
+    """Tira LED sobre el borde delantero de una grada (lista (phi, rho))."""
+    for (f0, r0), (f1, r1) in zip(borde[:-1], borde[1:]):
+        if excluir_centro and abs((f0 + f1) / 2.0) * r0 < excluir_centro / 2.0:
+            continue
+        # Sobre la cara de la contrahuella, justo bajo la nariz del escalon.
+        p0 = g.punto_arco(r0 - fondo / 4.0, f0, z - alto)
+        p1 = g.punto_arco(r1 - fondo / 4.0, f1, z - alto)
+        agregar_barra(bm, p0, p1, alto)
+
+
+def agregar_persona(bm, pos, yaw):
+    """Maniqui de escala de ALTURA_PERSONA (cuerpo + cabeza)."""
+    m = Matrix.Translation(pos) @ Matrix.Rotation(yaw, 4, 'Z')
+    alto_cuerpo = ALTURA_PERSONA - 0.24
+    agregar_caja(bm, (0.26, 0.46, alto_cuerpo), (0.0, 0.0, 0.0), 0.0, m)
+    agregar_caja(bm, (0.22, 0.19, 0.24), (0.0, 0.0, alto_cuerpo), 0.0, m)
+
+
+def material_frontal(nombre):
+    d = MATERIALES_FRONTALES[nombre]
+    mat = crear_material(nombre, d["color"], emision_color=d.get("emision"),
+                         emision_fuerza=d.get("fuerza_emision", 0.0),
+                         rugosidad=d["rugosidad"], metalico=d["metalico"])
+    return mat
+
+
+def objeto_frontal(bm, nombre, material):
+    obj = nuevo_objeto_desde_bmesh(bm, nombre)
+    obj.data.materials.append(material)
+    return obj
+
+
+def crear_pantalla_frontal(g):
+    bm = construir_bmesh_cupula(g.radio, 0.0)
+    bmesh.ops.transform(bm, matrix=Matrix.Translation(g.centro) @ g.rotacion, verts=bm.verts)
+    obj = nuevo_objeto_desde_bmesh(bm, "SM_Domo")
+    _material_domo_checker(obj)
+    return obj
+
+
+def crear_muro_y_piso_frontal(g, mat_muro, mat_piso):
+    """Muro vertical bajo el borde de la pantalla y piso con la forma de su
+    proyeccion. Mismos SEGMENTOS_AZIMUT que la cupula, asi el borde superior
+    del muro coincide vertice a vertice con el borde de la pantalla."""
+    bm = bmesh.new()
+    arriba, abajo = [], []
+    for i in range(SEGMENTOS_AZIMUT):
+        t = 2.0 * math.pi * i / SEGMENTOS_AZIMUT
+        x, y = g.semieje_x * math.cos(t), g.semieje_y * math.sin(t)
+        z = g.z_borde(t)
+        va = bm.verts.new((x, y, z))
+        vb = va if z < 0.005 else bm.verts.new((x, y, 0.0))
+        arriba.append(va)
+        abajo.append(vb)
+    caras = []
+    for i in range(SEGMENTOS_AZIMUT):
+        j = (i + 1) % SEGMENTOS_AZIMUT
+        unicos = []
+        for v in (abajo[i], abajo[j], arriba[j], arriba[i]):
+            if v not in unicos:
+                unicos.append(v)
+        if len(unicos) >= 3:
+            caras.append(bm.faces.new(unicos))
+    bm.normal_update()
+    for f in caras:
+        c = f.calc_center_median()
+        if f.normal.dot(Vector((c.x, c.y, 0.0))) > 0:
+            f.normal_flip()
+    muro = objeto_frontal(bm, "SM_Muro", mat_muro)
+
+    bm = bmesh.new()
+    vs = [bm.verts.new((g.semieje_x * math.cos(2.0 * math.pi * i / SEGMENTOS_AZIMUT),
+                        g.semieje_y * math.sin(2.0 * math.pi * i / SEGMENTOS_AZIMUT), 0.0))
+          for i in range(SEGMENTOS_AZIMUT)]
+    f = bm.faces.new(vs)
+    bm.normal_update()
+    if f.normal.z < 0:
+        f.normal_flip()
+    piso = objeto_frontal(bm, "SM_Piso", mat_piso)
+    return muro, piso
+
+
+def crear_puertas_frontales(g, x_puerta, mat_puerta):
+    """Dos puertas en el muro, una a cada lado, a la altura del pasillo
+    delantero (piso a nivel 0)."""
+    t = math.acos(max(-1.0, min(1.0, x_puerta / g.semieje_x)))
+    alto_libre = g.z_borde(t)
+    assert alto_libre > ALTURA_PUERTA + GROSOR_MARCO, \
+        "El borde de la pantalla queda a {:.2f} m sobre la puerta; no cabe.".format(alto_libre)
+    objetos = []
+    for indice, signo in enumerate((+1.0, -1.0)):
+        tt = signo * t
+        p = Vector((g.semieje_x * math.cos(tt), g.semieje_y * math.sin(tt), 0.0))
+        n = Vector((math.cos(tt) / g.semieje_x, math.sin(tt) / g.semieje_y, 0.0)).normalized()
+        m = Matrix.Translation(p - n * 0.06) @ Matrix.Rotation(math.atan2(n.y, n.x), 4, 'Z')
+        objetos.append(crear_puerta_en(indice, m, mat_puerta))
+    return objetos
+
+
+def seccion_de_filas_45(g):
+    """Filas de la grada del modelo 45: se agregan filas hacia atras hasta
+    llegar EXACTO a total_butacas; la ultima se recorta a lo que falte."""
+    p = g.p
+    filas = []
+    total = 0
+    r = 0
+    while total < p["total_butacas"]:
+        x = p["x_primera_fila"] - r * p["paso_fila"]
+        rho = g.xf - x
+        z = r * p["contrahuella"]
+        n_lado = 0
+        while True:
+            d = p["pasillo_central"] / 2.0 + p["paso_butaca"] / 2.0 + n_lado * p["paso_butaca"]
+            q = g.punto_arco(rho, d / rho)
+            if not g.dentro(q.x, q.y, p["margen_lateral"] + p["paso_butaca"] / 2.0):
+                break
+            n_lado += 1
+        if n_lado == 0:
+            raise SystemExit("La grada llego al muro sin completar {} butacas (van {}).".format(
+                p["total_butacas"], total))
+        n = 2 * n_lado
+        restante = p["total_butacas"] - total
+        filas.append({"indice": r, "x": x, "rho": rho, "z": z, "por_lado": [n_lado, n_lado]})
+        if n > restante:
+            filas[-1]["por_lado"] = [restante - restante // 2, restante // 2]
+            n = restante
+        total += n
+        r += 1
+    return filas
+
+
+def construir_sala_45(g, mats):
+    p = g.p
+    filas = seccion_de_filas_45(g)
+    paso = p["paso_fila"]
+    bm_grada, bm_baranda, bm_led = bmesh.new(), bmesh.new(), bmesh.new()
+    bm_butacas = [bmesh.new(), bmesh.new()]   # SM_Butacas_01 = +Y, SM_Butacas_02 = -Y
+    asientos = []
+    n_filas = len(filas)
+    for f in filas:
+        rho_in = f["rho"] - paso / 2.0
+        rho_out = f["rho"] + paso / 2.0 if f["indice"] < n_filas - 1 else 1e3
+        if f["z"] > 0.0:
+            res = agregar_prisma_arco(bm_grada, g, rho_in, rho_out, f["z"])
+            if res:
+                agregar_led_arco(bm_led, g, res[1], f["z"], excluir_centro=p["pasillo_central"])
+        rho_asiento = f["rho"] + 0.05
+        for lado, signo in enumerate((+1.0, -1.0)):
+            for k in range(f["por_lado"][lado]):
+                d = p["pasillo_central"] / 2.0 + p["paso_butaca"] / 2.0 + k * p["paso_butaca"]
+                phi = signo * d / rho_asiento
+                q = g.punto_arco(rho_asiento, phi, f["z"])
+                yaw = math.atan2(-q.y, g.xf - q.x)
+                m = Matrix.Translation(q) @ Matrix.Rotation(yaw, 4, 'Z')
+                agregar_butaca(bm_butacas[lado], m, p["reclinacion_deg"], p["inclinacion_asiento_deg"],
+                               p["altura_respaldo"])
+                asientos.append((f["indice"], lado, k, q, yaw))
+
+    # Pasillo central: medio escalon en la mitad trasera de cada fila, para
+    # subir de una grada a la siguiente en dos pasos.
+    for f in filas[:-1]:
+        x0 = g.xf - (f["rho"] + paso / 2.0)
+        agregar_caja(bm_grada, (paso / 2.0, p["pasillo_central"], p["contrahuella"] / 2.0),
+                     (x0 + paso / 4.0, 0.0, f["z"]), 0.0, Matrix.Identity(4))
+
+    # Pasamanos del pasillo central, a los dos lados, siguiendo la pendiente:
+    # un poste por fila a 0,90 m del piso de su grada.
+    alto_pasamanos = 0.90
+    for signo in (+1.0, -1.0):
+        y = signo * (p["pasillo_central"] / 2.0 - 0.04)
+        tops = []
+        for f in filas[1:]:
+            base = Vector((g.xf - f["rho"], y, f["z"]))
+            top = base + Vector((0, 0, alto_pasamanos))
+            agregar_barra(bm_baranda, base, top + Vector((0, 0, 0.025)), 0.05)
+            tops.append(top)
+        for a, b in zip(tops[:-1], tops[1:]):
+            agregar_barra(bm_baranda, a, b, 0.05)
+
+    # Baranda frontal: separa el pasillo delantero (nivel 0) de la pantalla,
+    # a 1,5 m delante de la primera fila.
+    rho_frente = filas[0]["rho"] - paso / 2.0 - 1.5
+    cortes = [ph for ph in (math.radians(a / 10.0) for a in range(0, 900))
+              if g.cortes_elipse(ph) and g.cortes_elipse(ph)[0] < rho_frente]
+    if cortes:
+        ph = cortes[-1] - 1.2 / rho_frente   # deja 1,2 m libres contra el muro (acceso desde las puertas)
+        agregar_baranda_arco(bm_baranda, g, rho_frente, -ph, ph, 0.0, 1.05, 0.55, 1.5)
+
+    objetos = [
+        objeto_frontal(bm_grada, "SM_Graderia", mats["M_Grada"]),
+        objeto_frontal(bm_butacas[0], "SM_Butacas_01", mats["M_Butaca"]),
+        objeto_frontal(bm_butacas[1], "SM_Butacas_02", mats["M_Butaca"]),
+        objeto_frontal(bm_baranda, "SM_Barandas", mats["M_Baranda"]),
+        objeto_frontal(bm_led, "SM_LucesPaso", mats["M_LedPaso"]),
+    ]
+
+    # Ojo: primera butaca a la derecha del pasillo (+Y en Blender) de la fila
+    # fila_ojo, 0,5 m detras del centro del asiento (la cabeza contra el
+    # reposacabezas del respaldo reclinado), a altura_ojo del piso de la grada.
+    fila_ojo = min(p["fila_ojo"], n_filas - 1)
+    _, _, _, q, yaw = next(a for a in asientos if a[0] == fila_ojo and a[1] == 0 and a[2] == 0)
+    adelante = Vector((math.cos(yaw), math.sin(yaw), 0.0))
+    ojo = q - adelante * 0.5 + Vector((0.0, 0.0, p["altura_ojo"]))
+
+    # Maniquies de escala: dos de pie en el pasillo delantero.
+    bm_ref = bmesh.new()
+    x_ref = g.xf - filas[0]["rho"] + paso / 2.0 + 0.7
+    agregar_persona(bm_ref, Vector((x_ref, 3.0, 0.0)), math.pi)
+    agregar_persona(bm_ref, Vector((x_ref + 0.4, -4.5, 0.0)), math.pi * 0.8)
+    referencia = objeto_frontal(bm_ref, "REF_Personas", mats["M_Referencia"])
+
+    datos = {
+        "filas": [{"fila": f["indice"] + 1, "x_m": round(f["x"], 3), "z_piso_m": round(f["z"], 3),
+                   "butacas": sum(f["por_lado"])} for f in filas],
+        "butacas": len(asientos),
+    }
+    print("\n--- Grada del modelo 45 ---")
+    print(f"{'fila':>4} {'x(m)':>7} {'z piso(m)':>9} {'butacas':>8}")
+    for f in datos["filas"]:
+        print(f"{f['fila']:>4} {f['x_m']:>7.2f} {f['z_piso_m']:>9.2f} {f['butacas']:>8d}")
+    print(f"Total de butacas: {len(asientos)} (esperado {p['total_butacas']})")
+    assert len(asientos) == p["total_butacas"]
+    return objetos, referencia, ojo, datos
+
+
+def construir_sala_90(g, mats):
+    p = g.p
+    bm_grada, bm_baranda, bm_led, bm_ref = bmesh.new(), bmesh.new(), bmesh.new(), bmesh.new()
+    prof = p["profundidad_plataforma"]
+    plataformas = []
+    for k in range(p["num_plataformas"]):
+        x_frente = p["x_primera_plataforma"] - k * prof
+        rho_in = g.xf - x_frente
+        rho_out = rho_in + prof if k < p["num_plataformas"] - 1 else 1e3
+        z = p["z_primera_plataforma"] + k * p["contrahuella"]
+        res = agregar_prisma_arco(bm_grada, g, rho_in, rho_out, z)
+        if res is None:
+            raise SystemExit("La plataforma {} no cabe en la planta.".format(k + 1))
+        phi_max, borde = res
+        plataformas.append({"indice": k, "x_frente": x_frente, "rho_in": rho_in, "z": z, "phi_max": phi_max,
+                            "ancho_m": 2.0 * phi_max * rho_in})
+        agregar_led_arco(bm_led, g, borde, z, excluir_centro=p["pasillo_central"])
+
+        # Baranda en el borde delantero de cada plataforma (el publico se
+        # apoya en ella): dos tramos, con la abertura del pasillo central y
+        # 0,9 m libres contra cada muro para las escaleras laterales.
+        a_centro = (p["pasillo_central"] / 2.0) / rho_in
+        a_fin = phi_max - 0.9 / rho_in
+        rho_b = rho_in + 0.08
+        for signo in (+1.0, -1.0):
+            agregar_baranda_arco(bm_baranda, g, rho_b, signo * a_centro, signo * a_fin, z,
+                                 p["altura_baranda"], p["altura_riel_medio"], p["paso_postes"])
+
+        # Escalon intermedio en el pasillo central y en los dos extremos (mitad
+        # de la contrahuella), sobre la plataforma de abajo.
+        if k > 0:
+            z_abajo = z - p["contrahuella"]
+            x_esc = x_frente + 0.30 / 2.0
+            agregar_caja(bm_grada, (0.30, p["pasillo_central"], p["contrahuella"] / 2.0),
+                         (x_esc, 0.0, z_abajo), 0.0, Matrix.Identity(4))
+            for signo in (+1.0, -1.0):
+                phi_e = signo * (phi_max - 0.45 / rho_in)
+                q = g.punto_arco(rho_in - 0.15, phi_e, z_abajo)
+                yaw = math.atan2(-q.y, g.xf - q.x)
+                agregar_caja(bm_grada, (0.30, 0.9, p["contrahuella"] / 2.0), (0.0, 0.0, 0.0), 0.0,
+                             Matrix.Translation(q) @ Matrix.Rotation(yaw, 4, 'Z'))
+
+    # Maniquies de escala: gente de pie apoyada en las barandas.
+    for pl in plataformas[:4]:
+        for y in (-3.2, 3.0, 5.6):
+            phi = y / pl["rho_in"]
+            if abs(phi) > pl["phi_max"] - 0.1:
+                continue
+            q = g.punto_arco(pl["rho_in"] + 0.45, phi, pl["z"])
+            agregar_persona(bm_ref, q, math.atan2(-q.y, g.xf - q.x))
+
+    objetos = [
+        objeto_frontal(bm_grada, "SM_Plataformas", mats["M_Grada"]),
+        objeto_frontal(bm_baranda, "SM_Barandas", mats["M_Baranda"]),
+        objeto_frontal(bm_led, "SM_LucesPaso", mats["M_LedPaso"]),
+    ]
+    referencia = objeto_frontal(bm_ref, "REF_Personas", mats["M_Referencia"])
+
+    pl = plataformas[min(p["plataforma_ojo"], len(plataformas) - 1)]
+    phi = 1.4 / pl["rho_in"]
+    q = g.punto_arco(pl["rho_in"] + 0.5, phi, pl["z"])
+    ojo = q + Vector((0.0, 0.0, p["altura_ojo"]))
+
+    area = 0.0
+    for a, b in zip(plataformas, plataformas[1:] + [None]):
+        prof_real = prof if b else (g.semieje_x + a["x_frente"])
+        area += a["ancho_m"] * prof_real
+    aforo = int(area / 0.5)   # 0,5 m2 por persona de pie, holgado
+    print("\n--- Plataformas del modelo 90 ---")
+    for pl_ in plataformas:
+        print("plataforma {}: borde delantero x={:.2f} m, piso z={:.2f} m, ancho del borde {:.1f} m".format(
+            pl_["indice"] + 1, pl_["x_frente"], pl_["z"], pl_["ancho_m"]))
+    print("Aforo de pie estimado: {} personas (0,5 m2 por persona)".format(aforo))
+    datos = {
+        "plataformas": [{"plataforma": pl_["indice"] + 1, "x_borde_m": round(pl_["x_frente"], 3),
+                         "z_piso_m": round(pl_["z"], 3), "ancho_borde_m": round(pl_["ancho_m"], 2)}
+                        for pl_ in plataformas],
+        "aforo_de_pie_estimado": aforo,
+    }
+    return objetos, referencia, ojo, datos
+
+
+def imagen_patron(nombre="T_Patron_Prueba", ancho=2048, alto=1024):
+    """Reproduce 00_TouchDesigner/shaders/patron.frag en una imagen (v = 0
+    abajo, igual que la UV de Blender): rojo / amarillo / verde / cian por
+    bandas de v, meridianos negros cada 0,125 en u (el de u = 0 grueso),
+    cuadro blanco en (0,5, 0,75) y marca magenta en (0,5, 0,97)."""
+    img = bpy.data.images.new(nombre, ancho, alto, alpha=False)
+    pix = [0.0] * (ancho * alto * 4)
+    for j in range(alto):
+        v = (j + 0.5) / alto
+        if v < 0.25:
+            base = (1.0, 0.0, 0.0)
+        elif v < 0.5:
+            base = (1.0, 1.0, 0.0)
+        elif v < 0.75:
+            base = (0.0, 1.0, 0.0)
+        else:
+            base = (0.0, 1.0, 1.0)
+        fila = j * ancho * 4
+        for i in range(ancho):
+            u = (i + 0.5) / ancho
+            c = base
+            if (u % 0.125) < 0.003 or u < 0.012:
+                c = (0.0, 0.0, 0.0)
+            if abs(u - 0.5) < 0.03 and abs(v - 0.75) < 0.06:
+                c = (1.0, 1.0, 1.0)
+            if abs(u - 0.5) < 0.015 and abs(v - 0.97) < 0.03:
+                c = (1.0, 0.0, 1.0)
+            o = fila + i * 4
+            pix[o] = c[0]; pix[o + 1] = c[1]; pix[o + 2] = c[2]; pix[o + 3] = 1.0
+    img.pixels.foreach_set(pix)
+    img.pack()
+    return img
+
+
+def poner_patron_en_cupula(domo_obj):
+    """Solo para los renders: la cupula se ve con el patron de prueba de
+    TouchDesigner (emisivo puro) leyendo la capa UV del canal 0. Se hace
+    despues de exportar, asi el FBX no arrastra la imagen."""
+    mat = domo_obj.data.materials[0]
+    nodos, enlaces = mat.node_tree.nodes, mat.node_tree.links
+    for n in list(nodos):
+        nodos.remove(n)
+    salida = nodos.new("ShaderNodeOutputMaterial")
+    emision = nodos.new("ShaderNodeEmission")
+    emision.inputs["Strength"].default_value = 1.0
+    tex = nodos.new("ShaderNodeTexImage")
+    tex.image = imagen_patron()
+    tex.interpolation = 'Closest'
+    uv = nodos.new("ShaderNodeUVMap")
+    uv.uv_map = domo_obj.data.uv_layers[0].name
+    enlaces.new(uv.outputs["UV"], tex.inputs["Vector"])
+    enlaces.new(tex.outputs["Color"], emision.inputs["Color"])
+    enlaces.new(emision.outputs["Emission"], salida.inputs["Surface"])
+
+
+def _orientacion_mirando(origen, objetivo):
+    d = (objetivo - origen).normalized()
+    yaw = math.degrees(math.atan2(d.y, d.x))
+    pitch = math.degrees(math.asin(max(-1.0, min(1.0, d.z))))
+    return yaw, pitch
+
+
+def renderizar_vistas_frontales(g, domo_obj, ojo, referencia):
+    escena = bpy.context.scene
+    escena.render.engine = 'BLENDER_EEVEE'
+    escena.render.resolution_x = RES_X
+    escena.render.resolution_y = RES_Y
+    escena.render.image_settings.file_format = 'PNG'
+    escena.view_settings.view_transform = 'Standard'
+    try:
+        escena.eevee.taa_render_samples = 32
+    except AttributeError:
+        pass
+    mundo = bpy.data.worlds.new("Mundo_Preview")
+    mundo.use_nodes = True
+    mundo.node_tree.nodes["Background"].inputs["Color"].default_value = (0.02, 0.02, 0.025, 1.0)
+    escena.world = mundo
+
+    # Luz de trabajo suave desde arriba (la cupula emisiva sola deja la sala
+    # muy oscura en EEVEE): solo para leer la geometria en los renders.
+    luz = bpy.data.lights.new("Luz_Trabajo", type='AREA')
+    luz.energy = 2500.0
+    luz.size = g.radio * 1.2
+    obj_luz = bpy.data.objects.new("Luz_Trabajo", luz)
+    obj_luz.location = (-1.0, 0.0, g.z_centro + g.radio * 0.55)
+    bpy.context.collection.objects.link(obj_luz)
+
+    cam_data = bpy.data.cameras.new("Camara_Preview")
+    cam_data.clip_start = 0.05
+    cam_data.clip_end = 200.0
+    cam = bpy.data.objects.new("Camara_Preview", cam_data)
+    bpy.context.collection.objects.link(cam)
+    escena.camera = cam
+
+    cuadro_blanco = g.punto_pantalla(0.0, 45.0)
+    polo = g.punto_pantalla(0.0, 90.0)
+
+    # 1) Planta cenital, sin la pantalla, en cuadro cuadrado (+X a la derecha).
+    domo_obj.hide_render = True
+    escena.render.resolution_x = RES_Y
+    escena.render.resolution_y = RES_Y
+    cam_data.type = 'ORTHO'
+    cam_data.ortho_scale = g.radio * 2.15
+    cam.location = (0.0, 0.0, g.z_centro + g.radio + 5.0)
+    apuntar_camara(cam, Vector((0.0, 0.0, 0.0)))
+    escena.render.filepath = ruta_preview("vista_planta_cenital")
+    bpy.ops.render.render(write_still=True)
+    escena.render.resolution_x = RES_X
+    domo_obj.hide_render = False
+
+    # 2) Vista general desde la esquina trasera alta, hacia la pantalla.
+    cam_data.type = 'PERSP'
+    cam_data.lens = 12.0
+    cam.location = (-g.semieje_x * 0.72, -g.semieje_y * 0.33, g.z_centro + 2.0)
+    apuntar_camara(cam, Vector((cuadro_blanco.x * 0.8, 1.0, (cuadro_blanco.z + polo.z) / 2.0 - 2.5)))
+    escena.render.filepath = ruta_preview("vista_general_perspectiva")
+    bpy.ops.render.render(write_still=True)
+
+    # 3) Desde el ojo del espectador (sentado en 45, de pie en 90), mirando
+    # al cuadro blanco del frente: con el lente de 12 mm entran las filas o
+    # barandas de adelante y la pantalla hasta cerca del polo.
+    referencia.hide_render = False
+    cam_data.lens = 12.0
+    cam.location = ojo
+    objetivo = cuadro_blanco
+    if g.p["tipo"] == "de_pie":
+        # De pie se mira casi horizontal: entran la baranda propia y las de
+        # adelante, y el cuadro blanco queda en el tercio superior.
+        objetivo = Vector((cuadro_blanco.x, cuadro_blanco.y, ojo.z + (cuadro_blanco.z - ojo.z) * 0.25))
+    apuntar_camara(cam, objetivo)
+    nombre = "vista_desde_butaca" if g.p["tipo"] == "butacas" else "vista_de_pie"
+    escena.render.filepath = ruta_preview(nombre)
+    bpy.ops.render.render(write_still=True)
+    return _orientacion_mirando(ojo, objetivo)
+
+
+def verificar_export_frontal(g):
+    """Lee el FBX de vuelta y comprueba la cupula: una sola capa UV, V de 0,5
+    a 1, el frente (U = 0,5) en +X, el cuadro blanco (U 0,5, V 0,75) delante
+    y por encima del borde, y el borde delantero a z_borde_frente."""
+    escena_verificacion = bpy.data.scenes.new("Verificacion_FBX")
+    escena_anterior = bpy.context.window.scene
+    bpy.context.window.scene = escena_verificacion
+    antes = set(bpy.data.objects)
+    bpy.ops.import_scene.fbx(filepath=RUTA_FBX)
+    importados = [o for o in bpy.data.objects if o not in antes]
+    print("\n--- Verificacion leyendo el FBX exportado de vuelta ---")
+    print("objetos en el FBX: {}".format(sorted(o.name for o in importados)))
+    domo = next((o for o in importados if o.name.startswith("SM_Domo")), None)
+    resultado = {}
+    if domo is None:
+        print("SM_Domo: NO SE ENCONTRO EN EL FBX IMPORTADO")
+    else:
+        mw = domo.matrix_world
+        malla = domo.data
+        capas = [l.name for l in malla.uv_layers]
+        uvs = malla.uv_layers[0].data
+        frente_rim, cuadro, vs = [], [], []
+        for poly in malla.polygons:
+            for li in poly.loop_indices:
+                u, v = uvs[li].uv
+                co = mw @ malla.vertices[malla.loops[li].vertex_index].co
+                vs.append(v)
+                if abs(u - 0.5) < 0.01 and abs(v - 0.5) < 0.005:
+                    frente_rim.append(co)
+                if abs(u - 0.5) < 0.01 and abs(v - 0.75) < 0.01:
+                    cuadro.append(co)
+        pts = [mw @ Vector(c) for c in domo.bound_box]
+        dx = max(p.x for p in pts) - min(p.x for p in pts)
+        dy = max(p.y for p in pts) - min(p.y for p in pts)
+        zmin = min(p.z for p in pts)
+        zmax = max(p.z for p in pts)
+        c_rim = sum(frente_rim, Vector()) / max(1, len(frente_rim))
+        c_cuadro = sum(cuadro, Vector()) / max(1, len(cuadro))
+        ok_capas = len(capas) == 1
+        ok_v = abs(min(vs) - 0.5) < 1e-3 and abs(max(vs) - 1.0) < 1e-3
+        ok_frente = c_cuadro.x > 0.0 and c_rim.x > 0.0 and abs(c_cuadro.y) < 0.2
+        ok_borde = abs(c_rim.z - g.p["z_borde_frente"]) < 0.05
+        print("SM_Domo: X={:.2f} m  Y={:.2f} m  z de {:.2f} a {:.2f} m".format(dx, dy, zmin, zmax))
+        print("  capas UV: {} -> {}".format(capas, "OK" if ok_capas else "MAL (debe ser una)"))
+        print("  V del canal 0 de {:.3f} a {:.3f} -> {}".format(min(vs), max(vs), "OK" if ok_v else "MAL"))
+        print("  borde delantero (U 0,5 V 0,5) en ({:.2f}, {:.2f}, {:.2f}) -> {}".format(
+            c_rim.x, c_rim.y, c_rim.z, "OK" if ok_borde else "MAL"))
+        print("  cuadro blanco (U 0,5 V 0,75) en ({:.2f}, {:.2f}, {:.2f}) -> {}".format(
+            c_cuadro.x, c_cuadro.y, c_cuadro.z, "OK, al frente (+X)" if ok_frente else "MAL"))
+        resultado = {"capas_uv": capas, "v_min": round(min(vs), 4), "v_max": round(max(vs), 4),
+                     "borde_frente": [round(c, 3) for c in c_rim],
+                     "cuadro_blanco": [round(c, 3) for c in c_cuadro],
+                     "ok": ok_capas and ok_v and ok_frente and ok_borde}
+    for obj in importados:
+        bpy.data.objects.remove(obj, do_unlink=True)
+    bpy.context.window.scene = escena_anterior
+    bpy.data.scenes.remove(escena_verificacion)
+    return resultado
+
+
+def main_frontal():
+    import json
+    clave = int(round(FOV_DOMO))
+    preset = SALAS_FRONTALES[clave]
+    g = GeometriaFrontal(preset)
+    limpiar_escena()
+    print("\n=== Sala frontal {}: {} ===".format(clave, preset["titulo"]))
+    print("pantalla media esfera de radio {:.2f} m (diametro {:.1f} m), inclinada {:.1f} grados hacia +X".format(
+        g.radio, 2 * g.radio, math.degrees(g.inclinacion)))
+    print("centro de la esfera en z={:.2f} m | borde delantero a z={:.2f} m | lo mas alto a z={:.2f} m | "
+          "borde trasero a z={:.2f} m | planta elipse {:.2f} x {:.2f} m".format(
+              g.z_centro, preset["z_borde_frente"], g.z_centro + g.radio, g.z_borde(math.pi),
+              2 * g.semieje_x, 2 * g.semieje_y))
+
+    mats = {n: material_frontal(n) for n in MATERIALES_FRONTALES}
+    domo = crear_pantalla_frontal(g)
+    muro, piso = crear_muro_y_piso_frontal(g, mats["M_Muro"], mats["M_Piso"])
+    puertas = crear_puertas_frontales(g, preset["x_puerta"], mats["M_Puerta"])
+    if preset["tipo"] == "butacas":
+        piezas, referencia, ojo, datos_sala = construir_sala_45(g, mats)
+    else:
+        piezas, referencia, ojo, datos_sala = construir_sala_90(g, mats)
+
+    exportables = [piso, muro, domo] + piezas + puertas
+    reportar_poligonos(exportables)
+    for obj in exportables:
+        if obj is not domo:
+            desenvolver_uv_cube(obj)
+    aplicar_transformaciones(exportables + [referencia])
+    exportar_fbx(exportables)
+    exportar_glb(exportables)
+
+    poner_patron_en_cupula(domo)
+    yaw, pitch = renderizar_vistas_frontales(g, domo, ojo, referencia)
+    bpy.ops.wm.save_as_mainfile(filepath=RUTA_BLEND)
+    verificacion = verificar_export_frontal(g)
+
+    datos = {
+        "modelo": clave,
+        "titulo": preset["titulo"],
+        "generado_por": "01_Blender/generar_sala_domo.py",
+        "nota_coordenadas": "metros, ejes de Blender (+X frente, +Z arriba). Unreal: x*100, -y*100, z*100; yaw_unreal = -yaw.",
+        "pantalla": {
+            "fov_deg": 180.0,
+            "radio_m": g.radio,
+            "inclinacion_deg": round(math.degrees(g.inclinacion), 3),
+            "centro_esfera_m": [0.0, 0.0, round(g.z_centro, 4)],
+            "z_borde_frente_m": preset["z_borde_frente"],
+            "z_maxima_m": round(g.z_centro + g.radio, 4),
+            "z_borde_trasero_m": round(g.z_borde(math.pi), 4),
+            "planta_elipse_m": [round(2 * g.semieje_x, 3), round(2 * g.semieje_y, 3)],
+        },
+        "mallas": [o.name for o in exportables],
+        "material_por_malla": {o.name: o.data.materials[0].name for o in exportables if o is not domo},
+        "materiales": {n: {k: (list(v) if isinstance(v, tuple) else v) for k, v in d.items()}
+                       for n, d in MATERIALES_FRONTALES.items() if n != "M_Referencia"},
+        "ojo": {"posicion_m": [round(c, 4) for c in ojo], "yaw_deg": round(yaw, 3), "pitch_deg": round(pitch, 3),
+                "altura_sobre_piso_m": preset["altura_ojo"]},
+        "sala": datos_sala,
+        "verificacion_fbx": verificacion,
+    }
+    ruta_json = os.path.join(CARPETA_BASE, "02_Export", NOMBRE_SALIDA + ".json")
+    with open(ruta_json, "w", encoding="utf-8") as fh:
+        json.dump(datos, fh, ensure_ascii=False, indent=2)
+    print("\nListo: {0}.blend, {0}.fbx, {0}.glb, {0}.json y 3 PNG de previsualizacion.".format(NOMBRE_SALIDA))
+    if not verificacion.get("ok"):
+        raise SystemExit("La verificacion del FBX fallo; revisar el bloque de arriba.")
+
+
+# ---------------------------------------------------------------------------
 # PROGRAMA PRINCIPAL
 # ---------------------------------------------------------------------------
 
 def main():
+    if ES_SALA_FRONTAL:
+        main_frontal()
+        return
     limpiar_escena()
 
     print("\n=== Modelo de sala: FOV {:g} ({}) ===".format(

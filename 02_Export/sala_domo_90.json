@@ -1,0 +1,176 @@
+{
+  "modelo": 90,
+  "titulo": "Domo frontal de pie (museo / parque tematico)",
+  "generado_por": "01_Blender/generar_sala_domo.py",
+  "nota_coordenadas": "metros, ejes de Blender (+X frente, +Z arriba). Unreal: x*100, -y*100, z*100; yaw_unreal = -yaw.",
+  "pantalla": {
+    "fov_deg": 180.0,
+    "radio_m": 10.0,
+    "inclinacion_deg": 45.0,
+    "centro_esfera_m": [
+      0.0,
+      0.0,
+      7.0711
+    ],
+    "z_borde_frente_m": 0.0,
+    "z_maxima_m": 17.0711,
+    "z_borde_trasero_m": 14.1421,
+    "planta_elipse_m": [
+      14.142,
+      20.0
+    ]
+  },
+  "mallas": [
+    "SM_Piso",
+    "SM_Muro",
+    "SM_Domo",
+    "SM_Plataformas",
+    "SM_Barandas",
+    "SM_LucesPaso",
+    "SM_Puerta_01",
+    "SM_Puerta_02"
+  ],
+  "material_por_malla": {
+    "SM_Piso": "M_Piso",
+    "SM_Muro": "M_Muro",
+    "SM_Plataformas": "M_Grada",
+    "SM_Barandas": "M_Baranda",
+    "SM_LucesPaso": "M_LedPaso",
+    "SM_Puerta_01": "M_Puerta",
+    "SM_Puerta_02": "M_Puerta"
+  },
+  "materiales": {
+    "M_Piso": {
+      "color": [
+        0.035,
+        0.04,
+        0.06
+      ],
+      "rugosidad": 0.95,
+      "metalico": 0.0
+    },
+    "M_Grada": {
+      "color": [
+        0.14,
+        0.14,
+        0.15
+      ],
+      "rugosidad": 0.85,
+      "metalico": 0.0
+    },
+    "M_Muro": {
+      "color": [
+        0.025,
+        0.025,
+        0.03
+      ],
+      "rugosidad": 0.95,
+      "metalico": 0.0
+    },
+    "M_Baranda": {
+      "color": [
+        0.62,
+        0.62,
+        0.65
+      ],
+      "rugosidad": 0.35,
+      "metalico": 0.6
+    },
+    "M_Butaca": {
+      "color": [
+        0.3,
+        0.025,
+        0.03
+      ],
+      "rugosidad": 0.9,
+      "metalico": 0.0
+    },
+    "M_Puerta": {
+      "color": [
+        0.25,
+        0.25,
+        0.27
+      ],
+      "rugosidad": 0.4,
+      "metalico": 0.5
+    },
+    "M_LedPaso": {
+      "color": [
+        1.0,
+        0.55,
+        0.15
+      ],
+      "rugosidad": 0.5,
+      "metalico": 0.0,
+      "emision": [
+        1.0,
+        0.55,
+        0.15
+      ],
+      "fuerza_emision": 4.0
+    }
+  },
+  "ojo": {
+    "posicion_m": [
+      -0.9301,
+      1.446,
+      2.7
+    ],
+    "yaw_deg": -7.536,
+    "pitch_deg": 5.66,
+    "altura_sobre_piso_m": 1.6
+  },
+  "sala": {
+    "plataformas": [
+      {
+        "plataforma": 1,
+        "x_borde_m": 2.5,
+        "z_piso_m": 0.2,
+        "ancho_borde_m": 15.81
+      },
+      {
+        "plataforma": 2,
+        "x_borde_m": 1.0,
+        "z_piso_m": 0.65,
+        "ancho_borde_m": 17.92
+      },
+      {
+        "plataforma": 3,
+        "x_borde_m": -0.5,
+        "z_piso_m": 1.1,
+        "ancho_borde_m": 19.8
+      },
+      {
+        "plataforma": 4,
+        "x_borde_m": -2.0,
+        "z_piso_m": 1.55,
+        "ancho_borde_m": 21.01
+      },
+      {
+        "plataforma": 5,
+        "x_borde_m": -3.5,
+        "z_piso_m": 2.0,
+        "ancho_borde_m": 21.07
+      }
+    ],
+    "aforo_de_pie_estimado": 374
+  },
+  "verificacion_fbx": {
+    "capas_uv": [
+      "UVMap"
+    ],
+    "v_min": 0.5,
+    "v_max": 1.0,
+    "borde_frente": [
+      7.065,
+      -0.0,
+      0.006
+    ],
+    "cuadro_blanco": [
+      9.994,
+      0.0,
+      7.075
+    ],
+    "ok": true
+  }
+}

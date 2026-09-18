@@ -15,7 +15,16 @@ MODELOS DE SALA (variable de entorno DOMO_FOV, ver 04_Docs/05_Modelos_de_sala.md
     sin DOMO_FOV o DOMO_FOV=180   media esfera: 02_Export/sala_domo.fbx ->
                                   mallas en /Game/Sala, nivel /Game/Maps/DomoVR
                                   (comportamiento original, sin cambios).
-    DOMO_FOV=90 / DOMO_FOV=45     casquete: 02_Export/sala_domo_90.fbx ->
+    DOMO_FOV=45 / DOMO_FOV=90     SALAS FRONTALES (desde el 18 sep 2026): 45 =
+                                  cine domo inclinado tipo Maloka con grada,
+                                  90 = sala de pie con plataformas. Leen
+                                  02_Export/sala_domo_45.json (mallas,
+                                  materiales, ojo), vacian /Game/Sala/Domo_45,
+                                  crean sus materiales en
+                                  /Game/Sala/Domo_45/Materials y ponen
+                                  PlayerStart + Camara_Ojo a altura de ojo.
+                                  La cupula usa el MI_Domo compartido.
+    otro DOMO_FOV (casquete)      02_Export/sala_domo_N.fbx ->
                                   mallas en /Game/Sala/Domo_90 (el importador
                                   las nombra sala_domo_90_SM_*), nivel
                                   /Game/Maps/DomoVR_90. Los materiales M_* /
@@ -106,6 +115,26 @@ SUFIJO_MODELO = "" if ES_MEDIA_ESFERA else "_{:g}".format(FOV_DOMO)
 FBX_PATH = os.path.join(DOMO_ROOT_DIR, "02_Export", "sala_domo{}.fbx".format(SUFIJO_MODELO))
 TEXTURAS_DIR = os.path.join(DOMO_ROOT_DIR, "02_Export", "texturas")
 
+# Salas frontales (DOMO_FOV = 45 o 90, desde el 18 sep 2026): el 45 es el cine
+# domo inclinado tipo Maloka con grada y 314 butacas, el 90 la sala de pie con
+# plataformas y barandas. Ya no son casquetes: el generador de Blender escribe
+# junto al FBX un JSON (02_Export/sala_domo_45.json) con la lista de mallas,
+# el material de cada una, los colores de trabajo y la posicion del ojo, y
+# este script arma el nivel a partir de ese JSON. Sus materiales viven en
+# /Game/Sala/Domo_45/Materials (propios del modelo, se recrean en cada
+# corrida); la cupula sigue usando el MI_Domo compartido, que es el que
+# alimenta Spout. Ver 04_Docs/05_Modelos_de_sala.md.
+ES_SALA_FRONTAL = (not ES_MEDIA_ESFERA) and any(abs(FOV_DOMO - k) < 1e-6 for k in (45.0, 90.0))
+DATOS_SALA_PATH = os.path.join(DOMO_ROOT_DIR, "02_Export", "sala_domo{}.json".format(SUFIJO_MODELO))
+DATOS_SALA = None
+if ES_SALA_FRONTAL:
+    import json
+    if not os.path.isfile(DATOS_SALA_PATH):
+        raise RuntimeError("[importar_sala] Falta {}: correr antes generar_sala_domo.py -- --fov {:g}".format(
+            DATOS_SALA_PATH, FOV_DOMO))
+    with open(DATOS_SALA_PATH, "r", encoding="utf-8") as _fh:
+        DATOS_SALA = json.load(_fh)
+
 CONTENT_SALA = "/Game/Sala"
 CONTENT_MATERIALS = "/Game/Sala/Materials"
 CONTENT_TEXTURES = "/Game/Sala/Textures"
@@ -115,6 +144,8 @@ CONTENT_TEXTURES = "/Game/Sala/Textures"
 CONTENT_MALLAS = CONTENT_SALA if ES_MEDIA_ESFERA else "{}/Domo{}".format(CONTENT_SALA, SUFIJO_MODELO)
 CONTENT_MAPS = "/Game/Maps"
 MAP_PACKAGE_PATH = "/Game/Maps/DomoVR{}".format(SUFIJO_MODELO)
+# Materiales propios de una sala frontal (colores de trabajo del JSON).
+CONTENT_MATERIALS_SALA = "{}/Materials".format(CONTENT_MALLAS)
 
 PREFIJO_BUTACAS = "SM_Butacas"
 PREFIJO_PUERTAS = "SM_Puerta"
@@ -125,6 +156,8 @@ NOMBRES_MALLAS_ESPERADAS = (
     + ["{}_{:02d}".format(PREFIJO_BUTACAS, i) for i in range(1, 7)]
     + ["{}_{:02d}".format(PREFIJO_PUERTAS, i) for i in range(1, 5)]
 )
+if ES_SALA_FRONTAL:
+    NOMBRES_MALLAS_ESPERADAS = list(DATOS_SALA["mallas"])
 BUTACAS_POR_MODULO = 60
 TOTAL_BUTACAS = 360
 
@@ -328,6 +361,16 @@ def importar_fbx():
 
     log("Importando {} -> {}".format(FBX_PATH, CONTENT_MALLAS))
 
+    if ES_SALA_FRONTAL and unreal.EditorAssetLibrary.does_directory_exist(CONTENT_MALLAS):
+        # La sala frontal no tiene las mismas mallas que el casquete que habia
+        # antes en esta carpeta (tarima, cunas, control...): se vacia la
+        # carpeta del modelo para que no queden assets huerfanos. Solo esta
+        # carpeta; /Game/Sala/Materials y las mallas del 180 no se tocan.
+        viejos = unreal.EditorAssetLibrary.list_assets(CONTENT_MALLAS, True, False)
+        if viejos:
+            unreal.EditorAssetLibrary.delete_directory(CONTENT_MALLAS)
+            log("Carpeta {} vaciada antes de importar ({} assets).".format(CONTENT_MALLAS, len(viejos)))
+
     options = unreal.FbxImportUI()
     options.import_mesh = True
     options.import_as_skeletal = False
@@ -344,7 +387,10 @@ def importar_fbx():
     sm_data = options.static_mesh_import_data
     # "sin combinar mallas, conservando los nombres" -> combine_meshes=False.
     sm_data.set_editor_property("combine_meshes", False)
-    sm_data.set_editor_property("auto_generate_collision", True)
+    # Sala frontal: sin colision convexa automatica (el casco convexo de la
+    # cupula o de la grada envolveria al jugador); se usa la malla como
+    # colision compleja, ver _colision_compleja.
+    sm_data.set_editor_property("auto_generate_collision", not ES_SALA_FRONTAL)
     sm_data.set_editor_property("generate_lightmap_u_vs", False)
     # CRITICO, no se puede dejar en el valor por defecto del motor: el
     # constructor de UFbxAssetImportData (FbxAssetImportData.cpp) trae
@@ -421,6 +467,9 @@ def importar_fbx():
 
     log("Mallas reconocidas por el contrato: {}".format(sorted(mallas.keys())))
     resumen["mallas_importadas"] = sorted(mallas.keys())
+    if ES_SALA_FRONTAL:
+        for mesh in mallas.values():
+            _colision_compleja(mesh)
 
     faltantes = [n for n in NOMBRES_MALLAS_ESPERADAS if n not in mallas]
     if faltantes:
@@ -445,6 +494,20 @@ def importar_fbx():
         )
 
     return mallas
+
+
+def _colision_compleja(mesh):
+    """Colision por poligono (Use Complex Collision As Simple): se puede
+    caminar por las gradas y plataformas y el jugador no queda encerrado en
+    un casco convexo."""
+    try:
+        body = mesh.get_editor_property("body_setup")
+        if body is None:
+            aviso("{}: sin body_setup; queda sin colision.".format(mesh.get_name()))
+            return
+        body.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
+    except Exception as exc:  # noqa: BLE001
+        aviso("{}: no se pudo poner colision compleja ({}).".format(mesh.get_name(), exc))
 
 
 def _nombre_canonico_de_malla(nombre_real):
@@ -737,6 +800,9 @@ def crear_materiales():
     materiales = {}
     creados = []
 
+    if ES_SALA_FRONTAL:
+        return _crear_materiales_frontales()
+
     if ES_MEDIA_ESFERA:
         m_domo, mi_domo = _material_domo_emisivo()
         materiales["M_Domo"] = m_domo
@@ -780,6 +846,67 @@ def crear_materiales():
     return materiales
 
 
+def _material_color_frontal(nombre, datos):
+    """Material Default Lit de color plano con parametros Color, Roughness y
+    Metallic (y Emissive si el JSON trae emision, como el LED de paso). Los
+    valores son los mismos que usa Blender para los renders."""
+    material = crear_asset(nombre, CONTENT_MATERIALS_SALA, unreal.Material, unreal.MaterialFactoryNew())
+    mel = unreal.MaterialEditingLibrary
+    color = datos["color"]
+    expr = mel.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -500, -150)
+    expr.set_editor_property("parameter_name", "Color")
+    expr.set_editor_property("default_value", unreal.LinearColor(color[0], color[1], color[2], 1.0))
+    mel.connect_material_property(expr, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
+    for y, (param, valor, prop) in enumerate((
+            ("Roughness", datos["rugosidad"], unreal.MaterialProperty.MP_ROUGHNESS),
+            ("Metallic", datos["metalico"], unreal.MaterialProperty.MP_METALLIC))):
+        e = mel.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -500, y * 150)
+        e.set_editor_property("parameter_name", param)
+        e.set_editor_property("default_value", float(valor))
+        mel.connect_material_property(e, "", prop)
+    if datos.get("emision"):
+        em = datos["emision"]
+        fuerza = float(datos.get("fuerza_emision", 1.0))
+        e = mel.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -500, 300)
+        e.set_editor_property("parameter_name", "Emissive")
+        e.set_editor_property("default_value", unreal.LinearColor(em[0] * fuerza, em[1] * fuerza, em[2] * fuerza, 1.0))
+        mel.connect_material_property(e, "RGB", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    errores = mel.recompile_material(material)
+    if errores:
+        aviso("Errores al compilar {}: {}".format(nombre, list(errores)))
+    marcar_uso_nanite(material, nombre)
+    return material
+
+
+def _crear_materiales_frontales():
+    """Sala frontal: MI_Domo compartido (el de Spout) para la cupula, mas los
+    materiales propios del modelo en CONTENT_MATERIALS_SALA, recreados en cada
+    corrida desde el JSON de Blender."""
+    materiales, creados = {}, []
+    ruta_m_domo = _ruta_completa(CONTENT_MATERIALS, "M_Domo")
+    ruta_mi_domo = _ruta_completa(CONTENT_MATERIALS, "MI_Domo")
+    if (unreal.EditorAssetLibrary.does_asset_exist(ruta_m_domo)
+            and unreal.EditorAssetLibrary.does_asset_exist(ruta_mi_domo)):
+        materiales["M_Domo"] = cargar_asset_obligatorio(ruta_m_domo)
+        materiales["MI_Domo"] = cargar_asset_obligatorio(ruta_mi_domo)
+    else:
+        aviso("M_Domo/MI_Domo no existian en {}; se crean.".format(CONTENT_MATERIALS))
+        materiales["M_Domo"], materiales["MI_Domo"] = _material_domo_emisivo()
+        creados += ["M_Domo", "MI_Domo"]
+        unreal.EditorAssetLibrary.save_directory(CONTENT_MATERIALS, False, True)
+    if not unreal.EditorAssetLibrary.does_directory_exist(CONTENT_MATERIALS_SALA):
+        unreal.EditorAssetLibrary.make_directory(CONTENT_MATERIALS_SALA)
+    for nombre, datos in sorted(DATOS_SALA["materiales"].items()):
+        materiales[nombre] = _material_color_frontal(nombre, datos)
+        creados.append("{}/{}".format(CONTENT_MATERIALS_SALA, nombre))
+    unreal.EditorAssetLibrary.save_directory(CONTENT_MATERIALS_SALA, False, True)
+    reutilizados = ["MI_Domo"] if "MI_Domo" not in creados else []
+    log("Materiales de la sala frontal creados: {}; reutilizados: {}".format(creados, reutilizados))
+    resumen["materiales_creados"] = creados
+    resumen["materiales_reutilizados"] = reutilizados
+    return materiales
+
+
 def asignar_material(mesh, material, slot_index=0):
     if mesh is None or material is None:
         return
@@ -793,6 +920,12 @@ def aplicar_materiales(mallas, materiales):
     for nombre, mesh in mallas.items():
         if nombre == "SM_Domo":
             asignar_material(mesh, materiales.get("MI_Domo", materiales.get("M_Domo")))
+        elif ES_SALA_FRONTAL:
+            nombre_mat = DATOS_SALA["material_por_malla"].get(nombre)
+            if nombre_mat not in materiales:
+                aviso("{}: el JSON no le asigna un material conocido ({}).".format(nombre, nombre_mat))
+                continue
+            asignar_material(mesh, materiales[nombre_mat])
         elif nombre in MATERIAL_POR_MALLA:
             asignar_material(mesh, materiales.get(MATERIAL_POR_MALLA[nombre]))
         elif nombre.startswith(PREFIJO_BUTACAS):
@@ -965,11 +1098,63 @@ def crear_skylight_domo(actor_subsystem):
     comp = sky.get_component_by_class(unreal.SkyLightComponent)
     comp.set_editor_property("mobility", unreal.ComponentMobility.MOVABLE)
     comp.set_editor_property("real_time_capture", True)
-    comp.set_editor_property("lower_hemisphere_is_black", True)
+    # En las salas frontales la pantalla baja hasta el piso: la parte de la
+    # cupula bajo el horizonte tambien alumbra.
+    comp.set_editor_property("lower_hemisphere_is_black", not ES_SALA_FRONTAL)
     comp.set_editor_property("intensity", 2.0)
     resumen["actores_colocados"].append(sky.get_actor_label())
     log("SkyLight_Domo con captura en tiempo real creado (intensidad 2).")
     return sky
+
+
+def _signo_y_blender_a_unreal(actor_subsystem):
+    """El FBX de Blender entra a Unreal con el eje Y invertido (Unreal es de
+    mano izquierda). En vez de suponerlo, se mide: SM_Puerta_01 esta en +Y en
+    Blender (ver crear_puertas_frontales); se mira de que lado quedo."""
+    for actor in actor_subsystem.get_all_level_actors():
+        if actor.get_actor_label() == "Puerta_01_Actor":
+            origen, _ = actor.get_actor_bounds(False)
+            signo = 1.0 if origen.y > 0 else -1.0
+            log("Puerta_01 (en +Y en Blender) quedo en y={:.0f} cm: signo de Y Blender->Unreal = {:+.0f}".format(
+                origen.y, signo))
+            return signo
+    aviso("No se encontro Puerta_01_Actor para medir el eje Y; se supone invertido.")
+    return -1.0
+
+
+def crear_ojo_frontal(actor_subsystem):
+    """PlayerStart y CameraActor en el ojo del espectador que calculo Blender
+    (sentado en la fila 7 del modelo 45 a 1,2 m del piso de la grada; de pie
+    en la plataforma 3 del modelo 90 a 1,6 m). Misma convencion que el 180:
+    la ubicacion del PlayerStart ES la altura de ojo. La camara queda mirando
+    al cuadro blanco del patron (frente, +X)."""
+    ojo = DATOS_SALA["ojo"]
+    sy = _signo_y_blender_a_unreal(actor_subsystem)
+    x, y, z = ojo["posicion_m"]
+    ubicacion = unreal.Vector(x * 100.0, sy * y * 100.0, z * 100.0)
+    yaw = sy * ojo["yaw_deg"]
+    rot_start = unreal.Rotator(roll=0.0, pitch=0.0, yaw=yaw)
+    rot_cam = unreal.Rotator(roll=0.0, pitch=ojo["pitch_deg"], yaw=yaw)
+
+    start = actor_subsystem.spawn_actor_from_class(unreal.PlayerStart, ubicacion, rot_start)
+    if start is None:
+        fallar("spawn_actor_from_class devolvio None para PlayerStart.")
+    etiqueta = "PlayerStart_Butaca" if DATOS_SALA["sala"].get("filas") else "PlayerStart_DePie"
+    start.set_actor_label(etiqueta)
+    resumen["actores_colocados"].append(etiqueta)
+
+    cam = actor_subsystem.spawn_actor_from_class(unreal.CameraActor, ubicacion, rot_cam)
+    if cam is None:
+        fallar("spawn_actor_from_class devolvio None para CameraActor.")
+    cam.set_actor_label("Camara_Ojo")
+    try:
+        cam.camera_component.set_editor_property("field_of_view", 90.0)
+    except Exception as exc:  # noqa: BLE001
+        aviso("Camara_Ojo: no se pudo fijar el FOV ({}).".format(exc))
+    resumen["actores_colocados"].append("Camara_Ojo")
+    log("{} y Camara_Ojo en ({:.0f}, {:.0f}, {:.0f}) cm, ojo a {:.2f} m del piso, yaw {:.1f}, pitch camara {:.1f}.".format(
+        etiqueta, ubicacion.x, ubicacion.y, ubicacion.z, ojo["altura_sobre_piso_m"], yaw, ojo["pitch_deg"]))
+    return start
 
 
 def crear_player_start(actor_subsystem):
@@ -1001,16 +1186,23 @@ def crear_player_start(actor_subsystem):
 
 def main():
     log("=== Importacion de la sala de domo (DomoVR) ===")
-    log("Modelo de sala: FOV {:g} ({}) -> mallas en {}, nivel {}".format(
-        FOV_DOMO, "media esfera" if ES_MEDIA_ESFERA else "casquete", CONTENT_MALLAS, MAP_PACKAGE_PATH))
+    tipo = ("media esfera" if ES_MEDIA_ESFERA else
+            "sala frontal: {}".format(DATOS_SALA["titulo"]) if ES_SALA_FRONTAL else "casquete")
+    log("Modelo de sala: {:g} ({}) -> mallas en {}, nivel {}".format(
+        FOV_DOMO, tipo, CONTENT_MALLAS, MAP_PACKAGE_PATH))
     log("FBX esperado en: {}".format(FBX_PATH))
-    log("Texturas esperadas en: {}".format(TEXTURAS_DIR))
-    log(
-        "Escala de sala: radio {:.1f} m (cilindro cerrado, sin volumen "
-        "exterior), {} butacas en 6 cunas radiales.".format(
-            DOMO_RADIO_CM / 100.0, TOTAL_BUTACAS
+    if ES_SALA_FRONTAL:
+        pantalla = DATOS_SALA["pantalla"]
+        log("Pantalla de 180 grados, radio {:.1f} m, inclinada {:.1f} grados; datos de {}".format(
+            pantalla["radio_m"], pantalla["inclinacion_deg"], DATOS_SALA_PATH))
+    else:
+        log("Texturas esperadas en: {}".format(TEXTURAS_DIR))
+        log(
+            "Escala de sala: radio {:.1f} m (cilindro cerrado, sin volumen "
+            "exterior), {} butacas en 6 cunas radiales.".format(
+                DOMO_RADIO_CM / 100.0, TOTAL_BUTACAS
+            )
         )
-    )
 
     mallas = importar_fbx()
     materiales = crear_materiales()
@@ -1029,7 +1221,10 @@ def main():
 
     crear_post_process(actor_subsystem)
     crear_skylight_domo(actor_subsystem)
-    crear_player_start(actor_subsystem)
+    if ES_SALA_FRONTAL:
+        crear_ojo_frontal(actor_subsystem)
+    else:
+        crear_player_start(actor_subsystem)
 
     level_subsystem = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
     ok = level_subsystem.save_current_level()

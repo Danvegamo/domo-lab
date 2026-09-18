@@ -1596,7 +1596,10 @@ for nombre, texto, color, hijos in CAJAS:
     if not nodos:
         continue
     try:
-        caja = base.create(annotateCOMP, nombre)
+        # Sin nombre al crear y sin flag utility: en TD 2025.32460 un Annotate
+        # COMP creado con nombre, o con utility encendido, se autodestruye unos
+        # frames despues. Se renombra al final.
+        caja = base.create(annotateCOMP)
         x0 = min(o.nodeX for o in nodos) - PAD_X
         y0 = min(o.nodeY for o in nodos) - PAD_Y
         x1 = max(o.nodeX + max(o.nodeWidth, ANCHO_NODO) for o in nodos) + PAD_X
@@ -1607,7 +1610,7 @@ for nombre, texto, color, hijos in CAJAS:
         caja.par.Backcolorr, caja.par.Backcolorg, caja.par.Backcolorb = color
         caja.par.Backcoloralpha = 0.85
         setpar_any(caja, ['layerzone'], ['belowgrid', 'below grid'], 'Layer Zone')
-        caja.par.utility = True     # no cocina, no aparece en el orden de cook
+        caja.name = nombre
     except Exception as e:
         print('[VIDEO_DOME] sin caja %s: %s' % (nombre, e))
 

@@ -50,7 +50,7 @@ funcionar. El script solo hace falta para reconstruirlo o cambiarlo.
 ## 2. Estructura
 
 ```
-DOMO                          COMP raíz, atajo parent.DOMO, páginas Domo, Mapping y Salidas
+DOMO                          COMP raíz, atajo parent.DOMO, páginas Domo, 16:9, Mapping y Salidas
   IN_360                      video 360 equirectangular (+ costura opcional)
   IN_180                      domemaster fisheye, VR180 mono o VR180 lado a lado
   IN_169                      video plano sobre pantallas en la cúpula (VIDEO_DOME adentro)
@@ -226,13 +226,57 @@ tabla entera. Las versiones con nombre (`video_dome/versiones/*.json`:
 parámetros más la tabla. Los momentos (página **Momentos**) atan un punto de la
 película a un montaje y funden entre ellos mientras corre.
 
+**Se maneja desde la página 16:9 de DOMO.** Lo que importa del video plano está
+en la raíz, al mismo nivel que los selectores de 360 y 180, y no hace falta
+entrar a `IN_169/VIDEO_DOME` para el trabajo de todos los días. La página tiene
+cuatro bloques:
+
+| Bloque | Parámetros de DOMO | Van a |
+|---|---|---|
+| Fuente | `Vactivo`, `Vfuente` (archivo / ndi / spout), `Vmoviefile`, `Vndinombre`, `Vspoutnombre`, `Vplay` | `IN_169.Activo` y `Fuente`, `Moviefile`, `Ndinombre`, `Spoutnombre`, `Play` de VIDEO_DOME |
+| Montaje | `Vtemplate`, `Vyawglobal` | `Template`, `Yawglobal` |
+| Pantalla elegida | `Vscreen`, `Vsmode` (forma: plana, curva, banda, túnel, cilindro), `Vsyaw`, `Vspitch`, `Vshfov`, `Vsautovfov`, `Vsvfov`, `Vsrep`, `Vsrepspan`, `Vsblend` | `Screen`, `Smode`, `Syaw`, `Spitch`, `Shfov`, `Sautovfov`, `Svfov`, `Srep`, `Srepspan`, `Sblend` |
+| Fondo | `Vbg`, `Vbgblur`, `Vbgbright`, `Vbgsat`, `Vbgzoom`, `Vbgtile`, `Vbgyaw`, `Vbgfollow` | `Bg`, `Bgblur`, `Bgbright`, `Bgsat`, `Bgzoom`, `Bgtile`, `Bgyaw`, `Bgfollow` |
+
+Los parámetros de abajo están en modo **Bind** contra los de arriba
+(`parent.DOMO.par.Vtemplate`, etc.), y el bind funciona en los dos sentidos:
+mover un valor en la página 16:9 lo mueve en VIDEO_DOME, y cuando VIDEO_DOME
+escribe sus propios parámetros (al aplicar un template o al elegir otra fila con
+`Vscreen`) la página 16:9 se pone al día sola. El watcher de VIDEO_DOME ve el
+cambio de `Template` aunque llegue por el bind, así que **elegir un template en
+`Vtemplate` lo aplica de inmediato**, sin el pulse `Applytemplate`. Hay que
+tenerlo presente: un template pisa la tabla `screens` entera, y las ediciones de
+pantalla que no se hayan guardado como versión se pierden.
+
+Los parámetros de pantalla editan una sola fila, la que dice `Vscreen`. En un
+template de varias filas (por ejemplo `sala_corona`: la corona de seis copias y
+la cenital) se elige la fila y se ajustan su azimut, su elevación, su ancho, su
+forma, cuántas copias hace en anillo y el arco que ocupan, que es lo que
+controla la separación entre copias. Lo fino (recortes, espejo, opacidad,
+animación, momentos, versiones, el editor con el mouse, las guías) sigue en las
+páginas de VIDEO_DOME. La caja `nota_169` en la red de DOMO resume todo esto.
+
+Reconstruir DOMO conserva la página 16:9 y el montaje. El constructor restaura
+primero VIDEO_DOME, copia sus valores hacia arriba y solo entonces pone los
+binds, para que al enlazar no cambie nada. Como el watcher de VIDEO_DOME
+reacciona unos frames después de un cambio, restaurar `Template` alcanzaba a
+reaplicar el template sobre la tabla recién restaurada y se perdían las
+ediciones de pantalla; por eso el constructor vuelve a escribir la tabla
+`screens` con un `run()` diferido (15 frames) y relee la fila elegida. Probado
+el 18 de septiembre de 2026: una elevación editada a mano sobrevive a dos
+reconstrucciones seguidas, y después `Vtemplate` sigue aplicando templates.
+Las capturas `05_Preview/pruebas/td_169_sala_corona.png` y
+`td_169_anillo_doble.png` son `out_domo` con cada template elegido desde la
+página 16:9 y una imagen de prueba 16:9 como archivo.
+
 `video_dome/web/estudio_pantallas.html` es un estudio en WebGL2, un solo archivo
 sin dependencias, que dibuja el domemaster con el mismo mapeo del shader: se
 mueven las pantallas con el mouse, se comparan montajes y se copia la tabla
 lista para pegar en `screens`. Sirve para diseñar un montaje sin abrir
 TouchDesigner.
 
-**La fuente.** El parámetro `Fuente` de `VIDEO_DOME` (página Video) elige entre
+**La fuente.** El parámetro `Fuente` de `VIDEO_DOME` (página Video, o `Vfuente`
+en la página 16:9 de DOMO) elige entre
 un archivo (`Moviefile`), una fuente NDI de la red (`Ndinombre`) o un sender
 Spout de la misma máquina (`Spoutnombre`). Así el video plano puede venir de
 otro programa, de otro equipo o de un archivo.
@@ -247,10 +291,11 @@ luego por `domo` como cualquier otra fuente.
 
 | Parámetro (página Video169) | Qué hace |
 |---|---|
-| `Activo` | apagado, entrega negro y no cocina |
-| `Donde` | solo lectura: recuerda que el montaje se edita en `IN_169/VIDEO_DOME` |
+| `Activo` | apagado, entrega negro y no cocina; en modo Bind contra `DOMO.Vactivo` |
+| `Donde` | solo lectura: recuerda que lo principal se edita en la página 16:9 de DOMO y el resto en `IN_169/VIDEO_DOME` |
 
-Páginas de `VIDEO_DOME`, con sus parámetros tal como los crea `build_video_dome.py`:
+Páginas de `VIDEO_DOME`, con sus parámetros tal como los crea `build_video_dome.py`
+(los que aparecen en la página 16:9 de DOMO quedan en modo Bind):
 
 | Página | Parámetros |
 |---|---|
@@ -307,7 +352,8 @@ defecto y por `out1`, que es lo que graban `grabar` y `ndi_domo`.
    se aplica como `rx = 90 - Pitch`: un Pitch positivo inclina el contenido del
    frente hacia el cénit. El fov es el del contenido: con `Fovauto` encendido
    (por defecto) es el del modelo de sala, 180 para `domo180` (media esfera,
-   planetario), 90 y 45 para los casquetes, `Fovcustom` para `custom`; con
+   planetario) y también 180 para `domo90` y `domo45`, que son pantallas de media
+   esfera inclinadas, y `Fovcustom` para `custom`; con
    `Fovauto` apagado es `Fovcontenido`. La resolución es la de `Res`, cuadrada.
 3. **`mapping`** (Transform TOP, unidades en fracción, extensión `zero`) es el
    ajuste que en una sala real se hace en vivo sobre el servidor del domo:
@@ -353,7 +399,7 @@ Parámetros del COMP raíz:
 | Página Domo | Qué hace |
 |---|---|
 | `Fuente` | `v360`, `v180`, `v169`, `patron` |
-| `Modelo` | `domo180`, `domo90`, `domo45`, `custom` |
+| `Modelo` | `domo180` (planetario), `domo90` (sala de pie con barandas, pantalla de 180 inclinada 45°), `domo45` (tipo Maloka, pantalla de 180 inclinada 27°), `custom`; los tres primeros usan FOV 180 |
 | `Fovcustom` | FOV en grados si el modelo es `custom` (10 a 360) |
 | `Yaw` | girar el contenido en azimut (±180) |
 | `Pitch` | inclinar el contenido hacia el cénit (±90) |
@@ -430,8 +476,11 @@ queda en el centro del domemaster y la costura del lienzo va a parar detrás.
   corrimiento el frente queda a 90 grados. La receta es la misma en
   `para_unreal` y en `IN_169`.
 - **El modelo de sala es el FOV del fisheye.** `domo180` es media esfera;
-  `domo90` y `domo45` son casquetes; el resto de la esfera no entra en el
-  círculo. `para_unreal` usa siempre el fov de la sala, así que la sala VR
+  `domo90` y `domo45` también son pantallas de media esfera (180°), solo que
+  inclinadas 45° y 27°; la inclinación está en la geometría de la sala, así que
+  los tres usan FOV 180 y no hace falta tocar `Pitch` (ver
+  `05_Modelos_de_sala.md`). Con `custom`, lo que pase de `Fovcustom` no entra
+  en el círculo. `para_unreal` usa siempre el fov de la sala, así que la sala VR
   recibe exactamente lo que cubre el modelo; si `domo` trabaja con más grados
   (`Fovauto` apagado), ese contenido extra entra en la cúpula por el borde.
 - **Annotate COMP que se autodestruye.** En TD 2025.32460, si el Annotate COMP
@@ -459,7 +508,12 @@ queda en el centro del domemaster y la costura del lienzo va a parar detrás.
   Select TOP apuntado a `VIDEO_DOME/out_dome`; no está cableado por conector.
 - **VIDEO_DOME no conserva solo su montaje** cuando corre `build_domo.py`,
   porque DOMO entero se destruye antes; es `build_domo.py` el que copia sus
-  parámetros y sus tablas y los reescribe al final.
+  parámetros y sus tablas y los reescribe al final. La tabla `screens` se
+  escribe dos veces: en el momento y de nuevo unos frames después, porque el
+  watcher reaplica el template restaurado con retraso (ver 5.3).
+- **Los Annotate COMP de VIDEO_DOME se perdían.** `build_video_dome.py` los
+  creaba con nombre y con `utility` encendido, y desaparecían solos. Ahora se
+  crean sin nombre, sin `utility`, y se renombran al final, como en `caja()`.
 - **Resolución.** El domemaster viene en 2048 porque 4096 con todas las capas
   de VIDEO_DOME encendidas llena la memoria de la GPU. Subir `Res` solo para
   grabar.

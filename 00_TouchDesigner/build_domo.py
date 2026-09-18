@@ -13,7 +13,7 @@ volver a correr tras editar este archivo sin perder la configuracion.
 
 Estructura que deja:
 
-    DOMO                      COMP raiz, atajo `parent.DOMO`, paginas Domo y Salidas
+    DOMO                      COMP raiz, atajo `parent.DOMO`, paginas Domo, 16:9, Mapping y Salidas
       IN_360                  video 360 equirectangular (+ costura opcional)
       IN_180                  domemaster fisheye, VR180 mono o VR180 lado a lado
       IN_169                  video plano (16:9 o cualquier aspecto) sobre una pantalla en la cupula
@@ -100,8 +100,9 @@ def lienzo(o):
     expr(o, 'resolutionh', 'parent.DOMO.par.Ancho // 2')
 
 
-def caja(padre, nombre, titulo, cuerpo, nodos, color=(0.16, 0.18, 0.22), pad=(60, 60), extra_arriba=0):
+def caja(padre, nombre, titulo, cuerpo, nodos, color=(0.16, 0.18, 0.22), pad=(60, 60), extra_arriba=0, rect=None):
     """Annotate COMP que encierra `nodos` con un titulo y un texto explicativo.
+    Con `rect` = (x0, y0, x1, y1) la caja va ahi y no encierra nada: es una nota.
 
     Trampas medidas en TD 2025.32460: si el Annotate COMP se crea con nombre
     (`create(annotateCOMP, 'x')`) o se le enciende el flag `utility`, se
@@ -113,10 +114,13 @@ def caja(padre, nombre, titulo, cuerpo, nodos, color=(0.16, 0.18, 0.22), pad=(60
     if viejo:
         viejo.destroy()
     c = padre.create(annotateCOMP)
-    x0 = min(n.nodeX for n in nodos) - pad[0]
-    y0 = min(n.nodeY for n in nodos) - pad[1]
-    x1 = max(n.nodeX + max(n.nodeWidth, 160) for n in nodos) + pad[0]
-    y1 = max(n.nodeY + max(n.nodeHeight, 100) for n in nodos) + pad[1] + extra_arriba
+    if rect is not None:
+        x0, y0, x1, y1 = rect
+    else:
+        x0 = min(n.nodeX for n in nodos) - pad[0]
+        y0 = min(n.nodeY for n in nodos) - pad[1]
+        x1 = max(n.nodeX + max(n.nodeWidth, 160) for n in nodos) + pad[0]
+        y1 = max(n.nodeY + max(n.nodeHeight, 100) for n in nodos) + pad[1] + extra_arriba
     c.nodeX, c.nodeY = x0, y0
     c.nodeWidth, c.nodeHeight = x1 - x0, y1 - y0
     setpar(c, 'Titletext', titulo)
@@ -229,7 +233,8 @@ menu(pg, 'Fuente', 'Fuente al aire',
       'Patron de prueba (calibrar la sala)'], 0)
 menu(pg, 'Modelo', 'Modelo de sala',
      ['domo180', 'domo90', 'domo45', 'custom'],
-     ['Domo 180 (media esfera, planetario)', 'Domo 90 (casquete)', 'Domo 45 (casquete chico)', 'Otro FOV'], 0)
+     ['Domo 180 (media esfera, planetario)', 'Sala 90: de pie con barandas (pantalla 180, inclinada 45)',
+      'Sala 45: tipo Maloka (pantalla 180, inclinada 27)', 'Otro FOV'], 0)
 flotante(pg, 'Fovcustom', 'FOV si el modelo es Otro (grados)', 120, 10, 360)
 flotante(pg, 'Yaw', 'Girar el contenido en azimut (grados)', 0, -180, 180)
 flotante(pg, 'Pitch', 'Inclinar el contenido hacia el cenit (grados)', 0, -90, 90)
@@ -391,7 +396,7 @@ M.viewer = True
 pm = M.appendCustomPage('Video169')
 toggle(pm, 'Activo', 'Activo', True)
 p = pm.appendStr('Donde', label='El montaje se edita en')[0]
-p.val = 'IN_169/VIDEO_DOME: paginas Video, Montaje, Pantalla, Espacio, Versiones'
+p.val = 'DOMO, pagina 16:9 (lo principal); el resto en IN_169/VIDEO_DOME'
 p.readOnly = True
 
 ns = dict(globals())
@@ -422,10 +427,95 @@ caja(M, 'nota', 'IN_169: video plano sobre pantallas en la cupula',
      'VIDEO_DOME es el sistema de pantallas de Domo_Pantallas: el shader recorre el domemaster y '
      'pregunta que pantalla cubre cada pixel; las pantallas son filas de la tabla screens. Ahi '
      'estan los templates (una al frente, sala de 4, corona cosida, anillos, cilindro, mosaico), '
-     'el fondo desenfocado, el editor con el mouse y las versiones guardadas. Su par Fuente elige '
-     'archivo, NDI o Spout. Su domemaster (frente abajo) se pasa al lienzo equirectangular igual '
-     'que para_unreal.',
+     'el fondo desenfocado, el editor con el mouse y las versiones guardadas. Lo principal '
+     '(template, fuente, pantallas, fondo) se maneja desde la pagina 16:9 de DOMO. Su domemaster '
+     '(frente abajo) se pasa al lienzo equirectangular igual que para_unreal.',
      [vd, sel_vd, a_equi, giro169, M.op('negro'), M.op('activo'), M.op('out1')], (0.22, 0.17, 0.13))
+
+# ----------------------------------------------- pagina 16:9 en la raiz DOMO
+#
+# El 16:9 se edita al mismo nivel que 360 y 180: la pagina 16:9 de DOMO tiene
+# los pars que importan en una funcion, y los de VIDEO_DOME quedan en modo Bind
+# apuntando a ellos (parent.DOMO.par.X). El bind va en los dos sentidos: mover
+# un par arriba lo mueve abajo, y cuando VIDEO_DOME escribe sus pars (al
+# aplicar un template o elegir otra pantalla) la pagina 16:9 se pone al dia.
+# El watcher de VIDEO_DOME ve el cambio de Template aunque venga por el bind,
+# asi que el template se aplica solo, sin pulso.
+# Los binds se ponen al final del build, despues de restaurar la configuracion
+# (ver mas abajo), para que reconstruir no dispare un template y pise la tabla.
+#
+# (nombre en DOMO, par en VIDEO_DOME o None para IN_169, etiqueta)
+V169 = [
+    ('Vactivo', None, 'Activo', 'Modulo 16:9 activo'),
+    ('Vfuente', 'Fuente', None, 'Fuente del video plano'),
+    ('Vmoviefile', 'Moviefile', None, 'Archivo de video'),
+    ('Vndinombre', 'Ndinombre', None, 'Fuente NDI (nombre)'),
+    ('Vspoutnombre', 'Spoutnombre', None, 'Sender Spout (nombre)'),
+    ('Vplay', 'Play', None, 'Reproducir'),
+    ('Vtemplate', 'Template', None, 'Template (se aplica al elegirlo, pisa la tabla)'),
+    ('Vyawglobal', 'Yawglobal', None, 'Girar todo el montaje (grados)'),
+    ('Vscreen', 'Screen', None, 'Pantalla que se edita (fila de la tabla)'),
+    ('Vsmode', 'Smode', None, 'Forma / curvatura'),
+    ('Vsyaw', 'Syaw', None, 'Azimut (grados)'),
+    ('Vspitch', 'Spitch', None, 'Elevacion (grados)'),
+    ('Vshfov', 'Shfov', None, 'Ancho angular (grados)'),
+    ('Vsautovfov', 'Sautovfov', None, 'Alto automatico (aspecto del video)'),
+    ('Vsvfov', 'Svfov', None, 'Alto angular (grados)'),
+    ('Vsrep', 'Srep', None, 'Copias en anillo'),
+    ('Vsrepspan', 'Srepspan', None, 'Arco que ocupan las copias (separacion, grados)'),
+    ('Vsblend', 'Sblend', None, 'Costura entre copias (grados)'),
+    ('Vbg', 'Bg', None, 'Fondo'),
+    ('Vbgblur', 'Bgblur', None, 'Fondo: desenfoque'),
+    ('Vbgbright', 'Bgbright', None, 'Fondo: brillo'),
+    ('Vbgsat', 'Bgsat', None, 'Fondo: saturacion'),
+    ('Vbgzoom', 'Bgzoom', None, 'Fondo: zoom del lavado (>= 1.78)'),
+    ('Vbgtile', 'Bgtile', None, 'Fondo: repeticiones del envolvente'),
+    ('Vbgyaw', 'Bgyaw', None, 'Fondo: girar (grados)'),
+    ('Vbgfollow', 'Bgfollow', None, 'Fondo: sigue el giro global'),
+]
+CABECERAS = {'Vactivo': 'Fuente', 'Vtemplate': 'Montaje',
+             'Vscreen': 'Pantalla elegida', 'Vbg': 'Fondo'}
+
+
+M169 = M
+
+
+def destino169(vpar, mpar):
+    return getattr(M169.op('VIDEO_DOME').par, vpar) if vpar else getattr(M169.par, mpar)
+
+
+p169 = D.appendCustomPage('16:9')
+for nombre, vpar, mpar, etiqueta in V169:
+    if nombre in CABECERAS:
+        p169.appendHeader('H' + nombre[1:], label=CABECERAS[nombre])
+    src = destino169(vpar, mpar)
+    estilo = src.style
+    if estilo == 'Menu':
+        p = p169.appendMenu(nombre, label=etiqueta)[0]
+        p.menuNames = list(src.menuNames)
+        p.menuLabels = list(src.menuLabels)
+    elif estilo == 'File':
+        p = p169.appendFile(nombre, label=etiqueta)[0]
+    elif estilo == 'Str':
+        p = p169.appendStr(nombre, label=etiqueta)[0]
+    elif estilo == 'Toggle':
+        p = p169.appendToggle(nombre, label=etiqueta)[0]
+    elif estilo == 'Int':
+        p = p169.appendInt(nombre, label=etiqueta)[0]
+    else:
+        p = p169.appendFloat(nombre, label=etiqueta)[0]
+    if estilo in ('Float', 'Int'):
+        p.normMin, p.normMax = src.normMin, src.normMax
+        if src.clampMin:
+            p.min, p.clampMin = src.min, True
+        if src.clampMax:
+            p.max, p.clampMax = src.max, True
+    p.val = src.eval()
+    try:
+        p.default = src.default
+    except Exception:
+        pass
+D.sortCustomPages('Domo', '16:9', 'Mapping', 'Salidas')
 
 # ------------------------------------------------------------------- AUDIO
 
@@ -531,7 +621,9 @@ wire(equi, giro)
 # circulo; para_unreal (y el servidor del domo real) lo leen como si fuera el
 # FOV de la sala, asi que en la cupula de 180 se ve tambien lo que estaba
 # hasta 25 grados bajo el horizonte: mas espacio para lo que se creo.
-FOV_SALA = "[180, 90, 45, parent().par.Fovcustom][parent().par.Modelo.menuIndex]"
+# Las salas 90 y 45 son pantallas de 180 grados inclinadas; la inclinacion va
+# en la geometria de la sala, no en el Pitch.
+FOV_SALA = "[180, 180, 180, parent().par.Fovcustom][parent().par.Modelo.menuIndex]"
 domo = mk(D, projectionTOP, 'domo', 400, 250, input='equirectangular', output='fisheye', ry=90, rz=0)
 expr(domo, 'fov', "(%s) if parent().par.Fovauto else parent().par.Fovcontenido" % FOV_SALA)
 expr(domo, 'rx', '90 - parent().par.Pitch')
@@ -617,6 +709,17 @@ caja(D, 'nota_modulos', 'Modulos de entrada',
      'a la salida; los demas no gastan GPU aunque esten activos.',
      [D.op('IN_360'), D.op('IN_180'), D.op('IN_169'), D.op('AUDIO')], (0.14, 0.14, 0.18))
 
+caja(D, 'nota_169', 'Pagina 16:9: el video plano desde aqui',
+     'El 16:9 se maneja desde la pagina 16:9 de DOMO, igual que 360 y 180 desde Domo. Template '
+     'cambia el montaje de pantallas al elegirlo (sala_corona, anillo_doble, sala_4...), sin pulso; '
+     'ojo que pisa la tabla de pantallas. Fuente elige archivo, NDI o Spout. Pantalla elegida '
+     'dice que fila se edita: azimut, elevacion, ancho, forma (plana, curva, banda, tunel, cilindro), '
+     'copias en anillo y el arco que ocupan (la separacion). Fondo: modo, desenfoque, brillo, zoom. '
+     'Esos pars de IN_169/VIDEO_DOME estan en modo Bind contra estos, en los dos sentidos: lo que '
+     'se mueve aqui se mueve alla y viceversa, y reconstruir DOMO lo conserva. Lo fino (recortes, '
+     'espejo, animacion, momentos, versiones, editor con el mouse) sigue en VIDEO_DOME.',
+     [], (0.26, 0.19, 0.12), rect=(-1200, -150, -720, 450))
+
 # ------------------------------------------------- reescribir la configuracion
 
 restaurados = 0
@@ -637,6 +740,20 @@ if guardado:
 
 vd = D.op('IN_169/VIDEO_DOME')
 if vd is not None and (vd_previo['pars'] or vd_previo['screens']):
+    # El watcher de VIDEO_DOME reacciona unos frames DESPUES del cambio: al
+    # restaurar Template (cine -> el que habia) aplica ese template sobre la
+    # tabla recien restaurada y se pierden las ediciones de pantalla (medido:
+    # apagar el watcher mientras tanto no alcanza, dispara al volver a
+    # prenderlo). Por eso la tabla se vuelve a escribir despues, con un run
+    # diferido, y se releen los pars de la pantalla elegida.
+    if vd_previo['screens']:
+        vd.store('_tabla_restaurar', vd_previo['screens'])
+        run("vd = op(%r)\n"
+            "t = vd.fetch('_tabla_restaurar', None, search=False) if vd is not None else None\n"
+            "if t:\n"
+            "    vd.op('screens').text = t\n"
+            "    vd.unstore('_tabla_restaurar')\n"
+            "    vd.op('watcher').module.leer_fila(vd)\n" % vd.path, delayFrames=15)
     n = 0
     for nombre, (tipo, valor) in vd_previo['pars'].items():
         p = getattr(vd.par, nombre, None)
@@ -654,5 +771,20 @@ if vd is not None and (vd_previo['pars'] or vd_previo['screens']):
         if vd_previo[t] and vd.op(t) is not None:
             vd.op(t).text = vd_previo[t]
     print('[DOMO] VIDEO_DOME: %d pars y sus tablas restaurados' % n)
+
+# Pagina 16:9: primero se copian los valores de abajo hacia arriba (VIDEO_DOME
+# ya tiene su configuracion restaurada y la tabla que le corresponde), y solo
+# despues se ponen los binds. Como los dos lados ya valen lo mismo, el bind no
+# cambia nada y el watcher no vuelve a aplicar el template sobre la tabla.
+for nombre, vpar, mpar, etiqueta in V169:
+    abajo = destino169(vpar, mpar)
+    arriba = getattr(D.par, nombre)
+    try:
+        arriba.val = abajo.eval()
+        abajo.bindExpr = 'parent.DOMO.par.' + nombre
+        abajo.mode = ParMode.BIND
+    except Exception as e:
+        print('[DOMO] no se pudo enlazar %s -> %s.%s: %s' % (nombre, abajo.owner.path, abajo.name, e))
+print('[DOMO] pagina 16:9: %d pars enlazados a IN_169/VIDEO_DOME' % len(V169))
 
 print('[DOMO] construido: %s, %d operadores' % (D.path, len(D.findChildren())))
