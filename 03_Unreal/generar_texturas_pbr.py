@@ -123,10 +123,15 @@ def tela(rng):
     tejido = np.maximum(trama * 0.9, urdimbre * 0.6)
     pelusa = ruido(rng, 90)
     motas = ruido(rng, 6, pendiente=0.5)
-    altura = norm01(tejido * 0.7 + pelusa * 0.12)
-    valor = 0.46 + 0.05 * (tejido - 0.5) + 0.025 * pelusa + 0.035 * motas
-    rug = np.clip(0.86 + 0.06 * pelusa - 0.05 * norm01(motas), 0.7, 1.0)
-    guardar("Tela", gris(valor), rug, normal_desde_altura(altura, 1.2))
+    # Pelo cepillado (tipo terciopelo de cine): vetas largas que atrapan o pierden
+    # la luz segun hacia donde se peino el pelo, y desgaste en manchas grandes.
+    peine = ruido(rng, 16, anis_x=0.30, anis_y=1.7)
+    desgaste = ruido(rng, 4, pendiente=0.8)
+    altura = norm01(tejido * 0.65 + pelusa * 0.10 + peine * 0.22)
+    valor = (0.44 + 0.055 * (tejido - 0.5) + 0.02 * pelusa + 0.03 * motas
+             + 0.06 * peine + 0.03 * desgaste)
+    rug = np.clip(0.74 + 0.10 * (0.5 - norm01(peine)) + 0.05 * norm01(desgaste) + 0.03 * pelusa, 0.55, 1.0)
+    guardar("Tela", gris(valor), rug, normal_desde_altura(altura, 2.0))
 
 
 def madera(rng):

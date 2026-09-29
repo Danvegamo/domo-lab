@@ -37,7 +37,11 @@
 
 param(
     [double]$Fov = 180,
-    [string]$ScriptName = "importar_sala.py"
+    [string]$ScriptName = "importar_sala.py",
+    # actualizar (por defecto): reimporta las mallas y conserva los actores del nivel
+    # con sus ajustes; reconstruir: vacia el nivel y lo arma de cero (como antes).
+    [ValidateSet("actualizar", "reconstruir")]
+    [string]$Modo = "actualizar"
 )
 
 $ErrorActionPreference = "Stop"
@@ -67,8 +71,9 @@ if (-not (Test-Path $CarpetaLogs)) {
 
 # Los dos scripts de Python leen el modelo de sala de esta variable.
 $env:DOMO_FOV = "$Fov"
+$env:DOMO_MODO = "$Modo"
 
-Write-Host "Corriendo $ScriptName de forma headless (modelo FOV $Fov)..."
+Write-Host "Corriendo $ScriptName de forma headless (modelo FOV $Fov, modo $Modo)..."
 Write-Host "  Editor:   $UnrealEditorCmd"
 Write-Host "  Proyecto: $Proyecto"
 Write-Host "  Script:   $Script"

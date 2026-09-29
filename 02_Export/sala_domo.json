@@ -1,0 +1,3178 @@
+{
+ "version": 2,
+ "generador": "01_Blender/generar_sala_domo.py",
+ "sala": {
+  "modelo": "180",
+  "radio_m": 11.5,
+  "altura_pared_m": 3.0,
+  "tarima": {
+   "radio_m": 1.25,
+   "alto_m": 1.0
+  },
+  "total_butacas": 241,
+  "modulos": 4,
+  "filas": 5,
+  "pasillos": 4,
+  "ancho_pasillo_m": 1.3,
+  "angulo_control_deg": 34.876
+ },
+ "mallas_base": [
+  "SM_Piso",
+  "SM_Muro",
+  "SM_Listones",
+  "SM_LucesMuro",
+  "SM_Domo",
+  "SM_Tarima"
+ ],
+ "material_por_malla": {
+  "SM_Muro": "M_Muro",
+  "SM_Listones": "M_Madera",
+  "SM_Piso": "M_Piso",
+  "SM_Tarima": "M_Tarima",
+  "SM_LucesMuro": "M_LuzMuro"
+ },
+ "piezas": [
+  {
+   "nombre": "SM_ControlPiso",
+   "malla": "SM_ControlPiso",
+   "pos_m": [
+    -10.0,
+    0.0,
+    0.0
+   ],
+   "yaw_deg": -0.0,
+   "material": "M_Control",
+   "carpeta": "Control"
+  },
+  {
+   "nombre": "SM_Consola",
+   "malla": "SM_Consola",
+   "pos_m": [
+    -9.9,
+    0.0,
+    0.0
+   ],
+   "yaw_deg": -0.0,
+   "material": "M_Control",
+   "carpeta": "Control"
+  },
+  {
+   "nombre": "SM_Monitores",
+   "malla": "SM_Monitores",
+   "pos_m": [
+    -9.9,
+    0.0,
+    0.0
+   ],
+   "yaw_deg": -0.0,
+   "material": "M_Control",
+   "carpeta": "Control",
+   "monitores": [
+    {
+     "local_m": [
+      -0.268,
+      -1.3,
+      1.16
+     ],
+     "ancho_m": 1.09,
+     "alto_m": 0.6
+    },
+    {
+     "local_m": [
+      -0.268,
+      0.0,
+      1.16
+     ],
+     "ancho_m": 1.09,
+     "alto_m": 0.6
+    },
+    {
+     "local_m": [
+      -0.268,
+      1.3,
+      1.16
+     ],
+     "ancho_m": 1.09,
+     "alto_m": 0.6
+    }
+   ]
+  },
+  {
+   "nombre": "SM_Rack",
+   "malla": "SM_Rack",
+   "pos_m": [
+    -11.05,
+    0.0,
+    0.0
+   ],
+   "yaw_deg": -0.0,
+   "material": "M_Control",
+   "carpeta": "Control"
+  },
+  {
+   "nombre": "SM_Antepecho",
+   "malla": "SM_Antepecho",
+   "pos_m": [
+    -8.9,
+    0.0,
+    0.0
+   ],
+   "yaw_deg": -0.0,
+   "material": "M_Control",
+   "carpeta": "Control"
+  }
+ ],
+ "instancias": {
+  "SM_Butaca": {
+   "material": "M_Butaca",
+   "carpeta": "Butacas",
+   "prefijo": "Butaca",
+   "items": [
+    {
+     "nombre": "Butaca_M1_F01_A001",
+     "modulo": 1,
+     "fila": 1,
+     "asiento": 1,
+     "pos_m": [
+      3.1593,
+      -1.7259,
+      0.0
+     ],
+     "yaw_deg": 151.352
+    },
+    {
+     "nombre": "Butaca_M1_F01_A002",
+     "modulo": 1,
+     "fila": 1,
+     "asiento": 2,
+     "pos_m": [
+      3.4018,
+      -1.1779,
+      0.0
+     ],
+     "yaw_deg": 160.901
+    },
+    {
+     "nombre": "Butaca_M1_F01_A003",
+     "modulo": 1,
+     "fila": 1,
+     "asiento": 3,
+     "pos_m": [
+      3.5501,
+      -0.5972,
+      0.0
+     ],
+     "yaw_deg": 170.451
+    },
+    {
+     "nombre": "Butaca_M1_F01_A004",
+     "modulo": 1,
+     "fila": 1,
+     "asiento": 4,
+     "pos_m": [
+      3.6,
+      0.0,
+      0.0
+     ],
+     "yaw_deg": 180.0
+    },
+    {
+     "nombre": "Butaca_M1_F01_A005",
+     "modulo": 1,
+     "fila": 1,
+     "asiento": 5,
+     "pos_m": [
+      3.5501,
+      0.5972,
+      0.0
+     ],
+     "yaw_deg": -170.451
+    },
+    {
+     "nombre": "Butaca_M1_F01_A006",
+     "modulo": 1,
+     "fila": 1,
+     "asiento": 6,
+     "pos_m": [
+      3.4018,
+      1.1779,
+      0.0
+     ],
+     "yaw_deg": -160.901
+    },
+    {
+     "nombre": "Butaca_M1_F01_A007",
+     "modulo": 1,
+     "fila": 1,
+     "asiento": 7,
+     "pos_m": [
+      3.1593,
+      1.7259,
+      0.0
+     ],
+     "yaw_deg": -151.352
+    },
+    {
+     "nombre": "Butaca_M1_F02_A001",
+     "modulo": 1,
+     "fila": 2,
+     "asiento": 1,
+     "pos_m": [
+      4.0604,
+      -2.5599,
+      0.0
+     ],
+     "yaw_deg": 147.771
+    },
+    {
+     "nombre": "Butaca_M1_F02_A002",
+     "modulo": 1,
+     "fila": 2,
+     "asiento": 2,
+     "pos_m": [
+      4.3479,
+      -2.0336,
+      0.0
+     ],
+     "yaw_deg": 154.933
+    },
+    {
+     "nombre": "Butaca_M1_F02_A003",
+     "modulo": 1,
+     "fila": 2,
+     "asiento": 3,
+     "pos_m": [
+      4.5675,
+      -1.4757,
+      0.0
+     ],
+     "yaw_deg": 162.095
+    },
+    {
+     "nombre": "Butaca_M1_F02_A004",
+     "modulo": 1,
+     "fila": 2,
+     "asiento": 4,
+     "pos_m": [
+      4.7159,
+      -0.8947,
+      0.0
+     ],
+     "yaw_deg": 169.257
+    },
+    {
+     "nombre": "Butaca_M1_F02_A005",
+     "modulo": 1,
+     "fila": 2,
+     "asiento": 5,
+     "pos_m": [
+      4.7906,
+      -0.2998,
+      0.0
+     ],
+     "yaw_deg": 176.419
+    },
+    {
+     "nombre": "Butaca_M1_F02_A006",
+     "modulo": 1,
+     "fila": 2,
+     "asiento": 6,
+     "pos_m": [
+      4.7906,
+      0.2998,
+      0.0
+     ],
+     "yaw_deg": -176.419
+    },
+    {
+     "nombre": "Butaca_M1_F02_A007",
+     "modulo": 1,
+     "fila": 2,
+     "asiento": 7,
+     "pos_m": [
+      4.7159,
+      0.8947,
+      0.0
+     ],
+     "yaw_deg": -169.257
+    },
+    {
+     "nombre": "Butaca_M1_F02_A008",
+     "modulo": 1,
+     "fila": 2,
+     "asiento": 8,
+     "pos_m": [
+      4.5675,
+      1.4757,
+      0.0
+     ],
+     "yaw_deg": -162.095
+    },
+    {
+     "nombre": "Butaca_M1_F02_A009",
+     "modulo": 1,
+     "fila": 2,
+     "asiento": 9,
+     "pos_m": [
+      4.3479,
+      2.0336,
+      0.0
+     ],
+     "yaw_deg": -154.933
+    },
+    {
+     "nombre": "Butaca_M1_F02_A010",
+     "modulo": 1,
+     "fila": 2,
+     "asiento": 10,
+     "pos_m": [
+      4.0604,
+      2.5599,
+      0.0
+     ],
+     "yaw_deg": -147.771
+    },
+    {
+     "nombre": "Butaca_M1_F03_A001",
+     "modulo": 1,
+     "fila": 3,
+     "asiento": 1,
+     "pos_m": [
+      4.952,
+      -3.3879,
+      0.0
+     ],
+     "yaw_deg": 145.623
+    },
+    {
+     "nombre": "Butaca_M1_F03_A002",
+     "modulo": 1,
+     "fila": 3,
+     "asiento": 2,
+     "pos_m": [
+      5.2655,
+      -2.8766,
+      0.0
+     ],
+     "yaw_deg": 151.352
+    },
+    {
+     "nombre": "Butaca_M1_F03_A003",
+     "modulo": 1,
+     "fila": 3,
+     "asiento": 3,
+     "pos_m": [
+      5.5264,
+      -2.3365,
+      0.0
+     ],
+     "yaw_deg": 157.082
+    },
+    {
+     "nombre": "Butaca_M1_F03_A004",
+     "modulo": 1,
+     "fila": 3,
+     "asiento": 4,
+     "pos_m": [
+      5.732,
+      -1.7731,
+      0.0
+     ],
+     "yaw_deg": 162.811
+    },
+    {
+     "nombre": "Butaca_M1_F03_A005",
+     "modulo": 1,
+     "fila": 3,
+     "asiento": 5,
+     "pos_m": [
+      5.8804,
+      -1.192,
+      0.0
+     ],
+     "yaw_deg": 168.541
+    },
+    {
+     "nombre": "Butaca_M1_F03_A006",
+     "modulo": 1,
+     "fila": 3,
+     "asiento": 6,
+     "pos_m": [
+      5.97,
+      -0.599,
+      0.0
+     ],
+     "yaw_deg": 174.27
+    },
+    {
+     "nombre": "Butaca_M1_F03_A007",
+     "modulo": 1,
+     "fila": 3,
+     "asiento": 7,
+     "pos_m": [
+      6.0,
+      0.0,
+      0.0
+     ],
+     "yaw_deg": 180.0
+    },
+    {
+     "nombre": "Butaca_M1_F03_A008",
+     "modulo": 1,
+     "fila": 3,
+     "asiento": 8,
+     "pos_m": [
+      5.97,
+      0.599,
+      0.0
+     ],
+     "yaw_deg": -174.27
+    },
+    {
+     "nombre": "Butaca_M1_F03_A009",
+     "modulo": 1,
+     "fila": 3,
+     "asiento": 9,
+     "pos_m": [
+      5.8804,
+      1.192,
+      0.0
+     ],
+     "yaw_deg": -168.541
+    },
+    {
+     "nombre": "Butaca_M1_F03_A010",
+     "modulo": 1,
+     "fila": 3,
+     "asiento": 10,
+     "pos_m": [
+      5.732,
+      1.7731,
+      0.0
+     ],
+     "yaw_deg": -162.811
+    },
+    {
+     "nombre": "Butaca_M1_F03_A011",
+     "modulo": 1,
+     "fila": 3,
+     "asiento": 11,
+     "pos_m": [
+      5.5264,
+      2.3365,
+      0.0
+     ],
+     "yaw_deg": -157.082
+    },
+    {
+     "nombre": "Butaca_M1_F03_A012",
+     "modulo": 1,
+     "fila": 3,
+     "asiento": 12,
+     "pos_m": [
+      5.2655,
+      2.8766,
+      0.0
+     ],
+     "yaw_deg": -151.352
+    },
+    {
+     "nombre": "Butaca_M1_F03_A013",
+     "modulo": 1,
+     "fila": 3,
+     "asiento": 13,
+     "pos_m": [
+      4.952,
+      3.3879,
+      0.0
+     ],
+     "yaw_deg": -145.623
+    },
+    {
+     "nombre": "Butaca_M1_F04_A001",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 1,
+     "pos_m": [
+      5.8389,
+      -4.2127,
+      0.0
+     ],
+     "yaw_deg": 144.19
+    },
+    {
+     "nombre": "Butaca_M1_F04_A002",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 2,
+     "pos_m": [
+      6.1693,
+      -3.7121,
+      0.0
+     ],
+     "yaw_deg": 148.965
+    },
+    {
+     "nombre": "Butaca_M1_F04_A003",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 3,
+     "pos_m": [
+      6.4569,
+      -3.1857,
+      0.0
+     ],
+     "yaw_deg": 153.739
+    },
+    {
+     "nombre": "Butaca_M1_F04_A004",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 4,
+     "pos_m": [
+      6.6997,
+      -2.6372,
+      0.0
+     ],
+     "yaw_deg": 158.514
+    },
+    {
+     "nombre": "Butaca_M1_F04_A005",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 5,
+     "pos_m": [
+      6.8959,
+      -2.0704,
+      0.0
+     ],
+     "yaw_deg": 163.289
+    },
+    {
+     "nombre": "Butaca_M1_F04_A006",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 6,
+     "pos_m": [
+      7.0443,
+      -1.4892,
+      0.0
+     ],
+     "yaw_deg": 168.063
+    },
+    {
+     "nombre": "Butaca_M1_F04_A007",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 7,
+     "pos_m": [
+      7.1438,
+      -0.8977,
+      0.0
+     ],
+     "yaw_deg": 172.838
+    },
+    {
+     "nombre": "Butaca_M1_F04_A008",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 8,
+     "pos_m": [
+      7.1938,
+      -0.2999,
+      0.0
+     ],
+     "yaw_deg": 177.613
+    },
+    {
+     "nombre": "Butaca_M1_F04_A009",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 9,
+     "pos_m": [
+      7.1938,
+      0.2999,
+      0.0
+     ],
+     "yaw_deg": -177.613
+    },
+    {
+     "nombre": "Butaca_M1_F04_A010",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 10,
+     "pos_m": [
+      7.1438,
+      0.8977,
+      0.0
+     ],
+     "yaw_deg": -172.838
+    },
+    {
+     "nombre": "Butaca_M1_F04_A011",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 11,
+     "pos_m": [
+      7.0443,
+      1.4892,
+      0.0
+     ],
+     "yaw_deg": -168.063
+    },
+    {
+     "nombre": "Butaca_M1_F04_A012",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 12,
+     "pos_m": [
+      6.8959,
+      2.0704,
+      0.0
+     ],
+     "yaw_deg": -163.289
+    },
+    {
+     "nombre": "Butaca_M1_F04_A013",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 13,
+     "pos_m": [
+      6.6997,
+      2.6372,
+      0.0
+     ],
+     "yaw_deg": -158.514
+    },
+    {
+     "nombre": "Butaca_M1_F04_A014",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 14,
+     "pos_m": [
+      6.4569,
+      3.1857,
+      0.0
+     ],
+     "yaw_deg": -153.739
+    },
+    {
+     "nombre": "Butaca_M1_F04_A015",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 15,
+     "pos_m": [
+      6.1693,
+      3.7121,
+      0.0
+     ],
+     "yaw_deg": -148.965
+    },
+    {
+     "nombre": "Butaca_M1_F04_A016",
+     "modulo": 1,
+     "fila": 4,
+     "asiento": 16,
+     "pos_m": [
+      5.8389,
+      4.2127,
+      0.0
+     ],
+     "yaw_deg": -144.19
+    },
+    {
+     "nombre": "Butaca_M1_F05_A001",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 1,
+     "pos_m": [
+      6.7232,
+      -5.0357,
+      0.0
+     ],
+     "yaw_deg": 143.167
+    },
+    {
+     "nombre": "Butaca_M1_F05_A002",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 2,
+     "pos_m": [
+      7.0655,
+      -4.543,
+      0.0
+     ],
+     "yaw_deg": 147.26
+    },
+    {
+     "nombre": "Butaca_M1_F05_A003",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 3,
+     "pos_m": [
+      7.3717,
+      -4.0272,
+      0.0
+     ],
+     "yaw_deg": 151.352
+    },
+    {
+     "nombre": "Butaca_M1_F05_A004",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 4,
+     "pos_m": [
+      7.6403,
+      -3.4908,
+      0.0
+     ],
+     "yaw_deg": 155.445
+    },
+    {
+     "nombre": "Butaca_M1_F05_A005",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 5,
+     "pos_m": [
+      7.87,
+      -2.9366,
+      0.0
+     ],
+     "yaw_deg": 159.537
+    },
+    {
+     "nombre": "Butaca_M1_F05_A006",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 6,
+     "pos_m": [
+      8.0595,
+      -2.3675,
+      0.0
+     ],
+     "yaw_deg": 163.63
+    },
+    {
+     "nombre": "Butaca_M1_F05_A007",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 7,
+     "pos_m": [
+      8.2079,
+      -1.7863,
+      0.0
+     ],
+     "yaw_deg": 167.722
+    },
+    {
+     "nombre": "Butaca_M1_F05_A008",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 8,
+     "pos_m": [
+      8.3144,
+      -1.1959,
+      0.0
+     ],
+     "yaw_deg": 171.815
+    },
+    {
+     "nombre": "Butaca_M1_F05_A009",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 9,
+     "pos_m": [
+      8.3786,
+      -0.5995,
+      0.0
+     ],
+     "yaw_deg": 175.907
+    },
+    {
+     "nombre": "Butaca_M1_F05_A010",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 10,
+     "pos_m": [
+      8.4,
+      0.0,
+      0.0
+     ],
+     "yaw_deg": 180.0
+    },
+    {
+     "nombre": "Butaca_M1_F05_A011",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 11,
+     "pos_m": [
+      8.3786,
+      0.5995,
+      0.0
+     ],
+     "yaw_deg": -175.907
+    },
+    {
+     "nombre": "Butaca_M1_F05_A012",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 12,
+     "pos_m": [
+      8.3144,
+      1.1959,
+      0.0
+     ],
+     "yaw_deg": -171.815
+    },
+    {
+     "nombre": "Butaca_M1_F05_A013",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 13,
+     "pos_m": [
+      8.2079,
+      1.7863,
+      0.0
+     ],
+     "yaw_deg": -167.722
+    },
+    {
+     "nombre": "Butaca_M1_F05_A014",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 14,
+     "pos_m": [
+      8.0595,
+      2.3675,
+      0.0
+     ],
+     "yaw_deg": -163.63
+    },
+    {
+     "nombre": "Butaca_M1_F05_A015",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 15,
+     "pos_m": [
+      7.87,
+      2.9366,
+      0.0
+     ],
+     "yaw_deg": -159.537
+    },
+    {
+     "nombre": "Butaca_M1_F05_A016",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 16,
+     "pos_m": [
+      7.6403,
+      3.4908,
+      0.0
+     ],
+     "yaw_deg": -155.445
+    },
+    {
+     "nombre": "Butaca_M1_F05_A017",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 17,
+     "pos_m": [
+      7.3717,
+      4.0272,
+      0.0
+     ],
+     "yaw_deg": -151.352
+    },
+    {
+     "nombre": "Butaca_M1_F05_A018",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 18,
+     "pos_m": [
+      7.0655,
+      4.543,
+      0.0
+     ],
+     "yaw_deg": -147.26
+    },
+    {
+     "nombre": "Butaca_M1_F05_A019",
+     "modulo": 1,
+     "fila": 5,
+     "asiento": 19,
+     "pos_m": [
+      6.7232,
+      5.0357,
+      0.0
+     ],
+     "yaw_deg": -143.167
+    },
+    {
+     "nombre": "Butaca_M2_F01_A001",
+     "modulo": 2,
+     "fila": 1,
+     "asiento": 1,
+     "pos_m": [
+      1.7259,
+      3.1593,
+      0.0
+     ],
+     "yaw_deg": -118.648
+    },
+    {
+     "nombre": "Butaca_M2_F01_A002",
+     "modulo": 2,
+     "fila": 1,
+     "asiento": 2,
+     "pos_m": [
+      1.1779,
+      3.4018,
+      0.0
+     ],
+     "yaw_deg": -109.099
+    },
+    {
+     "nombre": "Butaca_M2_F01_A003",
+     "modulo": 2,
+     "fila": 1,
+     "asiento": 3,
+     "pos_m": [
+      0.5972,
+      3.5501,
+      0.0
+     ],
+     "yaw_deg": -99.549
+    },
+    {
+     "nombre": "Butaca_M2_F01_A004",
+     "modulo": 2,
+     "fila": 1,
+     "asiento": 4,
+     "pos_m": [
+      0.0,
+      3.6,
+      0.0
+     ],
+     "yaw_deg": -90.0
+    },
+    {
+     "nombre": "Butaca_M2_F01_A005",
+     "modulo": 2,
+     "fila": 1,
+     "asiento": 5,
+     "pos_m": [
+      -0.5972,
+      3.5501,
+      0.0
+     ],
+     "yaw_deg": -80.451
+    },
+    {
+     "nombre": "Butaca_M2_F01_A006",
+     "modulo": 2,
+     "fila": 1,
+     "asiento": 6,
+     "pos_m": [
+      -1.1779,
+      3.4018,
+      0.0
+     ],
+     "yaw_deg": -70.901
+    },
+    {
+     "nombre": "Butaca_M2_F01_A007",
+     "modulo": 2,
+     "fila": 1,
+     "asiento": 7,
+     "pos_m": [
+      -1.7259,
+      3.1593,
+      0.0
+     ],
+     "yaw_deg": -61.352
+    },
+    {
+     "nombre": "Butaca_M2_F02_A001",
+     "modulo": 2,
+     "fila": 2,
+     "asiento": 1,
+     "pos_m": [
+      2.5599,
+      4.0604,
+      0.0
+     ],
+     "yaw_deg": -122.229
+    },
+    {
+     "nombre": "Butaca_M2_F02_A002",
+     "modulo": 2,
+     "fila": 2,
+     "asiento": 2,
+     "pos_m": [
+      2.0336,
+      4.3479,
+      0.0
+     ],
+     "yaw_deg": -115.067
+    },
+    {
+     "nombre": "Butaca_M2_F02_A003",
+     "modulo": 2,
+     "fila": 2,
+     "asiento": 3,
+     "pos_m": [
+      1.4757,
+      4.5675,
+      0.0
+     ],
+     "yaw_deg": -107.905
+    },
+    {
+     "nombre": "Butaca_M2_F02_A004",
+     "modulo": 2,
+     "fila": 2,
+     "asiento": 4,
+     "pos_m": [
+      0.8947,
+      4.7159,
+      0.0
+     ],
+     "yaw_deg": -100.743
+    },
+    {
+     "nombre": "Butaca_M2_F02_A005",
+     "modulo": 2,
+     "fila": 2,
+     "asiento": 5,
+     "pos_m": [
+      0.2998,
+      4.7906,
+      0.0
+     ],
+     "yaw_deg": -93.581
+    },
+    {
+     "nombre": "Butaca_M2_F02_A006",
+     "modulo": 2,
+     "fila": 2,
+     "asiento": 6,
+     "pos_m": [
+      -0.2998,
+      4.7906,
+      0.0
+     ],
+     "yaw_deg": -86.419
+    },
+    {
+     "nombre": "Butaca_M2_F02_A007",
+     "modulo": 2,
+     "fila": 2,
+     "asiento": 7,
+     "pos_m": [
+      -0.8947,
+      4.7159,
+      0.0
+     ],
+     "yaw_deg": -79.257
+    },
+    {
+     "nombre": "Butaca_M2_F02_A008",
+     "modulo": 2,
+     "fila": 2,
+     "asiento": 8,
+     "pos_m": [
+      -1.4757,
+      4.5675,
+      0.0
+     ],
+     "yaw_deg": -72.095
+    },
+    {
+     "nombre": "Butaca_M2_F02_A009",
+     "modulo": 2,
+     "fila": 2,
+     "asiento": 9,
+     "pos_m": [
+      -2.0336,
+      4.3479,
+      0.0
+     ],
+     "yaw_deg": -64.933
+    },
+    {
+     "nombre": "Butaca_M2_F02_A010",
+     "modulo": 2,
+     "fila": 2,
+     "asiento": 10,
+     "pos_m": [
+      -2.5599,
+      4.0604,
+      0.0
+     ],
+     "yaw_deg": -57.771
+    },
+    {
+     "nombre": "Butaca_M2_F03_A001",
+     "modulo": 2,
+     "fila": 3,
+     "asiento": 1,
+     "pos_m": [
+      3.3879,
+      4.952,
+      0.0
+     ],
+     "yaw_deg": -124.377
+    },
+    {
+     "nombre": "Butaca_M2_F03_A002",
+     "modulo": 2,
+     "fila": 3,
+     "asiento": 2,
+     "pos_m": [
+      2.8766,
+      5.2655,
+      0.0
+     ],
+     "yaw_deg": -118.648
+    },
+    {
+     "nombre": "Butaca_M2_F03_A003",
+     "modulo": 2,
+     "fila": 3,
+     "asiento": 3,
+     "pos_m": [
+      2.3365,
+      5.5264,
+      0.0
+     ],
+     "yaw_deg": -112.918
+    },
+    {
+     "nombre": "Butaca_M2_F03_A004",
+     "modulo": 2,
+     "fila": 3,
+     "asiento": 4,
+     "pos_m": [
+      1.7731,
+      5.732,
+      0.0
+     ],
+     "yaw_deg": -107.189
+    },
+    {
+     "nombre": "Butaca_M2_F03_A005",
+     "modulo": 2,
+     "fila": 3,
+     "asiento": 5,
+     "pos_m": [
+      1.192,
+      5.8804,
+      0.0
+     ],
+     "yaw_deg": -101.459
+    },
+    {
+     "nombre": "Butaca_M2_F03_A006",
+     "modulo": 2,
+     "fila": 3,
+     "asiento": 6,
+     "pos_m": [
+      0.599,
+      5.97,
+      0.0
+     ],
+     "yaw_deg": -95.73
+    },
+    {
+     "nombre": "Butaca_M2_F03_A007",
+     "modulo": 2,
+     "fila": 3,
+     "asiento": 7,
+     "pos_m": [
+      0.0,
+      6.0,
+      0.0
+     ],
+     "yaw_deg": -90.0
+    },
+    {
+     "nombre": "Butaca_M2_F03_A008",
+     "modulo": 2,
+     "fila": 3,
+     "asiento": 8,
+     "pos_m": [
+      -0.599,
+      5.97,
+      0.0
+     ],
+     "yaw_deg": -84.27
+    },
+    {
+     "nombre": "Butaca_M2_F03_A009",
+     "modulo": 2,
+     "fila": 3,
+     "asiento": 9,
+     "pos_m": [
+      -1.192,
+      5.8804,
+      0.0
+     ],
+     "yaw_deg": -78.541
+    },
+    {
+     "nombre": "Butaca_M2_F03_A010",
+     "modulo": 2,
+     "fila": 3,
+     "asiento": 10,
+     "pos_m": [
+      -1.7731,
+      5.732,
+      0.0
+     ],
+     "yaw_deg": -72.811
+    },
+    {
+     "nombre": "Butaca_M2_F03_A011",
+     "modulo": 2,
+     "fila": 3,
+     "asiento": 11,
+     "pos_m": [
+      -2.3365,
+      5.5264,
+      0.0
+     ],
+     "yaw_deg": -67.082
+    },
+    {
+     "nombre": "Butaca_M2_F03_A012",
+     "modulo": 2,
+     "fila": 3,
+     "asiento": 12,
+     "pos_m": [
+      -2.8766,
+      5.2655,
+      0.0
+     ],
+     "yaw_deg": -61.352
+    },
+    {
+     "nombre": "Butaca_M2_F03_A013",
+     "modulo": 2,
+     "fila": 3,
+     "asiento": 13,
+     "pos_m": [
+      -3.3879,
+      4.952,
+      0.0
+     ],
+     "yaw_deg": -55.623
+    },
+    {
+     "nombre": "Butaca_M2_F04_A001",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 1,
+     "pos_m": [
+      4.2127,
+      5.8389,
+      0.0
+     ],
+     "yaw_deg": -125.81
+    },
+    {
+     "nombre": "Butaca_M2_F04_A002",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 2,
+     "pos_m": [
+      3.7121,
+      6.1693,
+      0.0
+     ],
+     "yaw_deg": -121.035
+    },
+    {
+     "nombre": "Butaca_M2_F04_A003",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 3,
+     "pos_m": [
+      3.1857,
+      6.4569,
+      0.0
+     ],
+     "yaw_deg": -116.261
+    },
+    {
+     "nombre": "Butaca_M2_F04_A004",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 4,
+     "pos_m": [
+      2.6372,
+      6.6997,
+      0.0
+     ],
+     "yaw_deg": -111.486
+    },
+    {
+     "nombre": "Butaca_M2_F04_A005",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 5,
+     "pos_m": [
+      2.0704,
+      6.8959,
+      0.0
+     ],
+     "yaw_deg": -106.711
+    },
+    {
+     "nombre": "Butaca_M2_F04_A006",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 6,
+     "pos_m": [
+      1.4892,
+      7.0443,
+      0.0
+     ],
+     "yaw_deg": -101.937
+    },
+    {
+     "nombre": "Butaca_M2_F04_A007",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 7,
+     "pos_m": [
+      0.8977,
+      7.1438,
+      0.0
+     ],
+     "yaw_deg": -97.162
+    },
+    {
+     "nombre": "Butaca_M2_F04_A008",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 8,
+     "pos_m": [
+      0.2999,
+      7.1938,
+      0.0
+     ],
+     "yaw_deg": -92.387
+    },
+    {
+     "nombre": "Butaca_M2_F04_A009",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 9,
+     "pos_m": [
+      -0.2999,
+      7.1938,
+      0.0
+     ],
+     "yaw_deg": -87.613
+    },
+    {
+     "nombre": "Butaca_M2_F04_A010",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 10,
+     "pos_m": [
+      -0.8977,
+      7.1438,
+      0.0
+     ],
+     "yaw_deg": -82.838
+    },
+    {
+     "nombre": "Butaca_M2_F04_A011",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 11,
+     "pos_m": [
+      -1.4892,
+      7.0443,
+      0.0
+     ],
+     "yaw_deg": -78.063
+    },
+    {
+     "nombre": "Butaca_M2_F04_A012",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 12,
+     "pos_m": [
+      -2.0704,
+      6.8959,
+      0.0
+     ],
+     "yaw_deg": -73.289
+    },
+    {
+     "nombre": "Butaca_M2_F04_A013",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 13,
+     "pos_m": [
+      -2.6372,
+      6.6997,
+      0.0
+     ],
+     "yaw_deg": -68.514
+    },
+    {
+     "nombre": "Butaca_M2_F04_A014",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 14,
+     "pos_m": [
+      -3.1857,
+      6.4569,
+      0.0
+     ],
+     "yaw_deg": -63.739
+    },
+    {
+     "nombre": "Butaca_M2_F04_A015",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 15,
+     "pos_m": [
+      -3.7121,
+      6.1693,
+      0.0
+     ],
+     "yaw_deg": -58.965
+    },
+    {
+     "nombre": "Butaca_M2_F04_A016",
+     "modulo": 2,
+     "fila": 4,
+     "asiento": 16,
+     "pos_m": [
+      -4.2127,
+      5.8389,
+      0.0
+     ],
+     "yaw_deg": -54.19
+    },
+    {
+     "nombre": "Butaca_M2_F05_A001",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 1,
+     "pos_m": [
+      5.0357,
+      6.7232,
+      0.0
+     ],
+     "yaw_deg": -126.833
+    },
+    {
+     "nombre": "Butaca_M2_F05_A002",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 2,
+     "pos_m": [
+      4.543,
+      7.0655,
+      0.0
+     ],
+     "yaw_deg": -122.74
+    },
+    {
+     "nombre": "Butaca_M2_F05_A003",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 3,
+     "pos_m": [
+      4.0272,
+      7.3717,
+      0.0
+     ],
+     "yaw_deg": -118.648
+    },
+    {
+     "nombre": "Butaca_M2_F05_A004",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 4,
+     "pos_m": [
+      3.4908,
+      7.6403,
+      0.0
+     ],
+     "yaw_deg": -114.555
+    },
+    {
+     "nombre": "Butaca_M2_F05_A005",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 5,
+     "pos_m": [
+      2.9366,
+      7.87,
+      0.0
+     ],
+     "yaw_deg": -110.463
+    },
+    {
+     "nombre": "Butaca_M2_F05_A006",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 6,
+     "pos_m": [
+      2.3675,
+      8.0595,
+      0.0
+     ],
+     "yaw_deg": -106.37
+    },
+    {
+     "nombre": "Butaca_M2_F05_A007",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 7,
+     "pos_m": [
+      1.7863,
+      8.2079,
+      0.0
+     ],
+     "yaw_deg": -102.278
+    },
+    {
+     "nombre": "Butaca_M2_F05_A008",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 8,
+     "pos_m": [
+      1.1959,
+      8.3144,
+      0.0
+     ],
+     "yaw_deg": -98.185
+    },
+    {
+     "nombre": "Butaca_M2_F05_A009",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 9,
+     "pos_m": [
+      0.5995,
+      8.3786,
+      0.0
+     ],
+     "yaw_deg": -94.093
+    },
+    {
+     "nombre": "Butaca_M2_F05_A010",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 10,
+     "pos_m": [
+      0.0,
+      8.4,
+      0.0
+     ],
+     "yaw_deg": -90.0
+    },
+    {
+     "nombre": "Butaca_M2_F05_A011",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 11,
+     "pos_m": [
+      -0.5995,
+      8.3786,
+      0.0
+     ],
+     "yaw_deg": -85.907
+    },
+    {
+     "nombre": "Butaca_M2_F05_A012",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 12,
+     "pos_m": [
+      -1.1959,
+      8.3144,
+      0.0
+     ],
+     "yaw_deg": -81.815
+    },
+    {
+     "nombre": "Butaca_M2_F05_A013",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 13,
+     "pos_m": [
+      -1.7863,
+      8.2079,
+      0.0
+     ],
+     "yaw_deg": -77.722
+    },
+    {
+     "nombre": "Butaca_M2_F05_A014",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 14,
+     "pos_m": [
+      -2.3675,
+      8.0595,
+      0.0
+     ],
+     "yaw_deg": -73.63
+    },
+    {
+     "nombre": "Butaca_M2_F05_A015",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 15,
+     "pos_m": [
+      -2.9366,
+      7.87,
+      0.0
+     ],
+     "yaw_deg": -69.537
+    },
+    {
+     "nombre": "Butaca_M2_F05_A016",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 16,
+     "pos_m": [
+      -3.4908,
+      7.6403,
+      0.0
+     ],
+     "yaw_deg": -65.445
+    },
+    {
+     "nombre": "Butaca_M2_F05_A017",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 17,
+     "pos_m": [
+      -4.0272,
+      7.3717,
+      0.0
+     ],
+     "yaw_deg": -61.352
+    },
+    {
+     "nombre": "Butaca_M2_F05_A018",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 18,
+     "pos_m": [
+      -4.543,
+      7.0655,
+      0.0
+     ],
+     "yaw_deg": -57.26
+    },
+    {
+     "nombre": "Butaca_M2_F05_A019",
+     "modulo": 2,
+     "fila": 5,
+     "asiento": 19,
+     "pos_m": [
+      -5.0357,
+      6.7232,
+      0.0
+     ],
+     "yaw_deg": -53.167
+    },
+    {
+     "nombre": "Butaca_M3_F01_A001",
+     "modulo": 3,
+     "fila": 1,
+     "asiento": 1,
+     "pos_m": [
+      -3.1593,
+      1.7259,
+      0.0
+     ],
+     "yaw_deg": -28.648
+    },
+    {
+     "nombre": "Butaca_M3_F01_A002",
+     "modulo": 3,
+     "fila": 1,
+     "asiento": 2,
+     "pos_m": [
+      -3.4018,
+      1.1779,
+      0.0
+     ],
+     "yaw_deg": -19.099
+    },
+    {
+     "nombre": "Butaca_M3_F01_A003",
+     "modulo": 3,
+     "fila": 1,
+     "asiento": 3,
+     "pos_m": [
+      -3.5501,
+      0.5972,
+      0.0
+     ],
+     "yaw_deg": -9.549
+    },
+    {
+     "nombre": "Butaca_M3_F01_A004",
+     "modulo": 3,
+     "fila": 1,
+     "asiento": 4,
+     "pos_m": [
+      -3.6,
+      0.0,
+      0.0
+     ],
+     "yaw_deg": -0.0
+    },
+    {
+     "nombre": "Butaca_M3_F01_A005",
+     "modulo": 3,
+     "fila": 1,
+     "asiento": 5,
+     "pos_m": [
+      -3.5501,
+      -0.5972,
+      0.0
+     ],
+     "yaw_deg": 9.549
+    },
+    {
+     "nombre": "Butaca_M3_F01_A006",
+     "modulo": 3,
+     "fila": 1,
+     "asiento": 6,
+     "pos_m": [
+      -3.4018,
+      -1.1779,
+      0.0
+     ],
+     "yaw_deg": 19.099
+    },
+    {
+     "nombre": "Butaca_M3_F01_A007",
+     "modulo": 3,
+     "fila": 1,
+     "asiento": 7,
+     "pos_m": [
+      -3.1593,
+      -1.7259,
+      0.0
+     ],
+     "yaw_deg": 28.648
+    },
+    {
+     "nombre": "Butaca_M3_F02_A001",
+     "modulo": 3,
+     "fila": 2,
+     "asiento": 1,
+     "pos_m": [
+      -4.0604,
+      2.5599,
+      0.0
+     ],
+     "yaw_deg": -32.229
+    },
+    {
+     "nombre": "Butaca_M3_F02_A002",
+     "modulo": 3,
+     "fila": 2,
+     "asiento": 2,
+     "pos_m": [
+      -4.3479,
+      2.0336,
+      0.0
+     ],
+     "yaw_deg": -25.067
+    },
+    {
+     "nombre": "Butaca_M3_F02_A003",
+     "modulo": 3,
+     "fila": 2,
+     "asiento": 3,
+     "pos_m": [
+      -4.5675,
+      1.4757,
+      0.0
+     ],
+     "yaw_deg": -17.905
+    },
+    {
+     "nombre": "Butaca_M3_F02_A004",
+     "modulo": 3,
+     "fila": 2,
+     "asiento": 4,
+     "pos_m": [
+      -4.7159,
+      0.8947,
+      0.0
+     ],
+     "yaw_deg": -10.743
+    },
+    {
+     "nombre": "Butaca_M3_F02_A005",
+     "modulo": 3,
+     "fila": 2,
+     "asiento": 5,
+     "pos_m": [
+      -4.7906,
+      0.2998,
+      0.0
+     ],
+     "yaw_deg": -3.581
+    },
+    {
+     "nombre": "Butaca_M3_F02_A006",
+     "modulo": 3,
+     "fila": 2,
+     "asiento": 6,
+     "pos_m": [
+      -4.7906,
+      -0.2998,
+      0.0
+     ],
+     "yaw_deg": 3.581
+    },
+    {
+     "nombre": "Butaca_M3_F02_A007",
+     "modulo": 3,
+     "fila": 2,
+     "asiento": 7,
+     "pos_m": [
+      -4.7159,
+      -0.8947,
+      0.0
+     ],
+     "yaw_deg": 10.743
+    },
+    {
+     "nombre": "Butaca_M3_F02_A008",
+     "modulo": 3,
+     "fila": 2,
+     "asiento": 8,
+     "pos_m": [
+      -4.5675,
+      -1.4757,
+      0.0
+     ],
+     "yaw_deg": 17.905
+    },
+    {
+     "nombre": "Butaca_M3_F02_A009",
+     "modulo": 3,
+     "fila": 2,
+     "asiento": 9,
+     "pos_m": [
+      -4.3479,
+      -2.0336,
+      0.0
+     ],
+     "yaw_deg": 25.067
+    },
+    {
+     "nombre": "Butaca_M3_F02_A010",
+     "modulo": 3,
+     "fila": 2,
+     "asiento": 10,
+     "pos_m": [
+      -4.0604,
+      -2.5599,
+      0.0
+     ],
+     "yaw_deg": 32.229
+    },
+    {
+     "nombre": "Butaca_M3_F03_A001",
+     "modulo": 3,
+     "fila": 3,
+     "asiento": 1,
+     "pos_m": [
+      -4.952,
+      3.3879,
+      0.0
+     ],
+     "yaw_deg": -34.377
+    },
+    {
+     "nombre": "Butaca_M3_F03_A002",
+     "modulo": 3,
+     "fila": 3,
+     "asiento": 2,
+     "pos_m": [
+      -5.2655,
+      2.8766,
+      0.0
+     ],
+     "yaw_deg": -28.648
+    },
+    {
+     "nombre": "Butaca_M3_F03_A003",
+     "modulo": 3,
+     "fila": 3,
+     "asiento": 3,
+     "pos_m": [
+      -5.5264,
+      2.3365,
+      0.0
+     ],
+     "yaw_deg": -22.918
+    },
+    {
+     "nombre": "Butaca_M3_F03_A004",
+     "modulo": 3,
+     "fila": 3,
+     "asiento": 4,
+     "pos_m": [
+      -5.732,
+      1.7731,
+      0.0
+     ],
+     "yaw_deg": -17.189
+    },
+    {
+     "nombre": "Butaca_M3_F03_A005",
+     "modulo": 3,
+     "fila": 3,
+     "asiento": 5,
+     "pos_m": [
+      -5.8804,
+      1.192,
+      0.0
+     ],
+     "yaw_deg": -11.459
+    },
+    {
+     "nombre": "Butaca_M3_F03_A006",
+     "modulo": 3,
+     "fila": 3,
+     "asiento": 6,
+     "pos_m": [
+      -5.97,
+      0.599,
+      0.0
+     ],
+     "yaw_deg": -5.73
+    },
+    {
+     "nombre": "Butaca_M3_F03_A007",
+     "modulo": 3,
+     "fila": 3,
+     "asiento": 7,
+     "pos_m": [
+      -6.0,
+      0.0,
+      0.0
+     ],
+     "yaw_deg": -0.0
+    },
+    {
+     "nombre": "Butaca_M3_F03_A008",
+     "modulo": 3,
+     "fila": 3,
+     "asiento": 8,
+     "pos_m": [
+      -5.97,
+      -0.599,
+      0.0
+     ],
+     "yaw_deg": 5.73
+    },
+    {
+     "nombre": "Butaca_M3_F03_A009",
+     "modulo": 3,
+     "fila": 3,
+     "asiento": 9,
+     "pos_m": [
+      -5.8804,
+      -1.192,
+      0.0
+     ],
+     "yaw_deg": 11.459
+    },
+    {
+     "nombre": "Butaca_M3_F03_A010",
+     "modulo": 3,
+     "fila": 3,
+     "asiento": 10,
+     "pos_m": [
+      -5.732,
+      -1.7731,
+      0.0
+     ],
+     "yaw_deg": 17.189
+    },
+    {
+     "nombre": "Butaca_M3_F03_A011",
+     "modulo": 3,
+     "fila": 3,
+     "asiento": 11,
+     "pos_m": [
+      -5.5264,
+      -2.3365,
+      0.0
+     ],
+     "yaw_deg": 22.918
+    },
+    {
+     "nombre": "Butaca_M3_F03_A012",
+     "modulo": 3,
+     "fila": 3,
+     "asiento": 12,
+     "pos_m": [
+      -5.2655,
+      -2.8766,
+      0.0
+     ],
+     "yaw_deg": 28.648
+    },
+    {
+     "nombre": "Butaca_M3_F03_A013",
+     "modulo": 3,
+     "fila": 3,
+     "asiento": 13,
+     "pos_m": [
+      -4.952,
+      -3.3879,
+      0.0
+     ],
+     "yaw_deg": 34.377
+    },
+    {
+     "nombre": "Butaca_M3_F04_A001",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 1,
+     "pos_m": [
+      -5.8389,
+      4.2127,
+      0.0
+     ],
+     "yaw_deg": -35.81
+    },
+    {
+     "nombre": "Butaca_M3_F04_A002",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 2,
+     "pos_m": [
+      -6.1693,
+      3.7121,
+      0.0
+     ],
+     "yaw_deg": -31.035
+    },
+    {
+     "nombre": "Butaca_M3_F04_A003",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 3,
+     "pos_m": [
+      -6.4569,
+      3.1857,
+      0.0
+     ],
+     "yaw_deg": -26.261
+    },
+    {
+     "nombre": "Butaca_M3_F04_A004",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 4,
+     "pos_m": [
+      -6.6997,
+      2.6372,
+      0.0
+     ],
+     "yaw_deg": -21.486
+    },
+    {
+     "nombre": "Butaca_M3_F04_A005",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 5,
+     "pos_m": [
+      -6.8959,
+      2.0704,
+      0.0
+     ],
+     "yaw_deg": -16.711
+    },
+    {
+     "nombre": "Butaca_M3_F04_A006",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 6,
+     "pos_m": [
+      -7.0443,
+      1.4892,
+      0.0
+     ],
+     "yaw_deg": -11.937
+    },
+    {
+     "nombre": "Butaca_M3_F04_A007",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 7,
+     "pos_m": [
+      -7.1438,
+      0.8977,
+      0.0
+     ],
+     "yaw_deg": -7.162
+    },
+    {
+     "nombre": "Butaca_M3_F04_A008",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 8,
+     "pos_m": [
+      -7.1938,
+      0.2999,
+      0.0
+     ],
+     "yaw_deg": -2.387
+    },
+    {
+     "nombre": "Butaca_M3_F04_A009",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 9,
+     "pos_m": [
+      -7.1938,
+      -0.2999,
+      0.0
+     ],
+     "yaw_deg": 2.387
+    },
+    {
+     "nombre": "Butaca_M3_F04_A010",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 10,
+     "pos_m": [
+      -7.1438,
+      -0.8977,
+      0.0
+     ],
+     "yaw_deg": 7.162
+    },
+    {
+     "nombre": "Butaca_M3_F04_A011",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 11,
+     "pos_m": [
+      -7.0443,
+      -1.4892,
+      0.0
+     ],
+     "yaw_deg": 11.937
+    },
+    {
+     "nombre": "Butaca_M3_F04_A012",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 12,
+     "pos_m": [
+      -6.8959,
+      -2.0704,
+      0.0
+     ],
+     "yaw_deg": 16.711
+    },
+    {
+     "nombre": "Butaca_M3_F04_A013",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 13,
+     "pos_m": [
+      -6.6997,
+      -2.6372,
+      0.0
+     ],
+     "yaw_deg": 21.486
+    },
+    {
+     "nombre": "Butaca_M3_F04_A014",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 14,
+     "pos_m": [
+      -6.4569,
+      -3.1857,
+      0.0
+     ],
+     "yaw_deg": 26.261
+    },
+    {
+     "nombre": "Butaca_M3_F04_A015",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 15,
+     "pos_m": [
+      -6.1693,
+      -3.7121,
+      0.0
+     ],
+     "yaw_deg": 31.035
+    },
+    {
+     "nombre": "Butaca_M3_F04_A016",
+     "modulo": 3,
+     "fila": 4,
+     "asiento": 16,
+     "pos_m": [
+      -5.8389,
+      -4.2127,
+      0.0
+     ],
+     "yaw_deg": 35.81
+    },
+    {
+     "nombre": "Butaca_M4_F01_A001",
+     "modulo": 4,
+     "fila": 1,
+     "asiento": 1,
+     "pos_m": [
+      -1.7259,
+      -3.1593,
+      0.0
+     ],
+     "yaw_deg": 61.352
+    },
+    {
+     "nombre": "Butaca_M4_F01_A002",
+     "modulo": 4,
+     "fila": 1,
+     "asiento": 2,
+     "pos_m": [
+      -1.1779,
+      -3.4018,
+      0.0
+     ],
+     "yaw_deg": 70.901
+    },
+    {
+     "nombre": "Butaca_M4_F01_A003",
+     "modulo": 4,
+     "fila": 1,
+     "asiento": 3,
+     "pos_m": [
+      -0.5972,
+      -3.5501,
+      0.0
+     ],
+     "yaw_deg": 80.451
+    },
+    {
+     "nombre": "Butaca_M4_F01_A004",
+     "modulo": 4,
+     "fila": 1,
+     "asiento": 4,
+     "pos_m": [
+      -0.0,
+      -3.6,
+      0.0
+     ],
+     "yaw_deg": 90.0
+    },
+    {
+     "nombre": "Butaca_M4_F01_A005",
+     "modulo": 4,
+     "fila": 1,
+     "asiento": 5,
+     "pos_m": [
+      0.5972,
+      -3.5501,
+      0.0
+     ],
+     "yaw_deg": 99.549
+    },
+    {
+     "nombre": "Butaca_M4_F01_A006",
+     "modulo": 4,
+     "fila": 1,
+     "asiento": 6,
+     "pos_m": [
+      1.1779,
+      -3.4018,
+      0.0
+     ],
+     "yaw_deg": 109.099
+    },
+    {
+     "nombre": "Butaca_M4_F01_A007",
+     "modulo": 4,
+     "fila": 1,
+     "asiento": 7,
+     "pos_m": [
+      1.7259,
+      -3.1593,
+      0.0
+     ],
+     "yaw_deg": 118.648
+    },
+    {
+     "nombre": "Butaca_M4_F02_A001",
+     "modulo": 4,
+     "fila": 2,
+     "asiento": 1,
+     "pos_m": [
+      -2.5599,
+      -4.0604,
+      0.0
+     ],
+     "yaw_deg": 57.771
+    },
+    {
+     "nombre": "Butaca_M4_F02_A002",
+     "modulo": 4,
+     "fila": 2,
+     "asiento": 2,
+     "pos_m": [
+      -2.0336,
+      -4.3479,
+      0.0
+     ],
+     "yaw_deg": 64.933
+    },
+    {
+     "nombre": "Butaca_M4_F02_A003",
+     "modulo": 4,
+     "fila": 2,
+     "asiento": 3,
+     "pos_m": [
+      -1.4757,
+      -4.5675,
+      0.0
+     ],
+     "yaw_deg": 72.095
+    },
+    {
+     "nombre": "Butaca_M4_F02_A004",
+     "modulo": 4,
+     "fila": 2,
+     "asiento": 4,
+     "pos_m": [
+      -0.8947,
+      -4.7159,
+      0.0
+     ],
+     "yaw_deg": 79.257
+    },
+    {
+     "nombre": "Butaca_M4_F02_A005",
+     "modulo": 4,
+     "fila": 2,
+     "asiento": 5,
+     "pos_m": [
+      -0.2998,
+      -4.7906,
+      0.0
+     ],
+     "yaw_deg": 86.419
+    },
+    {
+     "nombre": "Butaca_M4_F02_A006",
+     "modulo": 4,
+     "fila": 2,
+     "asiento": 6,
+     "pos_m": [
+      0.2998,
+      -4.7906,
+      0.0
+     ],
+     "yaw_deg": 93.581
+    },
+    {
+     "nombre": "Butaca_M4_F02_A007",
+     "modulo": 4,
+     "fila": 2,
+     "asiento": 7,
+     "pos_m": [
+      0.8947,
+      -4.7159,
+      0.0
+     ],
+     "yaw_deg": 100.743
+    },
+    {
+     "nombre": "Butaca_M4_F02_A008",
+     "modulo": 4,
+     "fila": 2,
+     "asiento": 8,
+     "pos_m": [
+      1.4757,
+      -4.5675,
+      0.0
+     ],
+     "yaw_deg": 107.905
+    },
+    {
+     "nombre": "Butaca_M4_F02_A009",
+     "modulo": 4,
+     "fila": 2,
+     "asiento": 9,
+     "pos_m": [
+      2.0336,
+      -4.3479,
+      0.0
+     ],
+     "yaw_deg": 115.067
+    },
+    {
+     "nombre": "Butaca_M4_F02_A010",
+     "modulo": 4,
+     "fila": 2,
+     "asiento": 10,
+     "pos_m": [
+      2.5599,
+      -4.0604,
+      0.0
+     ],
+     "yaw_deg": 122.229
+    },
+    {
+     "nombre": "Butaca_M4_F03_A001",
+     "modulo": 4,
+     "fila": 3,
+     "asiento": 1,
+     "pos_m": [
+      -3.3879,
+      -4.952,
+      0.0
+     ],
+     "yaw_deg": 55.623
+    },
+    {
+     "nombre": "Butaca_M4_F03_A002",
+     "modulo": 4,
+     "fila": 3,
+     "asiento": 2,
+     "pos_m": [
+      -2.8766,
+      -5.2655,
+      0.0
+     ],
+     "yaw_deg": 61.352
+    },
+    {
+     "nombre": "Butaca_M4_F03_A003",
+     "modulo": 4,
+     "fila": 3,
+     "asiento": 3,
+     "pos_m": [
+      -2.3365,
+      -5.5264,
+      0.0
+     ],
+     "yaw_deg": 67.082
+    },
+    {
+     "nombre": "Butaca_M4_F03_A004",
+     "modulo": 4,
+     "fila": 3,
+     "asiento": 4,
+     "pos_m": [
+      -1.7731,
+      -5.732,
+      0.0
+     ],
+     "yaw_deg": 72.811
+    },
+    {
+     "nombre": "Butaca_M4_F03_A005",
+     "modulo": 4,
+     "fila": 3,
+     "asiento": 5,
+     "pos_m": [
+      -1.192,
+      -5.8804,
+      0.0
+     ],
+     "yaw_deg": 78.541
+    },
+    {
+     "nombre": "Butaca_M4_F03_A006",
+     "modulo": 4,
+     "fila": 3,
+     "asiento": 6,
+     "pos_m": [
+      -0.599,
+      -5.97,
+      0.0
+     ],
+     "yaw_deg": 84.27
+    },
+    {
+     "nombre": "Butaca_M4_F03_A007",
+     "modulo": 4,
+     "fila": 3,
+     "asiento": 7,
+     "pos_m": [
+      -0.0,
+      -6.0,
+      0.0
+     ],
+     "yaw_deg": 90.0
+    },
+    {
+     "nombre": "Butaca_M4_F03_A008",
+     "modulo": 4,
+     "fila": 3,
+     "asiento": 8,
+     "pos_m": [
+      0.599,
+      -5.97,
+      0.0
+     ],
+     "yaw_deg": 95.73
+    },
+    {
+     "nombre": "Butaca_M4_F03_A009",
+     "modulo": 4,
+     "fila": 3,
+     "asiento": 9,
+     "pos_m": [
+      1.192,
+      -5.8804,
+      0.0
+     ],
+     "yaw_deg": 101.459
+    },
+    {
+     "nombre": "Butaca_M4_F03_A010",
+     "modulo": 4,
+     "fila": 3,
+     "asiento": 10,
+     "pos_m": [
+      1.7731,
+      -5.732,
+      0.0
+     ],
+     "yaw_deg": 107.189
+    },
+    {
+     "nombre": "Butaca_M4_F03_A011",
+     "modulo": 4,
+     "fila": 3,
+     "asiento": 11,
+     "pos_m": [
+      2.3365,
+      -5.5264,
+      0.0
+     ],
+     "yaw_deg": 112.918
+    },
+    {
+     "nombre": "Butaca_M4_F03_A012",
+     "modulo": 4,
+     "fila": 3,
+     "asiento": 12,
+     "pos_m": [
+      2.8766,
+      -5.2655,
+      0.0
+     ],
+     "yaw_deg": 118.648
+    },
+    {
+     "nombre": "Butaca_M4_F03_A013",
+     "modulo": 4,
+     "fila": 3,
+     "asiento": 13,
+     "pos_m": [
+      3.3879,
+      -4.952,
+      0.0
+     ],
+     "yaw_deg": 124.377
+    },
+    {
+     "nombre": "Butaca_M4_F04_A001",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 1,
+     "pos_m": [
+      -4.2127,
+      -5.8389,
+      0.0
+     ],
+     "yaw_deg": 54.19
+    },
+    {
+     "nombre": "Butaca_M4_F04_A002",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 2,
+     "pos_m": [
+      -3.7121,
+      -6.1693,
+      0.0
+     ],
+     "yaw_deg": 58.965
+    },
+    {
+     "nombre": "Butaca_M4_F04_A003",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 3,
+     "pos_m": [
+      -3.1857,
+      -6.4569,
+      0.0
+     ],
+     "yaw_deg": 63.739
+    },
+    {
+     "nombre": "Butaca_M4_F04_A004",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 4,
+     "pos_m": [
+      -2.6372,
+      -6.6997,
+      0.0
+     ],
+     "yaw_deg": 68.514
+    },
+    {
+     "nombre": "Butaca_M4_F04_A005",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 5,
+     "pos_m": [
+      -2.0704,
+      -6.8959,
+      0.0
+     ],
+     "yaw_deg": 73.289
+    },
+    {
+     "nombre": "Butaca_M4_F04_A006",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 6,
+     "pos_m": [
+      -1.4892,
+      -7.0443,
+      0.0
+     ],
+     "yaw_deg": 78.063
+    },
+    {
+     "nombre": "Butaca_M4_F04_A007",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 7,
+     "pos_m": [
+      -0.8977,
+      -7.1438,
+      0.0
+     ],
+     "yaw_deg": 82.838
+    },
+    {
+     "nombre": "Butaca_M4_F04_A008",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 8,
+     "pos_m": [
+      -0.2999,
+      -7.1938,
+      0.0
+     ],
+     "yaw_deg": 87.613
+    },
+    {
+     "nombre": "Butaca_M4_F04_A009",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 9,
+     "pos_m": [
+      0.2999,
+      -7.1938,
+      0.0
+     ],
+     "yaw_deg": 92.387
+    },
+    {
+     "nombre": "Butaca_M4_F04_A010",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 10,
+     "pos_m": [
+      0.8977,
+      -7.1438,
+      0.0
+     ],
+     "yaw_deg": 97.162
+    },
+    {
+     "nombre": "Butaca_M4_F04_A011",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 11,
+     "pos_m": [
+      1.4892,
+      -7.0443,
+      0.0
+     ],
+     "yaw_deg": 101.937
+    },
+    {
+     "nombre": "Butaca_M4_F04_A012",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 12,
+     "pos_m": [
+      2.0704,
+      -6.8959,
+      0.0
+     ],
+     "yaw_deg": 106.711
+    },
+    {
+     "nombre": "Butaca_M4_F04_A013",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 13,
+     "pos_m": [
+      2.6372,
+      -6.6997,
+      0.0
+     ],
+     "yaw_deg": 111.486
+    },
+    {
+     "nombre": "Butaca_M4_F04_A014",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 14,
+     "pos_m": [
+      3.1857,
+      -6.4569,
+      0.0
+     ],
+     "yaw_deg": 116.261
+    },
+    {
+     "nombre": "Butaca_M4_F04_A015",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 15,
+     "pos_m": [
+      3.7121,
+      -6.1693,
+      0.0
+     ],
+     "yaw_deg": 121.035
+    },
+    {
+     "nombre": "Butaca_M4_F04_A016",
+     "modulo": 4,
+     "fila": 4,
+     "asiento": 16,
+     "pos_m": [
+      4.2127,
+      -5.8389,
+      0.0
+     ],
+     "yaw_deg": 125.81
+    },
+    {
+     "nombre": "Butaca_M4_F05_A001",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 1,
+     "pos_m": [
+      -5.0357,
+      -6.7232,
+      0.0
+     ],
+     "yaw_deg": 53.167
+    },
+    {
+     "nombre": "Butaca_M4_F05_A002",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 2,
+     "pos_m": [
+      -4.543,
+      -7.0655,
+      0.0
+     ],
+     "yaw_deg": 57.26
+    },
+    {
+     "nombre": "Butaca_M4_F05_A003",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 3,
+     "pos_m": [
+      -4.0272,
+      -7.3717,
+      0.0
+     ],
+     "yaw_deg": 61.352
+    },
+    {
+     "nombre": "Butaca_M4_F05_A004",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 4,
+     "pos_m": [
+      -3.4908,
+      -7.6403,
+      0.0
+     ],
+     "yaw_deg": 65.445
+    },
+    {
+     "nombre": "Butaca_M4_F05_A005",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 5,
+     "pos_m": [
+      -2.9366,
+      -7.87,
+      0.0
+     ],
+     "yaw_deg": 69.537
+    },
+    {
+     "nombre": "Butaca_M4_F05_A006",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 6,
+     "pos_m": [
+      -2.3675,
+      -8.0595,
+      0.0
+     ],
+     "yaw_deg": 73.63
+    },
+    {
+     "nombre": "Butaca_M4_F05_A007",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 7,
+     "pos_m": [
+      -1.7863,
+      -8.2079,
+      0.0
+     ],
+     "yaw_deg": 77.722
+    },
+    {
+     "nombre": "Butaca_M4_F05_A008",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 8,
+     "pos_m": [
+      -1.1959,
+      -8.3144,
+      0.0
+     ],
+     "yaw_deg": 81.815
+    },
+    {
+     "nombre": "Butaca_M4_F05_A009",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 9,
+     "pos_m": [
+      -0.5995,
+      -8.3786,
+      0.0
+     ],
+     "yaw_deg": 85.907
+    },
+    {
+     "nombre": "Butaca_M4_F05_A010",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 10,
+     "pos_m": [
+      -0.0,
+      -8.4,
+      0.0
+     ],
+     "yaw_deg": 90.0
+    },
+    {
+     "nombre": "Butaca_M4_F05_A011",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 11,
+     "pos_m": [
+      0.5995,
+      -8.3786,
+      0.0
+     ],
+     "yaw_deg": 94.093
+    },
+    {
+     "nombre": "Butaca_M4_F05_A012",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 12,
+     "pos_m": [
+      1.1959,
+      -8.3144,
+      0.0
+     ],
+     "yaw_deg": 98.185
+    },
+    {
+     "nombre": "Butaca_M4_F05_A013",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 13,
+     "pos_m": [
+      1.7863,
+      -8.2079,
+      0.0
+     ],
+     "yaw_deg": 102.278
+    },
+    {
+     "nombre": "Butaca_M4_F05_A014",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 14,
+     "pos_m": [
+      2.3675,
+      -8.0595,
+      0.0
+     ],
+     "yaw_deg": 106.37
+    },
+    {
+     "nombre": "Butaca_M4_F05_A015",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 15,
+     "pos_m": [
+      2.9366,
+      -7.87,
+      0.0
+     ],
+     "yaw_deg": 110.463
+    },
+    {
+     "nombre": "Butaca_M4_F05_A016",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 16,
+     "pos_m": [
+      3.4908,
+      -7.6403,
+      0.0
+     ],
+     "yaw_deg": 114.555
+    },
+    {
+     "nombre": "Butaca_M4_F05_A017",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 17,
+     "pos_m": [
+      4.0272,
+      -7.3717,
+      0.0
+     ],
+     "yaw_deg": 118.648
+    },
+    {
+     "nombre": "Butaca_M4_F05_A018",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 18,
+     "pos_m": [
+      4.543,
+      -7.0655,
+      0.0
+     ],
+     "yaw_deg": 122.74
+    },
+    {
+     "nombre": "Butaca_M4_F05_A019",
+     "modulo": 4,
+     "fila": 5,
+     "asiento": 19,
+     "pos_m": [
+      5.0357,
+      -6.7232,
+      0.0
+     ],
+     "yaw_deg": 126.833
+    }
+   ]
+  },
+  "SM_Puerta": {
+   "material": "M_Puerta",
+   "carpeta": "Puertas",
+   "prefijo": "Puerta",
+   "items": [
+    {
+     "nombre": "Puerta_01",
+     "pos_m": [
+      8.1317,
+      8.1317,
+      0.0
+     ],
+     "yaw_deg": 45.0
+    },
+    {
+     "nombre": "Puerta_02",
+     "pos_m": [
+      -8.1317,
+      8.1317,
+      0.0
+     ],
+     "yaw_deg": 135.0
+    },
+    {
+     "nombre": "Puerta_03",
+     "pos_m": [
+      -8.1317,
+      -8.1317,
+      0.0
+     ],
+     "yaw_deg": -135.0
+    },
+    {
+     "nombre": "Puerta_04",
+     "pos_m": [
+      8.1317,
+      -8.1317,
+      0.0
+     ],
+     "yaw_deg": -45.0
+    }
+   ]
+  },
+  "SM_SillaOperador": {
+   "material": "M_Control",
+   "carpeta": "Control",
+   "prefijo": "SillaOperador",
+   "items": [
+    {
+     "nombre": "SillaOperador_A",
+     "pos_m": [
+      -10.5,
+      -1.0,
+      0.0
+     ],
+     "yaw_deg": -0.0
+    },
+    {
+     "nombre": "SillaOperador_B",
+     "pos_m": [
+      -10.5,
+      1.0,
+      0.0
+     ],
+     "yaw_deg": -0.0
+    }
+   ]
+  }
+ },
+ "pasillos": [
+  {
+   "ang_deg": 45.0,
+   "r_min_m": 2.45,
+   "r_max_m": 10.9
+  },
+  {
+   "ang_deg": 135.0,
+   "r_min_m": 2.45,
+   "r_max_m": 10.9
+  },
+  {
+   "ang_deg": 225.0,
+   "r_min_m": 2.45,
+   "r_max_m": 10.9
+  },
+  {
+   "ang_deg": 315.0,
+   "r_min_m": 2.45,
+   "r_max_m": 10.9
+  }
+ ],
+ "luces_muro": {
+  "angulos_deg": [
+   0.0,
+   7.059,
+   14.118,
+   21.176,
+   28.235,
+   35.294,
+   56.471,
+   63.529,
+   70.588,
+   77.647,
+   84.706,
+   91.765,
+   98.824,
+   105.882,
+   112.941,
+   120.0,
+   127.059,
+   141.176,
+   148.235,
+   155.294,
+   162.353,
+   169.412,
+   176.471,
+   183.529,
+   190.588,
+   197.647,
+   204.706,
+   211.765,
+   218.824,
+   232.941,
+   240.0,
+   247.059,
+   254.118,
+   261.176,
+   268.235,
+   275.294,
+   282.353,
+   289.412,
+   296.471,
+   303.529,
+   324.706,
+   331.765,
+   338.824,
+   345.882,
+   352.941
+  ],
+  "radio_m": 11.4,
+  "z_m": 2.75,
+  "direccion": "abajo"
+ },
+ "ojo": {
+  "pos_m": [
+   6.4485,
+   -0.0,
+   0.8013
+  ],
+  "yaw_deg": -180.0,
+  "pitch_deg": 30.0
+ },
+ "layout_id": "1a664637"
+}

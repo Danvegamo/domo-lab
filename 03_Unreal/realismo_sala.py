@@ -52,6 +52,8 @@ M_PBR_PATH = CARPETA_MATERIALES + "/M_SalaPBR"
 M_EMISIVO_PATH = CARPETA_MATERIALES + "/M_SalaEmisivo"
 
 ETIQUETA_DETALLE = "domo_detalle"
+# Actores que son luces de sala: el DomeMediaController los apaga con la senal (domo.Luces).
+ETIQUETA_LUZ = "domo_luz"
 CARPETA_DETALLES = "Detalles"
 
 CUBO = "/Engine/BasicShapes/Cube.Cube"
@@ -80,15 +82,21 @@ SUPERFICIES = {
                    rug_mul=1.0, rug_add=0.0, normal=0.7, macro=0.10),
     "Pintura": dict(textura="Pintura", escala_m=0.60, tinte=(0.08, 0.08, 0.085), metalico=0.0,
                     rug_mul=1.0, rug_add=0.0, normal=0.5, macro=0.05),
+    # Piso pulido y oscuro del Planetario de Bogota (en las fotos refleja las luces
+    # del muro): rugosidad baja y relieve casi nulo.
+    "PisoPulido": dict(textura="Pintura", escala_m=1.00, tinte=(0.045, 0.045, 0.05), metalico=0.0,
+                       rug_mul=0.30, rug_add=0.0, normal=0.15, macro=0.06),
 }
 
 # Material logico de cada malla -> superficie, con el tinte que toque.
 # Domo 180 (planetario): nombres del contrato de importar_sala.py.
 MATERIALES_180 = {
-    "M_Muro": ("Fieltro", None),
+    # Muro base = sombra de madera (lo que se ve entre los listones), no fieltro casi
+    # negro: con el hueco negro los listones se leian "pintados sobre negro".
+    "M_Muro": ("Madera", (0.15, 0.09, 0.055)),
     "M_Madera": ("Madera", None),
-    "M_Piso": ("Alfombra", None),
-    "M_Butaca": ("Tela", (0.055, 0.07, 0.15)),     # azul profundo de planetario
+    "M_Piso": ("PisoPulido", None),
+    "M_Butaca": ("Tela", (0.07, 0.10, 0.23)),      # azul de planetario, algo mas claro que antes (fotos)
     "M_Tarima": ("Tarima", None),
     "M_Control": ("Pintura", (0.05, 0.05, 0.055)),
     "M_Puerta": ("Pintura", (0.07, 0.066, 0.062)),
@@ -109,6 +117,7 @@ MATERIALES_FRONTALES = {
 # la cupula blanca vale 1).
 EMISIVOS = {
     "MI_LedAmbar": dict(color=(1.0, 0.50, 0.14), intensidad=2.0),
+    "MI_LuzMuro": dict(color=(1.0, 0.55, 0.18), intensidad=3.0),
     "MI_LedTarima": dict(color=(0.40, 0.60, 1.0), intensidad=1.2),
     "MI_Salida": dict(color=(1.0, 1.0, 1.0), intensidad=1.6, textura="SenalSalida"),
     "MI_Monitor": dict(color=(0.55, 0.65, 0.85), intensidad=0.2),
@@ -487,6 +496,8 @@ def materiales_de_sala(fov, datos_sala, carpeta):
     if datos_sala is None:
         for nombre, (sup, tinte) in MATERIALES_180.items():
             res[nombre] = instancia_superficie("{}/MI_{}".format(carpeta, nombre[2:]), sup, tinte)
+        e = EMISIVOS["MI_LuzMuro"]
+        res["M_LuzMuro"] = instancia_emisiva("{}/MI_LuzMuro".format(carpeta), e["color"], e["intensidad"])
     else:
         for nombre, datos in sorted(datos_sala["materiales"].items()):
             ruta = "{}/MI_{}".format(carpeta, nombre[2:])
@@ -573,7 +584,7 @@ def borrar_detalles(actor_subsystem):
     return len(viejos)
 
 
-def _pieza(actor_subsystem, malla, material, pos_cm, tam_m, rot, etiqueta, sombra=True):
+def _pieza(actor_subsystem, malla, material, pos_cm, tam_m, rot, etiqueta, sombra=True, luz=False):
     """Un StaticMeshActor con una forma basica del motor (cubo o plano de
     100 uu), escalada a tam_m metros."""
     a = actor_subsystem.spawn_actor_from_class(unreal.StaticMeshActor, pos_cm, rot)
@@ -585,7 +596,7 @@ def _pieza(actor_subsystem, malla, material, pos_cm, tam_m, rot, etiqueta, sombr
     comp.set_editor_property("cast_shadow", sombra)
     a.set_actor_scale3d(unreal.Vector(tam_m[0], tam_m[1], tam_m[2]))
     a.set_actor_label(etiqueta)
-    a.tags = [unreal.Name(ETIQUETA_DETALLE)]
+    a.tags = [unreal.Name(ETIQUETA_DETALLE)] + ([unreal.Name(ETIQUETA_LUZ)] if luz else [])
     a.set_folder_path(CARPETA_DETALLES)
     return a
 
@@ -635,52 +646,102 @@ def senales_salida(actor_subsystem, mats, fov, datos_sala):
     return n
 
 
-def detalles_180(actor_subsystem, mats):
-    """Luces de pasillo (en el piso, en el eje de cada pasillo entre cunas),
-    anillo de luz en el borde de la tarima y monitores en la consola de
-    control. Angulos como en 01_Blender/generar_sala_domo.py
-    (calcular_layout_sala): control de 7 m de arco centrado en -X, 6 cunas en
-    el resto. La planta es simetrica en Y, asi que el cambio de signo de Y
-    Blender -> Unreal no mueve nada."""
+def _rot_vec(yaw_deg, x, y):
+    """Gira (x, y) el yaw de Unreal (grados). En coordenadas de Unreal el
+    adelante de un actor con yaw t es (cos t, sin t)."""
+    t = math.radians(yaw_deg)
+    return x * math.cos(t) - y * math.sin(t), x * math.sin(t) + y * math.cos(t)
+
+
+def detalles_180(actor_subsystem, mats, manifiesto):
+    """Luces de pasillo, anillo de la tarima, monitores de la consola y luces
+    de muro, a partir de 02_Export/sala_domo.json (lo escribe
+    01_Blender/generar_sala_domo.py). Manifiesto en el marco de Blender: Unreal
+    lleva la misma x y la y invertida. Los monitores se anclan al actor
+    Monitores_Actor: si se mueve la consola, las pantallas la siguen."""
+    if manifiesto is None:
+        log("Sin manifiesto (02_Export/sala_domo.json): no hay detalles del 180.")
+        return 0
     cubo = unreal.EditorAssetLibrary.load_asset(CUBO)
     plano = unreal.EditorAssetLibrary.load_asset(PLANO)
-    radio, ancho_control = 11.5, 7.0
-    ang_control = math.degrees(ancho_control / radio)
-    paso = (360.0 - ang_control) / 6.0
-    inicio = 180.0 + ang_control / 2.0
     n = 0
-    for k in range(7):
-        ang = math.radians(inicio + k * paso)
-        # los pasillos que bordean el control llegan solo hasta su antepecho
-        r_max = 6.3 if k in (0, 6) else 10.9
-        r = 2.6
-        i = 0
-        while r <= r_max:
+    # luces de pasillo, en el eje de cada pasillo
+    for k, p in enumerate(manifiesto["pasillos"]):
+        ang = math.radians(p["ang_deg"])
+        r, i = p["r_min_m"], 0
+        while r <= p["r_max_m"]:
             x, y = r * math.cos(ang), -r * math.sin(ang)
             _pieza(actor_subsystem, cubo, mats["MI_LedAmbar"], unreal.Vector(x * 100, y * 100, 1.2),
                    (0.07, 0.035, 0.024), unreal.Rotator(0.0, 0.0, -math.degrees(ang)),
-                   "LedPasillo_{}_{:02d}".format(k, i), sombra=False)
+                   "LedPasillo_{}_{:02d}".format(k, i), sombra=False, luz=True)
             r += 1.2
             i += 1
             n += 1
-    # anillo en el borde superior de la tarima (r 1,5 m, 1 m de alto)
+    # anillo en el borde superior de la tarima
+    tar = manifiesto["sala"]["tarima"]
     segs = 72
-    r_t = 1.508
+    r_t = tar["radio_m"] + 0.008
     largo = 2 * math.pi * r_t / segs * 0.8
+    z_anillo = tar["alto_m"] * 100.0 - 3.0
     for i in range(segs):
         a = 2 * math.pi * (i + 0.5) / segs
         x, y = r_t * math.cos(a), r_t * math.sin(a)
-        _pieza(actor_subsystem, cubo, mats["MI_LedTarima"], unreal.Vector(x * 100, y * 100, 97.0),
+        _pieza(actor_subsystem, cubo, mats["MI_LedTarima"], unreal.Vector(x * 100, y * 100, z_anillo),
                (0.012, largo, 0.018), unreal.Rotator(0.0, 0.0, math.degrees(a)),
-               "LedTarima_{:02d}".format(i), sombra=False)
+               "LedTarima_{:02d}".format(i), sombra=False, luz=True)
     n += segs
-    # monitores: la fila de monitores de la consola esta en x = -9,45 m,
-    # de 0,80 a 1,30 m de alto; se ponen tres pantallas encendidas, tenues.
-    for j, yy in enumerate((-1.3, 0.0, 1.3)):
-        _pieza(actor_subsystem, plano, mats["MI_Monitor"], unreal.Vector(-944.0, yy * 100, 105.0),
-               (1.10, 0.42, 1.0), _rot_plano(0.0), "Monitor_{}".format(j + 1), sombra=False)
-        n += 1
+    # monitores: una pantalla emisiva por entrada, anclada a Monitores_Actor
+    padre = None
+    for actor in actor_subsystem.get_all_level_actors():
+        if actor.get_actor_label() == "Monitores_Actor":
+            padre = actor
+            break
+    piezas = {pz["nombre"]: pz for pz in manifiesto["piezas"]}
+    if padre is not None and "SM_Monitores" in piezas:
+        loc = padre.get_actor_location()
+        yaw = padre.get_actor_rotation().yaw
+        for j, m in enumerate(piezas["SM_Monitores"]["monitores"]):
+            lx, ly, lz = m["local_m"]
+            dx, dy = _rot_vec(yaw, lx * 100.0, -ly * 100.0)
+            pos = unreal.Vector(loc.x + dx, loc.y + dy, loc.z + lz * 100.0)
+            a = _pieza(actor_subsystem, plano, mats["MI_Monitor"], pos, (m["ancho_m"], m["alto_m"], 1.0),
+                       _rot_plano(yaw), "Monitor_{}".format(j + 1), sombra=False)
+            a.attach_to_actor(padre, "", unreal.AttachmentRule.KEEP_WORLD, unreal.AttachmentRule.KEEP_WORLD,
+                              unreal.AttachmentRule.KEEP_WORLD, False)
+            n += 1
+    else:
+        log("No hay Monitores_Actor en el nivel: se omiten las pantallas de la consola.")
+    # luces de muro: un foco de luz real cada N focos de la franja emisiva
+    lm = manifiesto.get("luces_muro")
+    if lm:
+        angulos = lm["angulos_deg"][::3]
+        for i, ang_deg in enumerate(angulos):
+            ang = math.radians(ang_deg)
+            x, y = lm["radio_m"] * math.cos(ang), -lm["radio_m"] * math.sin(ang)
+            luz = actor_subsystem.spawn_actor_from_class(
+                unreal.SpotLight, unreal.Vector(x * 100, y * 100, lm["z_m"] * 100),
+                unreal.Rotator(pitch=-90.0, yaw=0.0, roll=0.0))
+            if luz is None:
+                fallar("spawn_actor_from_class devolvio None para SpotLight (luz de muro).")
+            comp = luz.get_component_by_class(unreal.SpotLightComponent)
+            comp.set_editor_property("mobility", unreal.ComponentMobility.MOVABLE)
+            comp.set_editor_property("intensity_units", unreal.LightUnits.LUMENS)
+            comp.set_editor_property("intensity", LUZ_MURO_LUMENES)
+            comp.set_editor_property("light_color", unreal.Color(r=255, g=150, b=60, a=255))
+            comp.set_editor_property("attenuation_radius", 420.0)
+            comp.set_editor_property("inner_cone_angle", 12.0)
+            comp.set_editor_property("outer_cone_angle", 42.0)
+            comp.set_editor_property("cast_shadows", False)
+            luz.set_actor_label("LuzMuro_{:02d}".format(i))
+            luz.tags = [unreal.Name(ETIQUETA_DETALLE), unreal.Name(ETIQUETA_LUZ)]
+            luz.set_folder_path(CARPETA_DETALLES)
+            n += 1
     return n
+
+
+# Lumenes de cada foco de la franja de muro (wall-wash de las fotos del
+# Planetario de Bogota). Punto de partida a ojo; se ajusta con una captura.
+LUZ_MURO_LUMENES = 1200.0
 
 
 def detalles_frontal(actor_subsystem, mats, fov, datos_sala):
@@ -715,12 +776,12 @@ def detalles_frontal(actor_subsystem, mats, fov, datos_sala):
     return 6
 
 
-def colocar_detalles(actor_subsystem, fov, datos_sala):
+def colocar_detalles(actor_subsystem, fov, datos_sala, manifiesto=None):
     mats = instancias_detalle()
     borrados = borrar_detalles(actor_subsystem)
     n = senales_salida(actor_subsystem, mats, fov, datos_sala)
     if datos_sala is None:
-        n += detalles_180(actor_subsystem, mats)
+        n += detalles_180(actor_subsystem, mats, manifiesto)
     else:
         n += detalles_frontal(actor_subsystem, mats, fov, datos_sala)
     log("Detalles de la sala {:g}: {} actores (se reemplazaron {}).".format(fov, n, borrados))

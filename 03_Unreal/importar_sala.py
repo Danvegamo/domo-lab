@@ -142,7 +142,23 @@ if ES_SALA_FRONTAL:
     with open(DATOS_SALA_PATH, "r", encoding="utf-8") as _fh:
         DATOS_SALA = json.load(_fh)
 
+# Manifiesto del 180 (28 sep 2026): si 02_Export/sala_domo.json existe, el 180 se
+# arma desde el (piezas sueltas, actualizar sin borrar); ver "MODO MANIFIESTO".
+MANIFIESTO_PATH = os.path.join(DOMO_ROOT_DIR, "02_Export", "sala_domo.json")
+MANIFIESTO = None
+if ES_MEDIA_ESFERA and os.path.isfile(MANIFIESTO_PATH):
+    import json
+    with open(MANIFIESTO_PATH, "r", encoding="utf-8") as _fh:
+        MANIFIESTO = json.load(_fh)
+MODO = os.environ.get("DOMO_MODO", "actualizar").strip().lower()
+if MODO not in ("actualizar", "reconstruir"):
+    raise RuntimeError("[importar_sala] DOMO_MODO tiene que ser actualizar o reconstruir; llego {}".format(MODO))
+FBX_PIEZAS_PATH = os.path.join(DOMO_ROOT_DIR, "02_Export", "sala_domo_piezas.fbx")
+TAG_GENERADO = "domo_generado"
+TAG_LUZ = "domo_luz"
+
 CONTENT_SALA = "/Game/Sala"
+CONTENT_PIEZAS = "/Game/Sala/Piezas"
 CONTENT_MATERIALS = "/Game/Sala/Materials"
 CONTENT_TEXTURES = "/Game/Sala/Textures"
 # Donde caen las mallas: la media esfera en /Game/Sala (como siempre); cada
@@ -165,6 +181,8 @@ NOMBRES_MALLAS_ESPERADAS = (
 )
 if ES_SALA_FRONTAL:
     NOMBRES_MALLAS_ESPERADAS = list(DATOS_SALA["mallas"])
+if MANIFIESTO is not None:
+    NOMBRES_MALLAS_ESPERADAS = list(MANIFIESTO["mallas_base"])
 BUTACAS_POR_MODULO = 60
 TOTAL_BUTACAS = 360
 
@@ -177,6 +195,7 @@ MATERIAL_POR_MALLA = {
     "SM_Piso": "M_Piso",
     "SM_Tarima": "M_Tarima",
     "SM_Control": "M_Control",
+    "SM_LucesMuro": "M_LuzMuro",
 }
 
 # Nanite (desde el 18 sep 2026, encargo de realismo): encendido en todas las
@@ -256,6 +275,9 @@ resumen = {
     "materiales_reutilizados": [],
     "actores_colocados": [],
     "avisos": [],
+    "actores_conservados": 0,
+    "actores_creados": 0,
+    "actores_reemplazados": 0,
 }
 
 
@@ -363,7 +385,7 @@ def importar_fbx():
     # /Game/Sala como M_* sueltos, que el nivel no usa). Los casquetes NO:
     # traerian los mismos nombres y pisarian esos assets del 180; sus mallas
     # reciben los materiales de /Game/Sala/Materials en aplicar_materiales.
-    options.import_materials = ES_MEDIA_ESFERA
+    options.import_materials = ES_MEDIA_ESFERA and MANIFIESTO is None
     options.import_textures = False
     options.import_animations = False
     options.mesh_type_to_import = unreal.FBXImportType.FBXIT_STATIC_MESH
@@ -641,7 +663,7 @@ def crear_materiales():
     materiales = {}
     creados = []
 
-    if ES_MEDIA_ESFERA:
+    if ES_MEDIA_ESFERA and not (MANIFIESTO is not None and MODO == "actualizar"):
         m_domo, mi_domo = _material_domo_emisivo()
         creados += ["M_Domo", "MI_Domo"]
     else:
@@ -665,7 +687,7 @@ def crear_materiales():
     materiales.update(pbr)
     creados += ["{}/MI_{}".format(carpeta, n[2:]) for n in sorted(pbr)]
 
-    unreal.EditorAssetLibrary.save_directory(CONTENT_MATERIALS, False, True)
+    unreal.EditorAssetLibrary.save_directory(CONTENT_MATERIALS, MANIFIESTO is not None, True)
     reutilizados = sorted(set(["M_Domo", "MI_Domo"]) - set(creados))
     log("Materiales creados: {}; reutilizados: {}".format(creados, reutilizados))
     resumen["materiales_creados"] = creados
@@ -951,6 +973,305 @@ def crear_player_start(actor_subsystem):
 
 
 # ---------------------------------------------------------------------------
+# MODO MANIFIESTO (180, desde el 28 sep 2026): actualizar sin borrar
+# ---------------------------------------------------------------------------
+#
+# 01_Blender/generar_sala_domo.py escribe 02_Export/sala_domo.json junto a dos
+# FBX: sala_domo.fbx (mallas horneadas en el mundo: domo, muro, listones, luces
+# de muro, piso, tarima) y sala_domo_piezas.fbx (una butaca maestra, una puerta
+# maestra, la silla de operador y la consola en partes, cada una con su pivote).
+# El manifiesto dice donde va cada pieza y cada instancia.
+#
+# A diferencia del modo de siempre, aqui el nivel NO se vacia:
+#   - Los actores que ya existen con la misma etiqueta y la misma malla se
+#     CONSERVAN tal cual (posicion, giro, escala y lo que hayas cambiado a mano).
+#     Como las mallas se reimportan encima de los mismos assets, se actualizan
+#     solas en esos actores.
+#   - Lo que falta se crea, en la posicion del manifiesto.
+#   - Los actores del modelo viejo (butacas y consola horneadas, puertas viejas)
+#     se retiran, y con ellos sus assets.
+#   - Nunca se tocan actores que este script no creo: el SpoutDomeReceiver, el
+#     DomeMediaController, los tuyos.
+#   - El PostProcessVolume, el SkyLight y el PlayerStart se crean solo si no hay.
+# DOMO_MODO=reconstruir vuelve al comportamiento de antes (vaciar y armar).
+
+def _a_unreal(pos_m, yaw_deg):
+    """Marco de Blender -> Unreal: misma x, y invertida, yaw invertido, en cm."""
+    return (unreal.Vector(pos_m[0] * 100.0, -pos_m[1] * 100.0, pos_m[2] * 100.0),
+            unreal.Rotator(roll=0.0, pitch=0.0, yaw=-yaw_deg))
+
+
+def _resolver_nombres(mallas_crudas, esperados):
+    """Nombre de asset real -> nombre del contrato (el importador antepone el
+    nombre del archivo: sala_domo_piezas_SM_Butaca)."""
+    res = {}
+    for nombre_real, obj in mallas_crudas.items():
+        for esperado in esperados:
+            if nombre_real == esperado or nombre_real.endswith("_" + esperado):
+                res[esperado] = obj
+                break
+    return res
+
+
+def importar_piezas():
+    """Importa sala_domo_piezas.fbx a /Game/Sala/Piezas con el pivote de cada
+    malla en su origen local (las mallas NO se hornean en el mundo)."""
+    esperados = [p["malla"] for p in MANIFIESTO["piezas"]] + list(MANIFIESTO["instancias"].keys())
+    if not os.path.isfile(FBX_PIEZAS_PATH):
+        fallar("Falta {}: correr antes 01_Blender/generar_sala_domo.py".format(FBX_PIEZAS_PATH))
+    log("Importando {} -> {}".format(FBX_PIEZAS_PATH, CONTENT_PIEZAS))
+    options = unreal.FbxImportUI()
+    options.import_mesh = True
+    options.import_materials = False
+    options.import_textures = False
+    options.import_animations = False
+    options.import_as_skeletal = False
+    options.mesh_type_to_import = unreal.FBXImportType.FBXIT_STATIC_MESH
+    options.automated_import_should_detect_type = False
+    sm = options.static_mesh_import_data
+    sm.set_editor_property("combine_meshes", False)
+    sm.set_editor_property("auto_generate_collision", True)
+    sm.set_editor_property("generate_lightmap_u_vs", False)
+    # Con la malla en coordenadas locales (sin llevarla al mundo) Unreal no convierte
+    # metros a centimetros: la butaca llegaba de 1 cm. El FBX de piezas ya sale de
+    # Blender en centimetros (exportar_fbx_piezas), asi que aqui no se escala.
+    sm.set_editor_property("convert_scene_unit", False)
+    sm.set_editor_property("import_uniform_scale", 1.0)
+    sm.set_editor_property("build_nanite", False)
+    # Pivote propio: la malla queda en coordenadas locales y NO se lleva al mundo.
+    sm.set_editor_property("transform_vertex_to_absolute", False)
+    sm.set_editor_property("bake_pivot_in_vertex", False)
+
+    task = unreal.AssetImportTask()
+    task.set_editor_property("filename", FBX_PIEZAS_PATH)
+    task.set_editor_property("destination_path", CONTENT_PIEZAS)
+    task.set_editor_property("replace_existing", True)
+    task.set_editor_property("replace_existing_settings", True)
+    task.set_editor_property("automated", True)
+    task.set_editor_property("save", True)
+    task.set_editor_property("factory", unreal.FbxFactory())
+    task.set_editor_property("options", options)
+    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
+
+    crudas = {o.get_name(): o for o in task.get_objects() if isinstance(o, unreal.StaticMesh)}
+    if not crudas:
+        fallar("La importacion de {} no devolvio ningun Static Mesh.".format(FBX_PIEZAS_PATH))
+    piezas = _resolver_nombres(crudas, esperados)
+    for nombre, mesh in sorted(piezas.items()):
+        caja = mesh.get_bounds()
+        origen, extent = caja.origin, caja.box_extent
+        log("  {}: centro ({:.0f}, {:.0f}, {:.0f}) cm, semiejes ({:.0f}, {:.0f}, {:.0f}) cm".format(
+            nombre, origen.x, origen.y, origen.z, extent.x, extent.y, extent.z))
+        if max(abs(origen.x), abs(origen.y)) > 1500.0:
+            aviso("{} llego lejos del origen: el pivote no quedo local (revisar transform_vertex_to_absolute).".format(nombre))
+    faltan = [n for n in esperados if n not in piezas]
+    if faltan:
+        fallar("El FBX de piezas no trajo: {}.".format(faltan))
+    if USAR_NANITE:
+        for n, mesh in sorted(piezas.items()):
+            realismo.aplicar_nanite(mesh, n)
+    return piezas
+
+
+def aplicar_materiales_piezas(piezas, materiales):
+    logico = {p["malla"]: p["material"] for p in MANIFIESTO["piezas"]}
+    logico.update({m: g["material"] for m, g in MANIFIESTO["instancias"].items()})
+    for nombre, mesh in piezas.items():
+        asignar_material(mesh, materiales.get(logico[nombre]))
+        unreal.EditorAssetLibrary.save_loaded_asset(mesh, False)
+
+
+def abrir_nivel_manifiesto():
+    ls = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+    actores = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    if not unreal.EditorAssetLibrary.does_directory_exist(CONTENT_MAPS):
+        unreal.EditorAssetLibrary.make_directory(CONTENT_MAPS)
+    if unreal.EditorAssetLibrary.does_asset_exist(MAP_PACKAGE_PATH):
+        if not ls.load_level(MAP_PACKAGE_PATH):
+            fallar("No se pudo cargar el nivel existente {}".format(MAP_PACKAGE_PATH))
+        log("Nivel existente {} cargado (modo {}).".format(MAP_PACKAGE_PATH, MODO))
+        if MODO == "reconstruir":
+            previos = actores.get_all_level_actors()
+            if previos:
+                actores.destroy_actors(previos)
+                log("Modo reconstruir: se borraron {} actores.".format(len(previos)))
+    else:
+        if not ls.new_level(MAP_PACKAGE_PATH):
+            fallar("No se pudo crear el nivel {}".format(MAP_PACKAGE_PATH))
+        log("Nivel creado: {}".format(MAP_PACKAGE_PATH))
+    return ls, actores
+
+
+def _ruta_malla(actor):
+    if not isinstance(actor, unreal.StaticMeshActor):
+        return ""
+    m = actor.static_mesh_component.static_mesh
+    return m.get_path_name() if m is not None else ""
+
+
+def retirar_modelo_viejo(actores):
+    """Actores del modelo de antes: butacas y consola horneadas (una malla por
+    cuna) y las puertas horneadas SM_Puerta_01..04. Se reconocen por la malla."""
+    viejos_marcas = ("sala_domo_SM_Butacas_", "sala_domo_SM_Control", "sala_domo_SM_Puerta_")
+    retirados = []
+    for a in actores.get_all_level_actors():
+        ruta = _ruta_malla(a)
+        if ruta and any(m in ruta for m in viejos_marcas):
+            retirados.append(a.get_actor_label())
+            actores.destroy_actor(a)
+    if retirados:
+        log("Modelo viejo retirado del nivel ({}): {}".format(len(retirados), retirados))
+        resumen["retirados"] = retirados
+    borrados = []
+    for base in ["SM_Butacas_{:02d}".format(i) for i in range(1, 7)] + ["SM_Control"] + \
+            ["SM_Puerta_{:02d}".format(i) for i in range(1, 5)]:
+        ruta = "{}/sala_domo_{}".format(CONTENT_SALA, base)
+        if unreal.EditorAssetLibrary.does_asset_exist(ruta):
+            if unreal.EditorAssetLibrary.delete_asset(ruta):
+                borrados.append(base)
+    if borrados:
+        log("Assets viejos borrados: {}".format(borrados))
+
+
+def _asegurar_actor(actores, indice, etiqueta, mesh, loc, rot, carpeta, capa_por_reparto=False, vivos=None):
+    """Un StaticMeshActor con esa etiqueta y esa malla. Si ya existe con la
+    misma malla se CONSERVA (no se toca su transformacion). Si existe con otra
+    malla (modelo viejo), se cambia por uno nuevo."""
+    a = indice.get(etiqueta)
+    tag_layout = "domo_layout_" + str(MANIFIESTO.get("layout_id", "0"))
+    if a is not None:
+        tags = [str(t) for t in a.tags]
+        # Se conserva solo si es la misma malla Y el mismo reparto: si Blender cambio la
+        # planta (otro numero de pasillos, otras filas), el actor con esa etiqueta ya no
+        # esta donde toca y se rehace. Dentro del mismo reparto no se toca nada.
+        if _ruta_malla(a) == mesh.get_path_name() and (tag_layout in tags or not capa_por_reparto):
+            resumen["actores_conservados"] += 1
+            if TAG_GENERADO not in tags:
+                a.tags = list(a.tags) + [unreal.Name(TAG_GENERADO)]
+            if capa_por_reparto and tag_layout not in tags:
+                a.tags = list(a.tags) + [unreal.Name(tag_layout)]
+            vivos.add(etiqueta)
+            return a
+        actores.destroy_actor(a)
+        resumen["actores_reemplazados"] += 1
+    a = actores.spawn_actor_from_class(unreal.StaticMeshActor, loc, rot)
+    if a is None:
+        fallar("spawn_actor_from_class devolvio None para {}.".format(etiqueta))
+    if not a.static_mesh_component.set_static_mesh(mesh):
+        fallar("set_static_mesh devolvio False para {}.".format(etiqueta))
+    a.set_actor_label(etiqueta)
+    a.tags = [unreal.Name(TAG_GENERADO)] + ([unreal.Name(tag_layout)] if capa_por_reparto else [])
+    vivos.add(etiqueta)
+    a.set_folder_path("Sala/" + carpeta)
+    indice[etiqueta] = a
+    resumen["actores_creados"] += 1
+    return a
+
+
+def sincronizar_nivel(actores, mallas_base, piezas):
+    indice = {a.get_actor_label(): a for a in actores.get_all_level_actors()}
+    origen = (unreal.Vector(0.0, 0.0, 0.0), unreal.Rotator(0.0, 0.0, 0.0))
+    vivos = set()
+    for nombre in MANIFIESTO["mallas_base"]:
+        mesh = mallas_base.get(nombre)
+        if mesh is None:
+            aviso("Falta la malla base {}.".format(nombre))
+            continue
+        a = _asegurar_actor(actores, indice, nombre.replace("SM_", "") + "_Actor", mesh, origen[0], origen[1],
+                            "Estructura", vivos=vivos)
+        if nombre == "SM_LucesMuro" and TAG_LUZ not in [str(t) for t in a.tags]:
+            a.tags = list(a.tags) + [unreal.Name(TAG_LUZ)]
+    for pz in MANIFIESTO["piezas"]:
+        loc, rot = _a_unreal(pz["pos_m"], pz["yaw_deg"])
+        _asegurar_actor(actores, indice, pz["malla"].replace("SM_", "") + "_Actor", piezas[pz["malla"]], loc, rot,
+                        pz["carpeta"], capa_por_reparto=True, vivos=vivos)
+    for malla, grupo in MANIFIESTO["instancias"].items():
+        mesh = piezas[malla]
+        for it in grupo["items"]:
+            loc, rot = _a_unreal(it["pos_m"], it["yaw_deg"])
+            carpeta = grupo["carpeta"] + ("/Cuna{}".format(it["modulo"]) if "modulo" in it else "")
+            _asegurar_actor(actores, indice, it["nombre"] + "_Actor", mesh, loc, rot, carpeta,
+                            capa_por_reparto=True, vivos=vivos)
+    # Actores que este importador creo antes y que el reparto actual ya no tiene
+    # (p. ej. butacas de una fila que se quito): se retiran. Los que tu pusiste no
+    # llevan la etiqueta domo_generado, asi que no se tocan.
+    sobran = [a for a in actores.get_all_level_actors()
+              if TAG_GENERADO in [str(t) for t in a.tags] and a.get_actor_label() not in vivos]
+    if sobran:
+        nombres = [a.get_actor_label() for a in sobran]
+        for a in sobran:
+            actores.destroy_actor(a)
+        resumen["retirados"] = resumen.get("retirados", []) + nombres
+        log("Actores generados que ya no estan en el reparto, retirados ({}): {}".format(len(nombres), nombres[:12]))
+    log("Actores del modelo: {} conservados, {} creados, {} reemplazados.".format(
+        resumen["actores_conservados"], resumen["actores_creados"], resumen["actores_reemplazados"]))
+
+
+def asegurar_ambiente(actores):
+    """PostProcessVolume, SkyLight y PlayerStart solo si el nivel no los tiene."""
+    todos = actores.get_all_level_actors()
+    if not any(isinstance(a, unreal.PostProcessVolume) for a in todos):
+        crear_post_process(actores)
+    else:
+        log("PostProcessVolume existente: se conserva.")
+    if not any(isinstance(a, unreal.SkyLight) for a in todos):
+        crear_skylight_domo(actores)
+    else:
+        log("SkyLight existente: se conserva.")
+    if not any(isinstance(a, unreal.PlayerStart) for a in todos):
+        ojo = MANIFIESTO["ojo"]
+        loc, rot = _a_unreal(ojo["pos_m"], ojo["yaw_deg"])
+        start = actores.spawn_actor_from_class(unreal.PlayerStart, loc, rot)
+        if start is None:
+            fallar("spawn_actor_from_class devolvio None para PlayerStart.")
+        start.set_actor_label("PlayerStart_Butaca")
+        log("PlayerStart_Butaca creado en la butaca central de la fila del medio, a la altura de ojo.")
+    else:
+        log("PlayerStart existente: se conserva.")
+
+
+def main_manifiesto():
+    log("=== Importacion de la sala 180 en modo {} (manifiesto v{}) ===".format(MODO, MANIFIESTO["version"]))
+    sala = MANIFIESTO["sala"]
+    log("{} butacas en {} cunas y {} filas; tarima de {:.2f} m de radio.".format(
+        sala["total_butacas"], sala["modulos"], sala["filas"], sala["tarima"]["radio_m"]))
+    mallas_base = importar_fbx()
+    piezas = importar_piezas()
+    materiales = crear_materiales()
+    aplicar_materiales(mallas_base, materiales)
+    aplicar_materiales_piezas(piezas, materiales)
+
+    ls, actores = abrir_nivel_manifiesto()
+    if MODO == "reconstruir":
+        limpiar_luces_de_cielo(actores)
+    retirar_modelo_viejo(actores)
+    sincronizar_nivel(actores, mallas_base, piezas)
+    asegurar_ambiente(actores)
+    n = realismo.colocar_detalles(actores, FOV_DOMO, None, MANIFIESTO)
+    resumen["actores_colocados"].append("{} detalles (carpeta Detalles)".format(n))
+
+    if not ls.save_current_level():
+        aviso("save_current_level devolvio False; revisar si el nivel quedo guardado.")
+    realismo.borrar_materiales_viejos(CONTENT_MATERIALS, list(realismo.MATERIALES_180.keys()))
+    if unreal.EditorAssetLibrary.does_directory_exist(CONTENT_TEXTURES):
+        unreal.EditorAssetLibrary.delete_directory(CONTENT_TEXTURES)
+    unreal.EditorAssetLibrary.save_directory(CONTENT_SALA, True, True)
+
+    log("=== Resumen ===")
+    log("Mallas base ({}): {}".format(len(resumen["mallas_importadas"]), resumen["mallas_importadas"]))
+    log("Piezas ({}): {}".format(len(piezas), sorted(piezas.keys())))
+    log("Actores: {} conservados, {} creados, {} reemplazados.".format(
+        resumen["actores_conservados"], resumen["actores_creados"], resumen["actores_reemplazados"]))
+    if resumen.get("retirados"):
+        log("Retirados del modelo viejo: {}".format(resumen["retirados"]))
+    if resumen["avisos"]:
+        log("Avisos ({}):".format(len(resumen["avisos"])))
+        for a in resumen["avisos"]:
+            log("  - {}".format(a))
+    log("=== Fin importar_sala.py ===")
+
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 
@@ -1038,4 +1359,7 @@ def main():
     log("=== Fin importar_sala.py ===")
 
 
-main()
+if MANIFIESTO is not None:
+    main_manifiesto()
+else:
+    main()

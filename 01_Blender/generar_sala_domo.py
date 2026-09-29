@@ -1,7 +1,9 @@
 """
 Genera por completo, de forma idempotente y en headless, la geometria de una
 sala tipo planetario (domo hemisferico + muro cilindrico con 4 puertas +
-piso + tarima central + sector de control + 6 cunas de butacas reclinadas),
+piso + tarima central + sector de control + 4 grupos de butacas reclinadas
+separados por 4 pasillos con salida; desde el 28 sep 2026 con butaca y puerta
+maestras, la consola en piezas con pivote propio y un manifiesto JSON),
 la guarda como .blend, hornea sus texturas PBR a PNG, la exporta a FBX y
 glTF para Unreal Engine 5.8, y renderiza 4 vistas de previsualizacion con
 EEVEE leyendo el FBX exportado de vuelta para verificar dimensiones.
@@ -175,16 +177,21 @@ Z_CENTRO_ESFERA = ALTURA_CENIT - RADIO_ESFERA
 # de Unreal reutiliza los M_* que ya existen para los casquetes. Asi generar
 # un casquete tarda un minuto en vez de diez y no reescribe las texturas de
 # la media esfera.
-HORNEAR_TEXTURAS = ES_MEDIA_ESFERA or ("--hornear" in _argumentos_propios())
+# Desde el 28 sep 2026 solo con --hornear: Unreal usa texturas PBR tileables
+# (03_Unreal/Texturas_PBR) y no los mapas horneados, que ademas pesan ~30 MB
+# de cambios binarios en el repo cada vez que se regeneran.
+HORNEAR_TEXTURAS = "--hornear" in _argumentos_propios()
 
-# Tarima central.
-RADIO_TARIMA = 1.5         # metros (3 m de diametro)
+# Tarima central. 2,5 m de diametro confirmados por David contra fotos reales
+# del Planetario de Bogota (28 sep 2026); antes eran 3 m, un supuesto sin
+# verificar.
+RADIO_TARIMA = 1.25        # metros (2,5 m de diametro)
 ALTURA_TARIMA = 1.0        # metros
 
 # Sector de control (dentro de la sala, contra el muro, lado -X). Ver
 # supuestos documentados arriba del archivo.
 ANCHO_CONTROL = 7.0        # metros de ARCO sobre el muro (no radial)
-RADIO_INICIO_CONTROL = 6.5 # metros: el control ocupa solo la parte de atras, contra el muro
+RADIO_INICIO_CONTROL = 8.9 # metros: el antepecho del control, detras de la ultima fila del grupo de atras
 LADO_CONTROL = "IZQUIERDA"          # documental: lado -X de la sala
 ANGULO_CENTRO_CONTROL_DEG = 180.0   # -X = "izquierda" en planta, +X al frente
 
@@ -193,27 +200,28 @@ ANCHO_PUERTA = 1.4
 ALTURA_PUERTA = 2.3
 GROSOR_MARCO = 0.10
 GROSOR_HOJA = 0.05
-# de las 4 fronteras "libres" entre cunas (fuera de las 2 que ya flanquean
-# el control), se eligen la 2a y la 4a contando desde el borde de control:
-# quedan simetricas respecto del punto exactamente opuesto al sector de
-# control, que es justo lo que pide el encargo ("preferiblemente hacia el
-# lado opuesto"). Se explica tambien en calcular_layout_sala().
-INDICES_FRONTERAS_PUERTAS_EXTRA = (2, 4)
+# Puertas: una en el extremo de cada pasillo (las 4 salidas de emergencia); las pone
+# calcular_layout_sala.
 
-# Butacas: 6 cunas, 60 butacas por cuna, 360 en total. Las cunas se reparten
-# el arco que sobra despues de descontar el sector de control.
-NUM_MODULOS = 6
-BUTACAS_POR_MODULO = 60
-TOTAL_BUTACAS = NUM_MODULOS * BUTACAS_POR_MODULO
+# Butacas (29 sep 2026, segun David y las fotos del Planetario de Bogota): 4 grupos de
+# butacas separados por 4 pasillos radiales, uno al final de cada salida de emergencia
+# (a 45, 135, 225 y 315 grados). El grupo de atras (el de 180 grados) tiene la
+# consola de control detras. Alrededor de los grupos queda un anillo libre contra el
+# muro, y espacio hacia cada salida. El total sale de la geometria, no se fija.
+NUM_MODULOS = 4
+BUTACAS_POR_MODULO = 0     # se calcula (calcular_instancias_butacas)
+TOTAL_BUTACAS = 0          # se calcula (calcular_instancias_butacas)
 
 # Filas concentricas dentro de cada cuna. El numero de filas y de butacas
 # por fila NO se escribe a mano: se calcula en calcular_filas() a partir de
 # estos parametros y del angulo util real de la cuna (que depende del
 # sector de control).
-RADIO_INTERIOR_BUTACAS = 3.2     # metros, radio de la primera fila (deja 1.4 m libres alrededor de la tarima)
+RADIO_INTERIOR_BUTACAS = 3.6     # metros, radio de la primera fila (2,35 m libres alrededor de la tarima)
+RADIO_MAX_FILA = 8.5             # ultima fila de los grupos laterales y del frente
+RADIO_MAX_FILA_ATRAS = 7.3       # el grupo de atras termina antes: la consola va detras
+ANCHO_PASILLO = 1.30             # metros, ancho constante de cada pasillo radial
 PASO_BUTACA = 0.60                # metros, paso real entre butacas de una fila (no se estira)
 PASO_FILA_RADIAL = 1.20           # metros: el respaldo reclinado invade hacia atras, hace falta este paso
-ANGULO_PASILLO_DEG = 3.0          # grados de pasillo libre a cada lado de la cuna
 
 # Butaca reclinada de domo: el espectador queda casi acostado mirando al
 # cenit (no es una butaca de teatro). Piso plano: todas las filas quedan al
@@ -244,6 +252,10 @@ NOMBRE_SALIDA = "sala_domo" + SUFIJO_MODELO
 RUTA_BLEND = os.path.join(CARPETA_BASE, "01_Blender", NOMBRE_SALIDA + ".blend")
 RUTA_FBX = os.path.join(CARPETA_BASE, "02_Export", NOMBRE_SALIDA + ".fbx")
 RUTA_GLB = os.path.join(CARPETA_BASE, "02_Export", NOMBRE_SALIDA + ".glb")
+# Piezas con pivote propio (butaca maestra, puerta maestra, consola en partes) y el
+# manifiesto que dice donde va cada una: lo lee 03_Unreal/importar_sala.py.
+RUTA_FBX_PIEZAS = os.path.join(CARPETA_BASE, "02_Export", NOMBRE_SALIDA + "_piezas.fbx")
+RUTA_MANIFIESTO = os.path.join(CARPETA_BASE, "02_Export", NOMBRE_SALIDA + ".json")
 CARPETA_TEXTURAS = os.path.join(CARPETA_BASE, "02_Export", "texturas")
 RUTA_PREVIEW = os.path.join(CARPETA_BASE, "05_Preview")
 
@@ -357,45 +369,26 @@ def desenvolver_uv_cube(obj, tam_cubo=1.0):
 # ---------------------------------------------------------------------------
 
 def calcular_layout_sala():
-    """Calcula, a partir de ANCHO_CONTROL y RADIO_DOMO, el arco (en grados)
-    que ocupa el sector de control, y reparte el arco restante entre las 6
-    cunas de butacas. Tambien decide en que 4 fronteras entre bloques van
-    las puertas. Nada de esto se escribe en grados a mano."""
-    angulo_control_rad = ANCHO_CONTROL / RADIO_DOMO
-    angulo_control_deg = math.degrees(angulo_control_rad)
-    angulo_control_ini_deg = (ANGULO_CENTRO_CONTROL_DEG - angulo_control_deg / 2.0) % 360.0
-    angulo_control_fin_deg = (ANGULO_CENTRO_CONTROL_DEG + angulo_control_deg / 2.0) % 360.0
-
-    angulo_libre_deg = 360.0 - angulo_control_deg
-    angulo_modulo_efectivo_deg = angulo_libre_deg / NUM_MODULOS
-
-    # Fronteras entre cunas, arrancando justo despues del sector de control
-    # y dando la vuelta hasta llegar de nuevo a el. boundaries[0] y
-    # boundaries[-1] son exactamente los dos bordes del sector de control.
-    inicio = ANGULO_CENTRO_CONTROL_DEG + angulo_control_deg / 2.0
-    boundaries_deg = [(inicio + k * angulo_modulo_efectivo_deg) % 360.0 for k in range(NUM_MODULOS + 1)]
-    centros_cunas_deg = [(inicio + (k + 0.5) * angulo_modulo_efectivo_deg) % 360.0 for k in range(NUM_MODULOS)]
-
-    # Puertas: las 2 que flanquean el control son las fronteras 0 y NUM_MODULOS
-    # (los bordes mismos del sector). Las otras 2 son las fronteras interiores
-    # elegidas en INDICES_FRONTERAS_PUERTAS_EXTRA (por defecto la 2a y la 4a
-    # frontera libre), que quedan simetricas respecto del punto opuesto al
-    # sector de control.
-    puertas_deg = [
-        angulo_control_ini_deg,
-        angulo_control_fin_deg,
-        boundaries_deg[INDICES_FRONTERAS_PUERTAS_EXTRA[0]],
-        boundaries_deg[INDICES_FRONTERAS_PUERTAS_EXTRA[1]],
-    ]
-
+    """Reparto en planta: NUM_MODULOS grupos de butacas centrados en 0, 90, 180 y
+    270 grados (frente, izquierda... segun Blender), separados por pasillos
+    radiales a 45, 135, 225 y 315 grados. Cada pasillo termina en una puerta (salida
+    de emergencia). El sector de control es el arco del muro de atras (180 grados)
+    donde va la consola, detras del grupo de atras."""
+    modulo_deg = 360.0 / NUM_MODULOS
+    centros_cunas_deg = [k * modulo_deg for k in range(NUM_MODULOS)]
+    boundaries_deg = [(c + modulo_deg / 2.0) % 360.0 for c in centros_cunas_deg]
+    boundaries_deg.append(boundaries_deg[0])
+    angulo_control_deg = math.degrees(ANCHO_CONTROL / RADIO_DOMO)
+    ang_ini = (ANGULO_CENTRO_CONTROL_DEG - angulo_control_deg / 2.0) % 360.0
+    ang_fin = (ANGULO_CENTRO_CONTROL_DEG + angulo_control_deg / 2.0) % 360.0
     return {
         "angulo_control_deg": angulo_control_deg,
-        "angulo_control_ini_deg": angulo_control_ini_deg,
-        "angulo_control_fin_deg": angulo_control_fin_deg,
-        "angulo_modulo_efectivo_deg": angulo_modulo_efectivo_deg,
+        "angulo_control_ini_deg": ang_ini,
+        "angulo_control_fin_deg": ang_fin,
+        "angulo_modulo_efectivo_deg": modulo_deg,
         "boundaries_deg": boundaries_deg,
         "centros_cunas_deg": centros_cunas_deg,
-        "puertas_deg": puertas_deg,
+        "puertas_deg": list(boundaries_deg[:NUM_MODULOS]),
     }
 
 
@@ -499,6 +492,39 @@ def crear_listones(puertas_deg):
         agregar_caja(bm, (FONDO_LISTON, ANCHO_LISTON, ALTURA_PARED), (0.0, 0.0, 0.0), 0.0, m)
     obj = nuevo_objeto_desde_bmesh(bm, "SM_Listones")
     obj.data.materials.append(crear_material("M_Madera", (0.30, 0.17, 0.08), rugosidad=0.55))
+    return obj
+
+
+PASO_LUZ_MURO = 1.4        # metros entre centros de foco (uno cada ~10 listones)
+ALTO_LUZ_MURO = 0.12       # metros, franja baja tipo wall-wash
+FONDO_LUZ_MURO = 0.03      # metros, cuanto sobresale del muro (menos que el liston)
+
+
+def crear_luces_muro(puertas_deg):
+    """Franja de focos calidos en la base del muro (wall-wash), como en las
+    fotos reales del Planetario de Bogota (28 sep 2026): una fila de luces
+    ambar a baja altura que ilumina los listones de abajo hacia arriba. Solo
+    geometria emisiva (sin Light actors: eso es trabajo de Unreal, bloqueado
+    por el MCP caido); en Unreal, con la cupula emisiva y Lumen ya activos
+    (ver domo-lab.md), esta franja aporta luz rebotada real, no solo el
+    brillo del material."""
+    radio_luz = RADIO_DOMO - FONDO_LUZ_MURO / 2.0 - 0.01
+    n = int(2.0 * math.pi * radio_luz / PASO_LUZ_MURO)
+    margen_puerta = (ANCHO_PUERTA / 2.0 + GROSOR_MARCO * 2.0) / RADIO_DOMO
+    puertas_rad = [math.radians(p) for p in puertas_deg]
+    bm = bmesh.new()
+    for i in range(n):
+        ang = 2.0 * math.pi * i / n
+        if any(abs(((ang - pr + math.pi) % (2.0 * math.pi)) - math.pi) <= margen_puerta for pr in puertas_rad):
+            continue
+        LUCES_MURO_ANGULOS.append(round(math.degrees(ang), 3))
+        centro = Vector((radio_luz * math.cos(ang), radio_luz * math.sin(ang), 0.0))
+        m = Matrix.Translation(centro) @ Matrix.Rotation(ang, 4, 'Z')
+        agregar_caja(bm, (FONDO_LUZ_MURO, ANCHO_LISTON * 1.4, ALTO_LUZ_MURO), (0.0, 0.0, ALTURA_PARED - 0.35), 0.0, m)
+    obj = nuevo_objeto_desde_bmesh(bm, "SM_LucesMuro")
+    obj.data.materials.append(
+        crear_material("M_LuzMuro", (1.0, 0.62, 0.20), emision_color=(1.0, 0.62, 0.20), emision_fuerza=6.0, rugosidad=0.4)
+    )
     return obj
 
 
@@ -684,23 +710,19 @@ def crear_tarima():
 # BUTACAS
 # ---------------------------------------------------------------------------
 
-def calcular_filas(angulo_util_rad):
-    """Igual que antes: sin numeros de fila escritos a mano. El arco
-    disponible en cada radio (angulo_util_rad, que ahora depende del arco
-    que le toco a la cuna despues de descontar el sector de control) se
-    divide entre PASO_BUTACA. Se van sumando filas hasta llegar EXACTO a
-    BUTACAS_POR_MODULO; la ultima se recorta a lo que falte."""
+def calcular_filas(radio_max, ancho_modulo_rad):
+    """Filas concentricas de un grupo: desde RADIO_INTERIOR_BUTACAS de a
+    PASO_FILA_RADIAL hasta radio_max. En cada radio se descuentan los dos
+    pasillos con su ancho fijo en metros (ANCHO_PASILLO), asi que el angulo util
+    es mayor lejos del centro y el pasillo se ve de bordes paralelos. Los
+    asientos por fila salen de dividir el arco entre PASO_BUTACA."""
     filas = []
     radio = RADIO_INTERIOR_BUTACAS
-    total = 0
-    while total < BUTACAS_POR_MODULO:
-        arco_disponible = angulo_util_rad * radio
-        n = max(1, math.floor(arco_disponible / PASO_BUTACA))
-        restante = BUTACAS_POR_MODULO - total
-        if n >= restante:
-            n = restante
+    while radio <= radio_max + 1e-6:
+        media_apertura = math.asin(min(1.0, (ANCHO_PASILLO / 2.0) / radio))
+        ang_util = ancho_modulo_rad - 2.0 * media_apertura
+        n = max(1, math.floor(ang_util * radio / PASO_BUTACA))
         filas.append({"radio": radio, "n": n})
-        total += n
         radio += PASO_FILA_RADIAL
     return filas
 
@@ -719,131 +741,212 @@ def agregar_caja(bm, dimensiones, posicion_local, rotacion_local_grados, matriz_
     return verts
 
 
+def _caja_biselada(bm, dimensiones, matriz, bisel=0.02, segmentos=2):
+    """Caja con su base centrada en el origen de `matriz` y aristas
+    redondeadas (bevel). Las cajas vivas de bmesh se biselan una por una: es
+    lo que quita el aspecto de "cubo" de la butaca."""
+    dx, dy, dz = dimensiones
+    ret = bmesh.ops.create_cube(bm, size=1.0)
+    verts = ret["verts"]
+    bmesh.ops.scale(bm, vec=(dx, dy, dz), verts=verts)
+    bmesh.ops.translate(bm, vec=(0, 0, dz / 2.0), verts=verts)
+    bmesh.ops.transform(bm, matrix=matriz, verts=verts)
+    if bisel and bisel > 0.0:
+        vset = set(verts)
+        aristas = list({e for v in verts for e in v.link_edges if e.verts[0] in vset and e.verts[1] in vset})
+        bmesh.ops.bevel(bm, geom=aristas, offset=min(bisel, min(dimensiones) * 0.42),
+                        segments=segmentos, affect='EDGES', profile=0.5)
+    return verts
+
+
 def agregar_butaca(bm, matriz_mundo, reclinacion_deg=None, inclinacion_asiento_deg=None,
                    altura_respaldo=None):
-    """Butaca reclinada de domo, piso plano (sin grada): base, asiento
-    inclinado hacia atras, respaldo MUY echado (63 grados desde la
-    vertical por defecto, editable arriba), reposacabezas al final del
-    respaldo, y dos apoyabrazos. Todo cajas: 6 x 12 = 72 triangulos por
-    butaca, muy por debajo del limite de ~200. Los tres parametros
-    opcionales los usa la sala 45 (butaca tipo IMAX Dome, menos echada);
-    sin ellos la butaca es la de siempre."""
-    ANGULO_RECLINACION_RESPALDO = reclinacion_deg if reclinacion_deg is not None else globals()["ANGULO_RECLINACION_RESPALDO"]
-    ANGULO_INCLINACION_ASIENTO = (inclinacion_asiento_deg if inclinacion_asiento_deg is not None
-                                  else globals()["ANGULO_INCLINACION_ASIENTO"])
-    ALTURA_RESPALDO = altura_respaldo if altura_respaldo is not None else globals()["ALTURA_RESPALDO"]
-    alto_asiento_z = ALTO_BASE
-    # Convencion: +X local es el frente (hacia la tarima). En agregar_caja
-    # un angulo positivo en Y inclina la pieza hacia +X; por eso el asiento
-    # y el respaldo usan angulos NEGATIVOS, para caer hacia atras.
+    """Butaca de planetario con forma de sillon (rehecha el 28 sep 2026 contra
+    fotos del Planetario de Bogota): cojin de asiento y respaldo acolchados
+    con aristas redondeadas, reposacabezas con dos "orejas" que abrazan la
+    cabeza, apoyabrazos acolchados, pedestal y placa de piso. Sigue siendo
+    una sola malla de ~1000 triangulos (Nanite en Unreal). Convencion: +X
+    local es el frente, el origen esta en el piso bajo el centro del
+    asiento. Las dimensiones clave (altura de asiento, angulo y largo del
+    respaldo, posicion del reposacabezas) son las de siempre, asi que la
+    altura de ojo calculada para las salas no cambia. Los tres parametros
+    opcionales los usa la sala 45 (butaca tipo IMAX Dome, menos echada)."""
+    recl = reclinacion_deg if reclinacion_deg is not None else ANGULO_RECLINACION_RESPALDO
+    incl = inclinacion_asiento_deg if inclinacion_asiento_deg is not None else ANGULO_INCLINACION_ASIENTO
+    alto_resp = altura_respaldo if altura_respaldo is not None else ALTURA_RESPALDO
+    z_asiento = ALTO_BASE
+    M = matriz_mundo
+    # En Y, un angulo positivo inclina la pieza hacia +X (el frente): asiento y
+    # respaldo usan angulos negativos para caer hacia atras.
+    def Ry(grados):
+        return Matrix.Rotation(math.radians(grados), 4, 'Y')
 
-    agregar_caja(
-        bm, (PROFUNDIDAD_ASIENTO * 0.75, ANCHO_ASIENTO * 0.75, ALTO_BASE - GROSOR_PANEL),
-        (0.0, 0.0, 0.0), 0.0, matriz_mundo,
-    )
-    agregar_caja(
-        bm, (PROFUNDIDAD_ASIENTO, ANCHO_ASIENTO, GROSOR_PANEL),
-        (0.0, 0.0, alto_asiento_z), -ANGULO_INCLINACION_ASIENTO, matriz_mundo,
-    )
+    # Placa de piso y pedestal.
+    _caja_biselada(bm, (0.40, 0.40, 0.03), M, 0.01, 1)
+    _caja_biselada(bm, (PROFUNDIDAD_ASIENTO * 0.55, ANCHO_ASIENTO * 0.55, z_asiento - 0.05),
+                   M @ Matrix.Translation((0.0, 0.0, 0.03)), 0.02, 1)
 
+    # Cojin de asiento (grueso, inclinado).
+    grosor_cojin = 0.11
+    _caja_biselada(bm, (PROFUNDIDAD_ASIENTO, ANCHO_ASIENTO, grosor_cojin),
+                   M @ Matrix.Translation((0.0, 0.0, z_asiento - grosor_cojin * 0.6)) @ Ry(-incl), 0.03, 2)
+
+    # Respaldo acolchado.
     borde_trasero_x = -PROFUNDIDAD_ASIENTO / 2.0
-    agregar_caja(
-        bm, (GROSOR_PANEL, ANCHO_ASIENTO, ALTURA_RESPALDO),
-        (borde_trasero_x, 0.0, alto_asiento_z), -ANGULO_RECLINACION_RESPALDO, matriz_mundo,
-    )
+    grosor_resp = 0.13
+    M_resp = M @ Matrix.Translation((borde_trasero_x, 0.0, z_asiento)) @ Ry(-recl)
+    _caja_biselada(bm, (grosor_resp, ANCHO_ASIENTO, alto_resp), M_resp, 0.035, 2)
 
-    angulo_rad = math.radians(ANGULO_RECLINACION_RESPALDO)
-    punta_respaldo_x = borde_trasero_x - ALTURA_RESPALDO * math.sin(angulo_rad)
-    punta_respaldo_z = alto_asiento_z + ALTURA_RESPALDO * math.cos(angulo_rad)
-    agregar_caja(
-        bm, (GROSOR_PANEL * 1.4, ANCHO_ASIENTO * 0.55, ALTURA_REPOSACABEZAS),
-        (punta_respaldo_x, 0.0, punta_respaldo_z), -ANGULO_RECLINACION_RESPALDO, matriz_mundo,
-    )
-
+    # Reposacabezas: almohadilla central y dos orejas que se cierran hacia el frente.
+    M_cab = M_resp @ Matrix.Translation((0.0, 0.0, alto_resp))
+    _caja_biselada(bm, (grosor_resp * 1.15, ANCHO_ASIENTO * 0.62, ALTURA_REPOSACABEZAS), M_cab, 0.035, 2)
     for signo in (+1.0, -1.0):
-        y = signo * (ANCHO_ASIENTO / 2.0 - ANCHO_APOYABRAZOS / 2.0)
-        agregar_caja(
-            bm, (LARGO_APOYABRAZOS, ANCHO_APOYABRAZOS, ALTO_APOYABRAZOS),
-            (0.0, y, alto_asiento_z), 0.0, matriz_mundo,
-        )
+        M_oreja = (M_cab @ Matrix.Translation((0.03, signo * ANCHO_ASIENTO * 0.33, 0.0))
+                   @ Matrix.Rotation(math.radians(signo * -28.0), 4, 'Z'))
+        _caja_biselada(bm, (0.09, 0.15, ALTURA_REPOSACABEZAS * 0.92), M_oreja, 0.03, 2)
+
+    # Apoyabrazos acolchados.
+    for signo in (+1.0, -1.0):
+        y = signo * (ANCHO_ASIENTO / 2.0 + ANCHO_APOYABRAZOS * 0.15)
+        _caja_biselada(bm, (LARGO_APOYABRAZOS, ANCHO_APOYABRAZOS, ALTO_APOYABRAZOS * 0.55),
+                       M @ Matrix.Translation((0.03, y, z_asiento + 0.05)), 0.025, 2)
+        _caja_biselada(bm, (0.06, ANCHO_APOYABRAZOS * 0.6, z_asiento + 0.02 - 0.03),
+                       M @ Matrix.Translation((0.0, y, 0.03)), 0.01, 1)
 
 
-def crear_modulo_butacas(indice_modulo, filas, angulo_util_rad, angulo_centro_deg, mat_butaca):
-    """Coloca las butacas de una cuna. El paso lateral usa PASO_BUTACA real
-    (metros) convertido a radianes segun el radio de cada fila, en vez de
-    repartir angulo_util_rad en partes iguales: asi la separacion entre
-    butacas es fisicamente constante en todas las filas (no se estira en
-    las filas de adentro), y el limite izquierdo/derecho de cada fila cae
-    siempre muy cerca de +-angulo_util_rad/2, dando cuadros con los dos
-    costados rectos y radiales (una cuna real, no bandas concentricas)."""
-    angulo_centro = math.radians(angulo_centro_deg)
-    bm = bmesh.new()
-    contador = 0
-    for fila in filas:
-        radio = fila["radio"]
-        n = fila["n"]
-        if n == 1:
-            offsets = [0.0]
-        else:
-            paso_angular = PASO_BUTACA / radio
-            offsets = [(i - (n - 1) / 2.0) * paso_angular for i in range(n)]
-
-        for offset in offsets:
-            angulo_asiento = angulo_centro + offset
-            centro = Vector((radio * math.cos(angulo_asiento), radio * math.sin(angulo_asiento), 0.0))
-            matriz_mundo = Matrix.Translation(centro) @ Matrix.Rotation(angulo_asiento + math.pi, 4, 'Z')
-            agregar_butaca(bm, matriz_mundo)
-            contador += 1
-
-    nombre = f"SM_Butacas_{indice_modulo + 1:02d}"
-    obj = nuevo_objeto_desde_bmesh(bm, nombre)
-    obj.data.materials.append(mat_butaca)
-    return obj, contador
+# Angulos (grados) de cada foco de la franja de luces del muro; los llena
+# crear_luces_muro y los lee el manifiesto para que Unreal ponga luces reales.
+LUCES_MURO_ANGULOS = []
 
 
-def crear_todas_las_butacas(layout, mat_butaca):
-    angulo_util_rad = math.radians(layout["angulo_modulo_efectivo_deg"] - 2.0 * ANGULO_PASILLO_DEG)
-    filas = calcular_filas(angulo_util_rad)
+def matriz_a_pos_yaw(matriz):
+    """([x, y, z] en metros, yaw en grados) de una matriz de pieza. El yaw es el
+    giro alrededor de Z, antihorario visto desde arriba (convencion de Blender)."""
+    t = matriz.to_translation()
+    yaw = math.degrees(matriz.to_euler('XYZ').z)
+    return [round(t.x, 4), round(t.y, 4), round(t.z, 4)], round(yaw, 3)
 
-    print("\n--- Reparto de filas por cuna (igual en las 6 cunas; piso plano, sin grada) ---")
-    print(f"ancho efectivo de cuna: {layout['angulo_modulo_efectivo_deg']:.2f} grados "
-          f"(arco libre 360 - {layout['angulo_control_deg']:.2f} de control, entre 6)")
-    print(f"{'fila':>4} {'radio(m)':>9} {'butacas':>8}")
-    total_modulo = 0
-    for i, f in enumerate(filas):
-        print(f"{i + 1:>4} {f['radio']:>9.2f} {f['n']:>8d}")
-        total_modulo += f["n"]
-    print(f"Total por cuna: {total_modulo}  (esperado {BUTACAS_POR_MODULO})")
 
-    objetos = []
-    total_general = 0
+def objeto_local(bm_local, nombre, matriz, material):
+    """Objeto cuya malla ya esta en coordenadas LOCALES de `matriz` (su pivote);
+    se coloca en el mundo con matrix_world = matriz. Es lo que permite a Unreal
+    mover, girar o borrar la pieza como un actor suelto sin que el pivote
+    quede en el origen de la sala."""
+    obj = nuevo_objeto_desde_bmesh(bm_local, nombre)
+    obj.data.materials.append(material)
+    obj.matrix_world = matriz
+    return obj
+
+
+def objeto_desde_mundo(bm_mundo, nombre, matriz, material):
+    """Igual que objeto_local, pero la malla llega en coordenadas de MUNDO y se
+    pasa a locales con la inversa de `matriz` (piezas que se construyen sobre
+    un arco, como la marca de piso y el antepecho)."""
+    bm_mundo.transform(matriz.inverted())
+    return objeto_local(bm_mundo, nombre, matriz, material)
+
+
+def es_grupo_de_atras(centro_deg):
+    d = abs(((centro_deg - ANGULO_CENTRO_CONTROL_DEG) + 180.0) % 360.0 - 180.0)
+    return d < 1.0
+
+
+def calcular_instancias_butacas(layout):
+    """Filas y posicion de cada butaca, sin crear geometria. Devuelve
+    (filas del grupo del frente, items) con items = [{modulo, fila, asiento,
+    pos (Vector), yaw (rad)}]. El grupo de atras (con la consola detras) tiene una
+    fila menos. El total es lo que sale de la geometria."""
+    global BUTACAS_POR_MODULO, TOTAL_BUTACAS
+    ancho_rad = math.radians(layout["angulo_modulo_efectivo_deg"])
+    items = []
+    filas_frente = None
+    print("\n--- Reparto de filas ({} grupos, {} pasillos de {:.2f} m; piso plano, sin grada) ---".format(
+        NUM_MODULOS, NUM_MODULOS, ANCHO_PASILLO))
     for m in range(NUM_MODULOS):
-        obj, n = crear_modulo_butacas(m, filas, angulo_util_rad, layout["centros_cunas_deg"][m], mat_butaca)
-        objetos.append(obj)
-        total_general += n
+        centro_deg = layout["centros_cunas_deg"][m]
+        atras = es_grupo_de_atras(centro_deg)
+        filas = calcular_filas(RADIO_MAX_FILA_ATRAS if atras else RADIO_MAX_FILA, ancho_rad)
+        if filas_frente is None and not atras:
+            filas_frente = filas
+        detalle = ", ".join("{:.1f} m: {}".format(f["radio"], f["n"]) for f in filas)
+        print("grupo {} (a {:>5.1f} grados{}): {} butacas en {} filas [{}]".format(
+            m + 1, centro_deg, ", con la consola detras" if atras else "", sum(f["n"] for f in filas), len(filas), detalle))
+        angulo_centro = math.radians(centro_deg)
+        for fi, fila in enumerate(filas):
+            radio, n = fila["radio"], fila["n"]
+            offsets = [0.0] if n == 1 else [(i - (n - 1) / 2.0) * (PASO_BUTACA / radio) for i in range(n)]
+            for ai, offset in enumerate(offsets):
+                ang = angulo_centro + offset
+                items.append({
+                    "modulo": m + 1, "fila": fi + 1, "asiento": ai + 1,
+                    "pos": Vector((radio * math.cos(ang), radio * math.sin(ang), 0.0)),
+                    "yaw": ang + math.pi,
+                })
+    TOTAL_BUTACAS = len(items)
+    BUTACAS_POR_MODULO = TOTAL_BUTACAS // NUM_MODULOS
+    print(f"Total general de butacas: {TOTAL_BUTACAS}  (aforo publicado del Planetario de Bogota: 375)")
+    return filas_frente, items
 
-    print(f"Total general de butacas (6 cunas): {total_general}  (esperado {TOTAL_BUTACAS})")
-    assert total_general == TOTAL_BUTACAS, "El reparto de filas no dio el total esperado."
-    return objetos
+
+def crear_butaca_maestra(mat_butaca):
+    """SM_Butaca: UNA butaca en el origen (pivote en el piso, bajo el centro
+    del asiento, +X al frente). Las 376 se colocan como instancias."""
+    bm = bmesh.new()
+    agregar_butaca(bm, Matrix.Identity(4))
+    obj = nuevo_objeto_desde_bmesh(bm, "SM_Butaca")
+    obj.data.materials.append(mat_butaca)
+    return obj
+
+
+def matriz_de_instancia(item):
+    return Matrix.Translation(item["pos"]) @ Matrix.Rotation(item["yaw"], 4, 'Z')
+
+
+def crear_instancias_blender(master, items, nombre_de):
+    """Objetos que comparten la malla del maestro: solo para la previsualizacion
+    de Blender y el .glb; el FBX de piezas lleva unicamente el maestro."""
+    objs = []
+    for it in items:
+        o = bpy.data.objects.new(nombre_de(it), master.data)
+        bpy.context.collection.objects.link(o)
+        o.matrix_world = matriz_de_instancia(it)
+        objs.append(o)
+    return objs
 
 
 # ---------------------------------------------------------------------------
-# SECTOR DE CONTROL (dentro de la sala, contra el muro en -X)
+# SECTOR DE CONTROL (dentro de la sala, contra el muro en -X): piezas sueltas,
+# cada una con su pivote
 # ---------------------------------------------------------------------------
 
-def crear_zona_control(layout, mat_control):
-    """SM_Control = mobiliario (consola + cuerpo + panel de monitores) mas
-    un parche de piso que marca el sector, todo dentro de la sala (ver
-    supuesto documentado arriba del archivo: ya no es un anexo exterior)."""
+def agregar_silla_operador(bm, M):
+    """Silla giratoria de operador: tres aspas de base, columna, asiento y respaldo."""
+    for grados in (0, 60, 120):
+        _caja_biselada(bm, (0.50, 0.06, 0.05), M @ Matrix.Rotation(math.radians(grados), 4, 'Z'), 0.01, 1)
+    _caja_biselada(bm, (0.06, 0.06, 0.40), M @ Matrix.Translation((0.0, 0.0, 0.05)), 0.01, 1)
+    _caja_biselada(bm, (0.48, 0.48, 0.08), M @ Matrix.Translation((0.0, 0.0, 0.45)), 0.03, 2)
+    _caja_biselada(bm, (0.08, 0.46, 0.55),
+                   M @ Matrix.Translation((-0.22, 0.0, 0.52)) @ Matrix.Rotation(math.radians(-8), 4, 'Y'), 0.03, 2)
+
+
+def crear_zona_control_piezas(layout, mat_control):
+    """Devuelve una lista de dicts {obj, malla, material, carpeta, ...} con las
+    piezas sueltas del control. Marco local de la consola: +X mira al centro de
+    la sala (hacia el publico); el operador se sienta atras (-X)."""
     ang_ini = math.radians(layout["angulo_control_ini_deg"])
     ang_fin = ang_ini + math.radians(layout["angulo_control_deg"])
     ang_centro = math.radians(ANGULO_CENTRO_CONTROL_DEG)
-
-    bm = bmesh.new()
-
-    # Parche de piso que marca el sector (un poco por encima del piso
-    # general para que no compita en z-fighting).
     r_in, r_out = RADIO_INICIO_CONTROL, RADIO_DOMO - 0.4
+    piezas = []
+
+    def registrar(obj, malla, **extra):
+        d = {"obj": obj, "malla": malla, "material": "M_Control", "carpeta": "Control"}
+        d.update(extra)
+        piezas.append(d)
+        return d
+
+    # Marca de piso del sector, sobre el arco.
+    bm = bmesh.new()
     n_sub = 16
     anillo_in, anillo_out = [], []
     for i in range(n_sub + 1):
@@ -857,21 +960,42 @@ def crear_zona_control(layout, mat_control):
     bm.normal_update()
     if bm.faces[0].normal.z < 0:
         voltear_normales(bm)
+    r_mid = (r_in + r_out) / 2.0
+    M_piso = (Matrix.Translation((r_mid * math.cos(ang_centro), r_mid * math.sin(ang_centro), 0.0))
+              @ Matrix.Rotation(ang_centro + math.pi, 4, 'Z'))
+    registrar(objeto_desde_mundo(bm, "SM_ControlPiso", M_piso, mat_control), "SM_ControlPiso")
 
-    # Consola de operacion, mirando hacia el centro de la sala (igual
-    # convencion que las butacas).
-    radio_consola = RADIO_DOMO - 2.3
+    radio_consola = RADIO_DOMO - 1.6
     centro_consola = Vector((radio_consola * math.cos(ang_centro), radio_consola * math.sin(ang_centro), 0.0))
-    matriz_consola = Matrix.Translation(centro_consola) @ Matrix.Rotation(ang_centro + math.pi, 4, 'Z')
-
+    M_cons = Matrix.Translation(centro_consola) @ Matrix.Rotation(ang_centro + math.pi, 4, 'Z')
     ancho_mueble = ANCHO_CONTROL * 0.7
-    agregar_caja(bm, (0.80, ancho_mueble, 0.05), (0.0, 0.0, 0.75), 0.0, matriz_consola)        # tablero
-    agregar_caja(bm, (0.60, ancho_mueble * 0.95, 0.70), (-0.10, 0.0, 0.0), 0.0, matriz_consola)  # cuerpo bajo mesa
-    agregar_caja(bm, (0.10, ancho_mueble * 0.9, 0.50), (-0.30, 0.0, 0.80), 0.0, matriz_consola)  # fila de monitores
-    # Rack de equipos contra el muro, detras del operador.
-    agregar_caja(bm, (0.60, ancho_mueble * 0.5, 1.90), (-1.55, 0.0, 0.0), 0.0, matriz_consola)
 
-    # Antepecho curvo (1 m de alto) que separa el control de las butacas.
+    # Mesa: tablero y tres modulos de cajones (ya en el marco local de la consola).
+    bm = bmesh.new()
+    _caja_biselada(bm, (0.80, ancho_mueble, 0.05), Matrix.Translation((0.0, 0.0, 0.75)), 0.012, 1)
+    for k in range(3):
+        y = (k - 1) * ancho_mueble * 0.32
+        _caja_biselada(bm, (0.60, ancho_mueble * 0.30, 0.72), Matrix.Translation((-0.10, y, 0.0)), 0.015, 1)
+    registrar(objeto_local(bm, "SM_Consola", M_cons.copy(), mat_control), "SM_Consola")
+
+    # Monitores: tres pantallas con marco delgado y pie. Las pantallas
+    # emisivas las pone Unreal, una por cada entrada de "monitores".
+    bm = bmesh.new()
+    monitores = []
+    for y in (-1.3, 0.0, 1.3):
+        _caja_biselada(bm, (0.05, 1.15, 0.66),
+                       Matrix.Translation((-0.30, y, 0.83)) @ Matrix.Rotation(math.radians(-6), 4, 'Y'), 0.01, 1)
+        _caja_biselada(bm, (0.14, 0.14, 0.05), Matrix.Translation((-0.32, y, 0.78)), 0.01, 1)
+        monitores.append({"local_m": [-0.268, y, 1.16], "ancho_m": 1.09, "alto_m": 0.60})
+    registrar(objeto_local(bm, "SM_Monitores", M_cons.copy(), mat_control), "SM_Monitores", monitores=monitores)
+
+    # Rack de equipos contra el muro, detras del operador.
+    bm = bmesh.new()
+    _caja_biselada(bm, (0.60, ancho_mueble * 0.5, 1.90), Matrix.Identity(4), 0.02, 1)
+    registrar(objeto_local(bm, "SM_Rack", M_cons @ Matrix.Translation((-1.15, 0.0, 0.0)), mat_control), "SM_Rack")
+
+    # Antepecho curvo de 1 m que separa el control de las butacas.
+    bm = bmesh.new()
     n_ant = 14
     for i in range(n_ant):
         t0 = ang_ini + (ang_fin - ang_ini) * i / n_ant
@@ -881,24 +1005,32 @@ def crear_zona_control(layout, mat_control):
         centro = Vector((r_in * math.cos(tm), r_in * math.sin(tm), 0.0))
         m = Matrix.Translation(centro) @ Matrix.Rotation(tm, 4, 'Z')
         agregar_caja(bm, (0.08, largo, 1.0), (0.0, 0.0, 0.0), 0.0, m)
+    M_ant = (Matrix.Translation((r_in * math.cos(ang_centro), r_in * math.sin(ang_centro), 0.0))
+             @ Matrix.Rotation(ang_centro + math.pi, 4, 'Z'))
+    registrar(objeto_desde_mundo(bm, "SM_Antepecho", M_ant, mat_control), "SM_Antepecho")
 
-    obj = nuevo_objeto_desde_bmesh(bm, "SM_Control")
-    obj.data.materials.append(mat_control)
-    return obj
+    # Silla de operador: maestra en el origen (oculta en previews) + dos instancias.
+    bm = bmesh.new()
+    agregar_silla_operador(bm, Matrix.Identity(4))
+    silla = nuevo_objeto_desde_bmesh(bm, "SM_SillaOperador")
+    silla.data.materials.append(mat_control)
+    items = []
+    for etiqueta, y in (("A", -1.0), ("B", 1.0)):
+        M_s = M_cons @ Matrix.Translation((-0.60, y, 0.0))
+        pos, yaw = matriz_a_pos_yaw(M_s)
+        items.append({"nombre": "SillaOperador_" + etiqueta, "pos_m": pos, "yaw_deg": yaw})
+        o = bpy.data.objects.new("SillaOperador_" + etiqueta, silla.data)
+        bpy.context.collection.objects.link(o)
+        o.matrix_world = M_s
+    registrar(silla, "SM_SillaOperador", instancias=items, maestra=True)
+    return piezas
 
 
 # ---------------------------------------------------------------------------
-# PUERTAS
+# PUERTAS: una maestra + instancias
 # ---------------------------------------------------------------------------
 
-def crear_puerta(indice, angulo_deg, mat_puerta):
-    ang = math.radians(angulo_deg)
-    centro_pared = Vector((RADIO_DOMO * math.cos(ang), RADIO_DOMO * math.sin(ang), 0.0))
-    matriz_mundo = Matrix.Translation(centro_pared) @ Matrix.Rotation(ang, 4, 'Z')
-    return crear_puerta_en(indice, matriz_mundo, mat_puerta)
-
-
-def crear_puerta_en(indice, matriz_mundo, mat_puerta):
+def crear_puerta_en_nombre(nombre, matriz_mundo, mat_puerta):
     """Marco + hoja de una puerta; +X local es la normal del muro."""
     bm = bmesh.new()
     for signo in (+1.0, -1.0):
@@ -909,18 +1041,25 @@ def crear_puerta_en(indice, matriz_mundo, mat_puerta):
                  (0.0, 0.0, ALTURA_PUERTA), 0.0, matriz_mundo)
     agregar_caja(bm, (GROSOR_HOJA, ANCHO_PUERTA * 0.94, ALTURA_PUERTA * 0.96),
                  (0.0, 0.0, 0.0), 0.0, matriz_mundo)
-
-    nombre = f"SM_Puerta_{indice + 1:02d}"
     obj = nuevo_objeto_desde_bmesh(bm, nombre)
     obj.data.materials.append(mat_puerta)
     return obj
 
 
-def crear_todas_las_puertas(layout, mat_puerta):
-    objetos = [crear_puerta(i, ang, mat_puerta) for i, ang in enumerate(layout["puertas_deg"])]
-    print(f"\nPuertas colocadas en (grados): {[round(a, 1) for a in layout['puertas_deg']]}"
-          f" -> las 2 primeras flanquean el sector de control, las otras 2 en el resto del muro.")
-    return objetos
+def crear_puerta_maestra(mat_puerta):
+    """SM_Puerta: marco + hoja en el origen (pivote en el piso, centro del vano)."""
+    return crear_puerta_en_nombre("SM_Puerta", Matrix.Identity(4), mat_puerta)
+
+
+def matriz_de_puerta(angulo_deg):
+    ang = math.radians(angulo_deg)
+    centro_pared = Vector((RADIO_DOMO * math.cos(ang), RADIO_DOMO * math.sin(ang), 0.0))
+    return Matrix.Translation(centro_pared) @ Matrix.Rotation(ang, 4, 'Z')
+
+
+def crear_puerta_en(indice, matriz_mundo, mat_puerta):
+    """Puerta horneada en el mundo (la usan las salas frontales)."""
+    return crear_puerta_en_nombre(f"SM_Puerta_{indice + 1:02d}", matriz_mundo, mat_puerta)
 
 
 # ---------------------------------------------------------------------------
@@ -940,6 +1079,12 @@ def hornear_material_pbr(obj, material, nombre_archivo):
     motor_anterior = bpy.context.scene.render.engine
     bpy.context.scene.render.engine = 'CYCLES'
     bpy.context.scene.cycles.samples = MUESTRAS_HORNEADO
+    bpy.context.scene.cycles.device = 'GPU'
+    prefs = bpy.context.preferences.addons['cycles'].preferences
+    prefs.compute_device_type = 'OPTIX' if any(d.type == 'OPTIX' for d in prefs.devices) else 'CUDA'
+    prefs.get_devices()
+    for d in prefs.devices:
+        d.use = d.type != 'CPU'
     for o in bpy.context.selected_objects:
         o.select_set(False)
     obj.select_set(True)
@@ -1016,17 +1161,43 @@ def aplicar_transformaciones(objetos):
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
 
-def exportar_fbx(objetos):
+def exportar_fbx(objetos, ruta=None, eje_adelante='-Z', eje_arriba='Y'):
     bpy.ops.object.select_all(action='DESELECT')
     for obj in objetos:
         obj.select_set(True)
     bpy.ops.export_scene.fbx(
-        filepath=RUTA_FBX, use_selection=True, object_types={'MESH'},
+        filepath=ruta or RUTA_FBX, use_selection=True, object_types={'MESH'},
         global_scale=1.0, apply_unit_scale=True, apply_scale_options='FBX_SCALE_ALL',
-        bake_space_transform=True, axis_forward='-Z', axis_up='Y',
+        bake_space_transform=True, axis_forward=eje_adelante, axis_up=eje_arriba,
         mesh_smooth_type='FACE', use_mesh_modifiers=True, use_triangles=False,
         path_mode='COPY', embed_textures=False,
     )
+
+
+def exportar_fbx_piezas(objetos):
+    """FBX de piezas: cada objeto sale con transformacion identidad (su malla
+    ya esta en coordenadas locales, con el pivote en el origen), asi Unreal no
+    tiene que decidir si aplica o ignora la transformacion del nodo. Donde va
+    cada pieza lo dice el manifiesto JSON. Se restauran las matrices despues."""
+    guardadas = [(o, o.matrix_world.copy()) for o in objetos]
+    # Unreal lee una malla local sin convertir unidades (1 unidad = 1 cm): las mallas
+    # salen multiplicadas por 100 (metros -> cm) y se devuelven a metros al terminar.
+    mallas = {id(o.data): o.data for o in objetos}
+    try:
+        for o, _ in guardadas:
+            o.matrix_world = Matrix.Identity(4)
+        for m in mallas.values():
+            m.transform(Matrix.Scale(100.0, 4))
+        bpy.context.view_layer.update()
+        # Ejes de Blender tal cual (Z arriba, -Y adelante): la malla local no pasa por la
+        # conversion de ejes de la escena, asi que el FBX tiene que salir ya orientado.
+        exportar_fbx(objetos, RUTA_FBX_PIEZAS, eje_adelante='Y', eje_arriba='Z')
+    finally:
+        for m in mallas.values():
+            m.transform(Matrix.Scale(0.01, 4))
+        for o, m in guardadas:
+            o.matrix_world = m
+        bpy.context.view_layer.update()
 
 
 def exportar_glb(objetos):
@@ -1054,7 +1225,7 @@ def verificar_export():
         return (max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
 
     print("\n--- Verificacion leyendo el FBX exportado de vuelta ---")
-    for nombre in ("SM_Domo", "SM_Muro", "SM_Butacas_01", "SM_Tarima"):
+    for nombre in ("SM_Domo", "SM_Muro", "SM_Listones", "SM_Tarima"):
         obj = bpy.data.objects.get(nombre)
         if obj is None:
             print(f"{nombre}: NO SE ENCONTRO EN EL FBX IMPORTADO")
@@ -1136,7 +1307,7 @@ def renderizar_vistas(cam_obj, domo_obj, layout):
     # 2) Vista desde una butaca mirando hacia el cenit: ojo calculado a lo
     # largo del respaldo reclinado (no a la altura del asiento, ahi
     # quedaria pegado al apoyabrazos vecino).
-    filas_ref = calcular_filas(math.radians(layout["angulo_modulo_efectivo_deg"] - 2 * ANGULO_PASILLO_DEG))
+    filas_ref = calcular_filas(RADIO_MAX_FILA, math.radians(layout["angulo_modulo_efectivo_deg"]))
     fila_ref = filas_ref[len(filas_ref) // 2]
     angulo_rad = math.radians(ANGULO_RECLINACION_RESPALDO)
     borde_trasero_x = -PROFUNDIDAD_ASIENTO / 2.0
@@ -1186,8 +1357,8 @@ def reportar_poligonos(objetos_relevantes):
         n = contar_triangulos(obj)
         total += n
         etiqueta = ""
-        if obj.name.startswith("SM_Butacas_"):
-            etiqueta = f"  ({n / BUTACAS_POR_MODULO:.0f} tris/butaca)"
+        if obj.name == "SM_Butaca":
+            etiqueta = f"  (x {TOTAL_BUTACAS} instancias = {n * TOTAL_BUTACAS} triangulos)"
         print(f"{obj.name}: {n} triangulos{etiqueta}")
     print(f"TOTAL escena: {total} triangulos")
 
@@ -2008,6 +2179,91 @@ def main_frontal():
 # PROGRAMA PRINCIPAL
 # ---------------------------------------------------------------------------
 
+def escribir_manifiesto(layout, filas, items_butacas, piezas_control, puertas_items, objetos_base):
+    """02_Export/sala_domo.json: donde va cada pieza suelta, cada instancia de
+    butaca y puerta, los pasillos y las luces. Lo lee 03_Unreal/importar_sala.py
+    para actualizar el nivel sin borrarlo. Posiciones en metros y yaw en grados,
+    en el marco de Blender (Unreal: x igual, y invertido, yaw invertido)."""
+    import json
+
+    butacas = []
+    for it in items_butacas:
+        pos, yaw = matriz_a_pos_yaw(matriz_de_instancia(it))
+        butacas.append({
+            "nombre": f"Butaca_M{it['modulo']}_F{it['fila']:02d}_A{it['asiento']:03d}",
+            "modulo": it["modulo"], "fila": it["fila"], "asiento": it["asiento"],
+            "pos_m": pos, "yaw_deg": yaw,
+        })
+
+    piezas = []
+    instancias = {
+        "SM_Butaca": {"material": "M_Butaca", "carpeta": "Butacas", "prefijo": "Butaca", "items": butacas},
+        "SM_Puerta": {"material": "M_Puerta", "carpeta": "Puertas", "prefijo": "Puerta", "items": puertas_items},
+    }
+    for p in piezas_control:
+        if p.get("maestra"):
+            instancias[p["malla"]] = {"material": p["material"], "carpeta": p["carpeta"],
+                                      "prefijo": "SillaOperador", "items": p["instancias"]}
+            continue
+        pos, yaw = matriz_a_pos_yaw(p["obj"].matrix_world)
+        d = {"nombre": p["malla"], "malla": p["malla"], "pos_m": pos, "yaw_deg": yaw,
+             "material": p["material"], "carpeta": p["carpeta"]}
+        if "monitores" in p:
+            d["monitores"] = p["monitores"]
+        piezas.append(d)
+
+    # Ojo del espectador: butaca central de la fila del medio de la primera cuna,
+    # a la altura de ojo de alguien reclinado (misma cuenta que la vista previa).
+    fila_medio = len(filas) // 2 + 1
+    de_la_fila = [it for it in items_butacas if it["modulo"] == 1 and it["fila"] == fila_medio]
+    it = de_la_fila[len(de_la_fila) // 2]
+    ang_recl = math.radians(ANGULO_RECLINACION_RESPALDO)
+    ojo_local = Vector((-PROFUNDIDAD_ASIENTO / 2.0 - math.sin(ang_recl) * 0.55 + 0.18, 0.0,
+                        ALTO_BASE + math.cos(ang_recl) * 0.55))
+    pos_ojo = matriz_de_instancia(it) @ ojo_local
+    yaw_ojo = (math.degrees(it["yaw"]) + 180.0) % 360.0 - 180.0
+
+    pasillos = []
+    for ang in layout["boundaries_deg"][:NUM_MODULOS]:
+        pasillos.append({"ang_deg": round(ang, 3), "r_min_m": round(RADIO_TARIMA + 1.2, 2),
+                         "r_max_m": round(RADIO_DOMO - 0.6, 2)})
+
+    datos = {
+        "version": 2,
+        "generador": "01_Blender/generar_sala_domo.py",
+        "sala": {
+            "modelo": "180", "radio_m": RADIO_DOMO, "altura_pared_m": ALTURA_PARED,
+            "tarima": {"radio_m": RADIO_TARIMA, "alto_m": ALTURA_TARIMA},
+            "total_butacas": len(items_butacas), "modulos": NUM_MODULOS, "filas": len(filas),
+            "pasillos": NUM_MODULOS, "ancho_pasillo_m": ANCHO_PASILLO,
+            "angulo_control_deg": round(layout["angulo_control_deg"], 3),
+        },
+        # Mallas horneadas en el mundo (pivote en el origen): un actor cada una, en (0,0,0).
+        "mallas_base": [o.name for o in objetos_base],
+        "material_por_malla": {
+            "SM_Muro": "M_Muro", "SM_Listones": "M_Madera", "SM_Piso": "M_Piso",
+            "SM_Tarima": "M_Tarima", "SM_LucesMuro": "M_LuzMuro",
+        },
+        # Piezas con pivote propio: un actor cada una, en su posicion.
+        "piezas": piezas,
+        "instancias": instancias,
+        "pasillos": pasillos,
+        # Focos en lo alto del muro que iluminan hacia el piso (como en el Planetario de Bogota).
+        "luces_muro": {"angulos_deg": LUCES_MURO_ANGULOS, "radio_m": round(RADIO_DOMO - 0.1, 2),
+                       "z_m": round(ALTURA_PARED - 0.25, 2), "direccion": "abajo"},
+        "ojo": {"pos_m": [round(pos_ojo.x, 4), round(pos_ojo.y, 4), round(pos_ojo.z, 4)],
+                "yaw_deg": round(yaw_ojo, 3), "pitch_deg": 30.0},
+    }
+    # Identificador del reparto: si cambia la planta, Unreal rehace las piezas en vez
+    # de conservar actores que quedarian donde ya no toca.
+    import hashlib
+    huella = json.dumps([butacas, piezas, puertas_items, pasillos], sort_keys=True).encode("utf-8")
+    datos["layout_id"] = hashlib.sha1(huella).hexdigest()[:8]
+    with open(RUTA_MANIFIESTO, "w", encoding="utf-8") as fh:
+        json.dump(datos, fh, indent=1, ensure_ascii=False)
+    print(f"Manifiesto escrito: {RUTA_MANIFIESTO} ({len(butacas)} butacas, {len(puertas_items)} puertas, {len(piezas)} piezas)")
+
+
 def main():
     if ES_SALA_FRONTAL:
         main_frontal()
@@ -2027,43 +2283,76 @@ def main():
     print(f"Sector de control: {layout['angulo_control_deg']:.2f} grados de arco "
           f"({layout['angulo_control_ini_deg']:.1f} a {layout['angulo_control_fin_deg']:.1f})")
 
-    mat_butaca = crear_material("M_Butaca", (0.06, 0.06, 0.065), rugosidad=0.9)
+    # Colores de trabajo de Blender (Unreal usa sus propias texturas PBR, ver
+    # 03_Unreal/realismo_sala.py). Butaca en azul grafito de planetario, como en
+    # las fotos del Planetario de Bogota (28 sep 2026).
+    mat_butaca = crear_material("M_Butaca", (0.05, 0.06, 0.12), rugosidad=0.85)
     mat_puerta = crear_material("M_Puerta", (0.5, 0.5, 0.52), rugosidad=0.35, metalico=0.85)
     mat_control = crear_material("M_Control", (0.08, 0.09, 0.12), rugosidad=0.4, metalico=0.2)
 
-    construir_variacion_procedural(mat_butaca, (0.04, 0.04, 0.045), (0.085, 0.085, 0.09), 40.0, 0.90, 0.05, 0.0, 0.08)
+    construir_variacion_procedural(mat_butaca, (0.03, 0.04, 0.10), (0.10, 0.12, 0.26), 55.0, 0.80, 0.12, 0.0, 0.12)
     construir_variacion_procedural(mat_puerta, (0.35, 0.35, 0.37), (0.55, 0.55, 0.58), 5.0, 0.30, 0.15, 0.9, 0.06)
 
     piso = crear_piso()
-    construir_variacion_procedural(piso.data.materials[0], (0.02, 0.02, 0.02), (0.09, 0.085, 0.08), 6.0, 0.85, 0.1, 0.0, 0.12)
+    # Piso pulido y reflectante (como en las fotos reales), no mate.
+    construir_variacion_procedural(piso.data.materials[0], (0.02, 0.02, 0.02), (0.07, 0.065, 0.06), 6.0, 0.25, 0.08, 0.15, 0.08)
 
+    # Muro base en sombra de madera: el hueco de 7 cm entre listones ya no deja
+    # ver gris casi negro, asi que la pared se lee como madera con sombra.
     muro = crear_muro(layout["puertas_deg"])
-    construir_variacion_procedural(muro.data.materials[0], (0.015, 0.015, 0.018), (0.05, 0.05, 0.055), 10.0, 0.82, 0.08, 0.0, 0.25)
+    construir_variacion_procedural(muro.data.materials[0], (0.05, 0.028, 0.014), (0.11, 0.065, 0.032), 10.0, 0.75, 0.08, 0.0, 0.25)
     listones = crear_listones(layout["puertas_deg"])
     construir_madera(listones.data.materials[0])
+    luces_muro = crear_luces_muro(layout["puertas_deg"])
 
     domo = crear_domo()
     tarima = crear_tarima()
     construir_variacion_procedural(tarima.data.materials[0], (0.05, 0.05, 0.06), (0.12, 0.12, 0.14), 8.0, 0.35, 0.15, 0.85, 0.10)
 
-    modulos_butacas = crear_todas_las_butacas(layout, mat_butaca)
-    zona_control = crear_zona_control(layout, mat_control)
-    puertas = crear_todas_las_puertas(layout, mat_puerta)
+    # Butacas y puertas: UNA malla maestra cada una (pivote propio) y la lista de
+    # donde va cada instancia. Las instancias de Blender comparten la malla y
+    # solo sirven para las vistas previas; el FBX de piezas lleva la maestra.
+    filas, items_butacas = calcular_instancias_butacas(layout)
+    butaca = crear_butaca_maestra(mat_butaca)
+    crear_instancias_blender(
+        butaca, items_butacas,
+        lambda it: f"Butaca_M{it['modulo']}_F{it['fila']:02d}_A{it['asiento']:03d}")
 
-    todos_los_objetos = [piso, muro, listones, domo, tarima, zona_control] + modulos_butacas + puertas
-    reportar_poligonos(todos_los_objetos)
+    piezas_control = crear_zona_control_piezas(layout, mat_control)
 
-    print(f"\nConteo de objetos en la escena: {len(todos_los_objetos)}")
-    print(f"Conteo de butacas totales: {TOTAL_BUTACAS} (en {NUM_MODULOS} cunas de {BUTACAS_POR_MODULO})")
+    puerta = crear_puerta_maestra(mat_puerta)
+    puertas_items = []
+    for i, ang in enumerate(layout["puertas_deg"]):
+        M = matriz_de_puerta(ang)
+        o = bpy.data.objects.new(f"Puerta_{i + 1:02d}", puerta.data)
+        bpy.context.collection.objects.link(o)
+        o.matrix_world = M
+        pos, yaw = matriz_a_pos_yaw(M)
+        puertas_items.append({"nombre": f"Puerta_{i + 1:02d}", "pos_m": pos, "yaw_deg": yaw})
+    print(f"\nPuertas colocadas en (grados): {[round(a, 1) for a in layout['puertas_deg']]}"
+          f" -> una salida de emergencia al final de cada pasillo.")
 
-    # Horneado de texturas PBR (una sola vez por material compartido; solo
-    # en la media esfera, ver HORNEAR_TEXTURAS).
-    hornear_todas_las_texturas(piso, muro, modulos_butacas[0], tarima, puertas[0], listones)
+    # Las maestras estan en el origen de la sala: fuera de los renders.
+    for maestra in [butaca, puerta] + [p["obj"] for p in piezas_control if p.get("maestra")]:
+        maestra.hide_render = True
 
-    aplicar_transformaciones(todos_los_objetos)
+    objetos_base = [piso, muro, listones, luces_muro, domo, tarima]
+    objetos_piezas = [butaca, puerta] + [p["obj"] for p in piezas_control]
+    reportar_poligonos(objetos_base + objetos_piezas)
 
-    exportar_fbx(todos_los_objetos)
-    exportar_glb(todos_los_objetos)
+    print(f"\nConteo de butacas totales: {len(items_butacas)} en {NUM_MODULOS} grupos")
+
+    # Horneado de texturas PBR: solo con --hornear (ver HORNEAR_TEXTURAS).
+    hornear_todas_las_texturas(piso, muro, butaca, tarima, puerta, listones)
+
+    aplicar_transformaciones(objetos_base)
+
+    exportar_fbx(objetos_base)
+    exportar_fbx_piezas(objetos_piezas)
+    maestras_glb = {"SM_Butaca", "SM_Puerta", "SM_SillaOperador"}
+    exportar_glb([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.name not in maestras_glb])
+
+    escribir_manifiesto(layout, filas, items_butacas, piezas_control, puertas_items, objetos_base)
 
     cam_obj = preparar_render()
     renderizar_vistas(cam_obj, domo, layout)

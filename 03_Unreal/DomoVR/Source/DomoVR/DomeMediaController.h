@@ -252,6 +252,42 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Domo")
 	bool bNegro = false;
 
+	// --- Luces de sala ------------------------------------------------------------
+	// Las luces de la sala (franja y focos del muro, luces de pasillo, anillo de la
+	// tarima) son los actores con la etiqueta EtiquetaLuces (las pone
+	// 03_Unreal/realismo_sala.py). En una sala real solo estan encendidas cuando no
+	// hay proyeccion: con LucesAutomaticas se apagan solas (con fundido) en cuanto
+	// hay senal y vuelven al perderla. Las senales de salida no llevan la etiqueta:
+	// nunca se apagan.
+
+	/** Las luces siguen a la senal: apagadas con proyeccion, encendidas sin ella. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo|Luces")
+	bool bLucesAutomaticas = true;
+
+	/** Estado manual cuando LucesAutomaticas esta apagado (domo.Luces 0|1). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo|Luces")
+	bool bLucesEncendidas = true;
+
+	/** Segundos que tarda el fundido de las luces. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo|Luces")
+	float SegundosFundidoLuces = 1.5f;
+
+	/** Etiqueta (Tag) de los actores que son luces de sala. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo|Luces")
+	FName EtiquetaLuces = FName(TEXT("domo_luz"));
+
+	/** Hay proyeccion: el Spout entrega cuadros, o el reproductor de Media esta en marcha. */
+	UFUNCTION(BlueprintPure, Category = "Domo|Luces")
+	bool HaySenal() const;
+
+	/** Manual: enciende o apaga las luces y deja de seguir a la senal. */
+	UFUNCTION(BlueprintCallable, Category = "Domo|Luces")
+	void SetLuces(bool bEncender);
+
+	/** Vuelve a seguir a la senal. */
+	UFUNCTION(BlueprintCallable, Category = "Domo|Luces")
+	void LucesAutomaticas(bool bActivar);
+
 	// --- Funciones para Blueprint, Remote Control y consola ---------------------
 
 	UFUNCTION(BlueprintCallable, Category = "Domo")
@@ -355,6 +391,18 @@ private:
 	void AplicarFuente();
 	void AsegurarMaterialEnCupula();
 	void ActualizarNegroYVolumen(float DeltaSeconds);
+	void ActualizarLuces(float DeltaSeconds);
+
+	/** 1 = luces encendidas, 0 = apagadas (con fundido). */
+	float NivelLuces = 1.f;
+	bool bLucesRecogidas = false;
+	bool bLucesAplicadasUnaVez = false;
+	double UltimaBusquedaLuces = -1000.0;
+
+	/** Intensidad de cada luz cuando esta al 100 %. */
+	TMap<TWeakObjectPtr<class ULightComponent>, float> IntensidadBase;
+	TArray<TWeakObjectPtr<AActor>> ActoresLuz;
+	void RecogerLuces();
 	void ConfigurarTeclado();
 	void Mensaje(const FString& Texto, float Segundos = 3.f) const;
 	void CorrerGuion(float DeltaSeconds);

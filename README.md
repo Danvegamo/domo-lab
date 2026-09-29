@@ -62,7 +62,7 @@ flowchart LR
     MAP -->|"equirectangular<br/>Spout: TD_Domo_Lab"| RX["ASpoutDomeReceiver (C++)"]
     subgraph UE["Unreal Engine 5.8 · DomoVR"]
         RX --> DOMO["Cúpula emisiva + SkyLight<br/>(Lumen ilumina la sala)"]
-        DOMO --> S180["Sala 180<br/>planetario, 360 butacas"]
+        DOMO --> S180["Sala 180<br/>planetario, 241 butacas"]
         DOMO --> S45["Sala 45<br/>tipo Maloka, sentado"]
         DOMO --> S90["Sala 90<br/>de pie, barandas"]
     end
@@ -112,9 +112,14 @@ Toda la documentación está también como una sola página con buscador en
 ## El proceso en cuatro pasos
 
 1. **Sala real → modelo.** `01_Blender/generar_sala_domo.py` construye la sala
-   (cúpula de 23 m como la del Planetario de Bogotá, 360 butacas reclinadas en
-   6 sectores, tarima central, zona de control de 7 m, 4 puertas, paredes con
-   listones de madera) y exporta el FBX de `02_Export/`.
+   (cúpula de 23 m como la del Planetario de Bogotá, 241 butacas reclinadas en
+   4 grupos separados por 4 pasillos que terminan en las 4 salidas de emergencia,
+   tarima de 2,5 m, la consola de control detrás del grupo de atrás, paredes con
+   listones de madera y luces en lo alto del muro que alumbran hacia el piso) y
+   exporta dos FBX y un manifiesto JSON a `02_Export/`. Volver a correr el
+   importador **actualiza el nivel sin borrar tus ajustes** (ver
+   `04_Docs/02_Sala_Unreal.md`, sección 15). Las luces de la sala se apagan solas
+   cuando hay señal (`domo.Luces`).
 2. **Modelo → Unreal.** `03_Unreal/importar_sala.py` arma el nivel `DomoVR`:
    materiales PBR con texturas generadas por script (tela, madera, alfombra,
    metal cepillado), Nanite, Lumen con trazado de rayos por hardware, TSR,

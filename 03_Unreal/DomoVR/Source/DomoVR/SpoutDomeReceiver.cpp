@@ -115,6 +115,7 @@ void ASpoutDomeReceiver::Tick(float DeltaSeconds)
 	}
 
 	ReceivedTexture = OutTexture;
+	UltimoCuadro = FPlatformTime::Seconds();
 
 	// OutMat solo cambia de puntero la primera vez que se recibe con exito
 	// (ver el comentario de arriba): a partir de ahi es el mismo objeto en
@@ -133,6 +134,11 @@ void ASpoutDomeReceiver::ApplyMaterialToMesh()
 	{
 		TargetMeshComponent->SetMaterial(TargetMaterialSlot, DynamicMaterial);
 	}
+}
+
+bool ASpoutDomeReceiver::HayCuadros() const
+{
+	return FPlatformTime::Seconds() - UltimoCuadro < 1.5;
 }
 
 void ASpoutDomeReceiver::ReaplicarMaterial()

@@ -55,6 +55,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Spout")
 	void ReaplicarMaterial();
 
+	/** True mientras el sender de Spout esta entregando cuadros (visto en el
+	 *  ultimo segundo y medio). Lo usa ADomeMediaController para apagar las
+	 *  luces de la sala cuando hay proyeccion. */
+	UFUNCTION(BlueprintPure, Category = "Spout")
+	bool HayCuadros() const;
+
 	//~ Begin AActor interface
 	virtual void Tick(float DeltaSeconds) override;
 	/** Devuelve true a proposito: es lo que hace que este actor tambien
@@ -100,6 +106,9 @@ private:
 	 *  por frame (podrian ser mas de 90 por segundo) cuando TouchDesigner
 	 *  todavia no publico el sender o se cerro. */
 	double LastUnavailableWarningTime = 0.0;
+
+	/** Segundos de plataforma del ultimo cuadro recibido. */
+	double UltimoCuadro = -1000.0;
 
 	void ApplyMaterialToMesh();
 };

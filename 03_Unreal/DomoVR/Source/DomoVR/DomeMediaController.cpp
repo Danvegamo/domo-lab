@@ -3,6 +3,8 @@
 #include "SpoutDomeReceiver.h"
 
 #include "Components/InputComponent.h"
+#include "Components/LightComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Camera/PlayerCameraManager.h"
@@ -627,6 +629,7 @@ void ADomeMediaController::Tick(float DeltaSeconds)
 	}
 
 	ActualizarNegroYVolumen(DeltaSeconds);
+	ActualizarLuces(DeltaSeconds);
 
 	if (EsMundoDeJuego())
 	{
@@ -635,6 +638,100 @@ void ADomeMediaController::Tick(float DeltaSeconds)
 			ConfigurarTeclado();
 		}
 		CorrerGuion(DeltaSeconds);
+	}
+}
+
+// --- Luces de sala --------------------------------------------------------------
+
+bool ADomeMediaController::HaySenal() const
+{
+	if (Fuente == EDomeFuente::Spout)
+	{
+		return SpoutReceiver && SpoutReceiver->HayCuadros();
+	}
+	return MediaPlayer && MediaPlayer->IsPlaying();
+}
+
+void ADomeMediaController::SetLuces(bool bEncender)
+{
+	bLucesAutomaticas = false;
+	bLucesEncendidas = bEncender;
+}
+
+void ADomeMediaController::LucesAutomaticas(bool bActivar)
+{
+	bLucesAutomaticas = bActivar;
+}
+
+void ADomeMediaController::RecogerLuces()
+{
+	ActoresLuz.Reset();
+	IntensidadBase.Reset();
+	TArray<AActor*> Encontrados;
+	UGameplayStatics::GetAllActorsWithTag(this, EtiquetaLuces, Encontrados);
+	for (AActor* A : Encontrados)
+	{
+		ActoresLuz.Add(A);
+		TArray<ULightComponent*> Luces;
+		A->GetComponents<ULightComponent>(Luces);
+		for (ULightComponent* L : Luces)
+		{
+			IntensidadBase.Add(L, L->Intensity);
+		}
+	}
+	bLucesRecogidas = true;
+	bLucesAplicadasUnaVez = false;
+	UltimaBusquedaLuces = FPlatformTime::Seconds();
+}
+
+void ADomeMediaController::ActualizarLuces(float DeltaSeconds)
+{
+	// Los actores de luz pueden crearse despues de BeginPlay (o en el editor): se
+	// vuelve a buscar cada tanto mientras no haya ninguno.
+	if (!bLucesRecogidas || (ActoresLuz.Num() == 0 && FPlatformTime::Seconds() - UltimaBusquedaLuces > 3.0))
+	{
+		RecogerLuces();
+	}
+	if (ActoresLuz.Num() == 0)
+	{
+		return;
+	}
+
+	const bool bEncendidas = bLucesAutomaticas ? !HaySenal() : bLucesEncendidas;
+	const float Objetivo = bEncendidas ? 1.f : 0.f;
+	const float Paso = SegundosFundidoLuces > KINDA_SMALL_NUMBER ? DeltaSeconds / SegundosFundidoLuces : 1.f;
+	const float Anterior = NivelLuces;
+	NivelLuces = FMath::Clamp(NivelLuces + FMath::Sign(Objetivo - NivelLuces) * FMath::Min(Paso, FMath::Abs(Objetivo - NivelLuces)), 0.f, 1.f);
+	if (FMath::IsNearlyEqual(Anterior, NivelLuces) && (NivelLuces <= 0.f || NivelLuces >= 1.f) && bLucesAplicadasUnaVez)
+	{
+		return;
+	}
+	bLucesAplicadasUnaVez = true;
+
+	for (const TWeakObjectPtr<AActor>& Ptr : ActoresLuz)
+	{
+		AActor* A = Ptr.Get();
+		if (!A)
+		{
+			continue;
+		}
+		TArray<ULightComponent*> Luces;
+		A->GetComponents<ULightComponent>(Luces);
+		for (ULightComponent* L : Luces)
+		{
+			if (const float* Base = IntensidadBase.Find(L))
+			{
+				L->SetIntensity(*Base * NivelLuces);
+				L->SetVisibility(NivelLuces > 0.005f);
+			}
+		}
+		// Las mallas emisivas (franjas, LEDs) no tienen fundido: se ocultan al apagar.
+		TArray<UStaticMeshComponent*> Mallas;
+		A->GetComponents<UStaticMeshComponent>(Mallas);
+		for (UStaticMeshComponent* M : Mallas)
+		{
+			M->SetVisibility(NivelLuces > 0.5f);
+		}
 	}
 }
 
@@ -1024,6 +1121,17 @@ namespace
 			{
 				if (A.Num() > 0) { C.Blackout(FCString::Atoi(*A[0]) != 0); }
 				else { C.ToggleBlackout(); }
+			});
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdLuces(TEXT("domo.Luces"),
+		TEXT("domo.Luces 0|1|auto: apaga o enciende las luces de la sala; auto las hace seguir a la senal."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& A, UWorld* W)
+		{
+			ConControlador(W, [&](ADomeMediaController& C)
+			{
+				if (A.Num() == 0 || A[0].Equals(TEXT("auto"), ESearchCase::IgnoreCase)) { C.LucesAutomaticas(true); }
+				else { C.SetLuces(FCString::Atoi(*A[0]) != 0); }
 			});
 		}));
 
