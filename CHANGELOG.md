@@ -4,6 +4,20 @@ Bitácora de cambios de domo-lab, de lo más reciente a lo más antiguo. Cada en
 dice qué cambió y por qué; el detalle técnico y las mediciones están en
 [04_Docs](04_Docs/). El estado futuro está en la [hoja de ruta](README.md#hoja-de-ruta).
 
+## 29 de septiembre de 2026 · README nuevo en tres idiomas, capturas del build y hoja de ruta
+
+- **README rehecho** con cabecera, insignias, novedades, galería, secciones desplegables, diagramas Mermaid (arquitectura
+  e historia), una animación de los montajes 16:9, la tabla de compatibilidad por fabricante de tarjeta y una hoja de
+  ruta en tres columnas (ahora, después, más adelante).
+- **Inglés y portugués:** `README.en.md` y `README.pt-BR.md`, traducidos por completo, con un selector de idioma en
+  los tres. Los documentos de `04_Docs/` siguen solo en español y eso se dice en cada README.
+- **Blender 5:** el README decía Blender 4; el generador se corre con Blender 5.2 LTS. Corregido en la insignia y en
+  los requisitos.
+- **Capturas nuevas del ejecutable** (`05_Preview/renders/`): la sala 180 con las paredes negras y el velo de la
+  cúpula, las salas 45 y 90, seis montajes 16:9 y el menú. Se sacaron con el build empaquetado y un video propio.
+- `04_Docs/build_docs.py` ahora traduce el HTML y el Mermaid de los README a Markdown simple y suma las páginas en
+  inglés y portugués a `docs/index.html`.
+
 ## 29 de septiembre de 2026 · TouchDesigner: montajes 16:9, efectos, 3D y panel de Unreal
 
 - **Montajes 16:9 arreglados.** Tres fallas de `dome_map.frag` (no solo los valores): el cilindro desaparecía a los

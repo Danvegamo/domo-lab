@@ -68,6 +68,10 @@ ESTUDIO_OUT_NAME = "estudio_pantallas.html"
 PAGES = [
     (ROOT / "README.md", "Guia del proyecto",
      "Vision general, el proceso en cuatro pasos y como poner todo en marcha"),
+    (ROOT / "README.en.md", "Overview in English",
+     "The project in English: what it does, quick start, the standalone player, graphics cards and roadmap"),
+    (ROOT / "README.pt-BR.md", "Visao geral em portugues",
+     "O projeto em portugues: o que faz, inicio rapido, o executavel, placas de video e roteiro"),
     (DOCS / "01_Proceso_y_matematica.md", "El proceso y la matematica",
      "Que es esto, la matematica del domo paso a paso y las decisiones ya medidas"),
     (DOCS / "04_Senal_TouchDesigner.md", "La senal en TouchDesigner",
@@ -80,6 +84,8 @@ PAGES = [
      "Domo de 90 y 45 grados"),
     (DOCS / "06_Unreal_standalone.md", "La sala sin TouchDesigner",
      "Unreal reproduce los videos en la cupula y se empaqueta como programa suelto"),
+    (DOCS / "07_GPUs_AMD_e_Intel.md", "AMD e Intel",
+     "El ejecutable en tarjetas AMD e Intel: video, render y lo que falta verificar"),
     (ROOT / "06_Modelos" / "Domos_de_Colombia.md", "Domos de Colombia",
      "Fichas de planetarios y cines domo reales, con sus datos y fuentes"),
     (DOCS / "Unreal_sala_domo.md", "Bitacora: sala de domo en Unreal",
@@ -162,7 +168,7 @@ def process_image(src: Path, cache: dict) -> str | None:
         return None
     IMG_DIR.mkdir(parents=True, exist_ok=True)
     data = src.read_bytes()
-    if len(data) <= IMG_MAX_BYTES:
+    if len(data) <= IMG_MAX_BYTES or (src.suffix.lower() == ".gif" and len(data) <= 4 * 1024 * 1024):
         out_name = src.name
         (IMG_DIR / out_name).write_bytes(data)
     else:
@@ -683,6 +689,33 @@ def strip_first_heading(md: str) -> str:
     return re.sub(r"\A#\s+.*\n", "", md, count=1)
 
 
+def readme_a_markdown(md: str) -> str:
+    """Los README usan HTML de GitHub (cabecera centrada, tablas de imagenes, <details>) y Mermaid.
+    El render de esta pagina solo entiende Markdown simple: se traduce lo que tiene equivalente
+    (imagenes, resumenes desplegables) y se quita lo que solo sirve en GitHub (insignias, indice
+    de anclas, diagramas Mermaid)."""
+    md = re.sub(r"```mermaid\n.*?```\n?", "", md, flags=re.S)
+    indice = re.compile(r"^\[[^\]]+\]\(#[^)]+\)( · \[[^\]]+\]\(#[^)]+\))+\s*$")
+    md = "\n".join(ln for ln in md.split("\n") if not ln.startswith("[![") and not indice.match(ln))
+
+    def img(m: re.Match) -> str:
+        tag = m.group(0)
+        src = re.search(r'src="([^"]+)"', tag)
+        alt = re.search(r'alt="([^"]*)"', tag)
+        if not src:
+            return ""
+        return "\n\n![%s](%s)\n\n" % (alt.group(1) if alt else "", src.group(1))
+
+    md = re.sub(r"<img\b[^>]*>", img, md)
+    md = re.sub(r"<summary>\s*<b>(.*?)</b>\s*</summary>", r"\n\n### \1\n\n", md)
+    md = re.sub(r"<sub>(.*?)</sub>", r"*\1*", md, flags=re.S)
+    md = re.sub(r"<b>(.*?)</b>", r"**\1**", md, flags=re.S)
+    md = re.sub(r"</?(details|div|table|tr|td|p|br|sub)\b[^>]*>", "\n", md)
+    md = re.sub(r"\[([^\]]+)\]\(#[^)]*\)", r"\1", md)
+    md = re.sub(r"\n{3,}", "\n\n", md)
+    return md.lstrip()
+
+
 def build() -> Path:
     existing_pages = [(p, t, b) for p, t, b in PAGES if p.exists()]
     for p, t, b in PAGES:
@@ -696,7 +729,10 @@ def build() -> Path:
     headings_by_docid: dict[str, list[tuple[str, str]]] = {}
     for path, title, _ in existing_pages:
         doc_id = slugify(title)
-        md = strip_first_heading(path.read_text(encoding="utf-8"))
+        md = path.read_text(encoding="utf-8")
+        if path.name.startswith("README"):
+            md = readme_a_markdown(md)
+        md = strip_first_heading(md)
         path_to_docid[path.resolve()] = doc_id
         raw_by_docid[doc_id] = md
         headings_by_docid[doc_id] = collect_headings(md, doc_id)

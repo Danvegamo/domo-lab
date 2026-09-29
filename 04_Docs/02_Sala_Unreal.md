@@ -482,16 +482,23 @@ en una ruta de Windows y el juego abre el mapa por defecto. Y TouchDesigner
 tiene que estar a la vista (no minimizado), o no cocina y la cúpula se queda
 con el último cuadro que recibió.
 
+Las capturas del 29 de septiembre de 2026 se sacaron con el ejecutable empaquetado (`Build/Windows/DomoVR.exe`,
+`-RenderOffscreen -nohmd`), sin TouchDesigner: el video va con `domo.Abrir` y, para los montajes,
+`domo.Param Formato 4` seguido de `domo.Plantilla id`. El video es un tramo de diez segundos de *3gracias*, sin
+sonido, en bucle. Las luces se apagan con `domo.Luces 0` para ver la cúpula y se encienden con `domo.Luces 1` para
+ver la sala.
+
 | Captura | Cámara (`domo.Camara X Y Z Pitch Yaw FOV`) |
 |---|---|
-| `3gracias_unreal_general.png` | −800 0 700 −30 0 100 |
-| `3gracias_unreal_desde_butacas.png` | −430 190 125 30 −8 95 |
-| `3gracias_unreal_desde_butacas_02.png` (reclinado, hacia el cénit) | 150 −700 110 60 150 100 |
-| `3gracias_unreal_general_02.png` (hacia el control) | 820 0 720 −32 180 100 |
-| `3gracias_sala45_butaca.png` | −363 −92 372 18 3,7 100 (el ojo de la fila 7) |
-| `3gracias_sala45_general.png` | −780 520 720 −18 −22 100 |
-| `3gracias_sala90_de_pie.png` | −93 −145 270 5,7 7,5 100 (el ojo de la plataforma 3) |
-| `3gracias_sala90_general.png` | −560 450 620 −15 −25 100 |
+| `hero_butacas.jpg` | 250 300 90 32 −105 95 |
+| `sala180_cupula_general.jpg` | −800 0 700 −30 0 100 |
+| `sala180_cupula_control.jpg` (hacia la cabina) | 820 0 720 −32 180 100 |
+| `sala180_luces_general.jpg` (luces encendidas) | −800 0 700 −30 0 100 |
+| `sala180_pasillo.jpg` (luces encendidas) | 100 −720 160 −3 90 100 |
+| `sala180_cabina_por_dentro.jpg` | −880 0 130 −6 180 90 |
+| `sala180_cabina_no_se_ve.jpg` | −450 0 175 2 180 95 |
+| `sala45_general.jpg` (mapa `DomoVR_45`) | −1500 0 1100 −25 0 100 |
+| `sala90_general.jpg` (mapa `DomoVR_90`, el ojo de la plataforma 3) | −93 −145 270 6 7,5 100 |
 
 ## 15. Actualizar sin borrar: piezas sueltas y manifiesto
 
