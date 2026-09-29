@@ -34,6 +34,8 @@ Estructura que deja:
       spout_domo / ndi_domo   salidas del domemaster
       para_unreal -> alfa_unreal -> spout_unreal   el equirectangular que espera la sala VR (mismo shader)
       grabar                  Movie File Out del domemaster
+      IN_UE                   el domemaster de Unreal por NDI, directo a las salidas, sin el equirectangular (modulos/in_ue.py)
+      salida_domo             Switch entre domo (el del lienzo) e IN_UE; alimenta out_domo
       udp_unreal              panel de control del ejecutable de Unreal por UDP (modulos/unreal_udp.py)
 
 Cada modulo tiene su parametro `Activo`: apagado, el modulo entrega negro y
@@ -1144,6 +1146,8 @@ caja(D, 'nota_salidas', 'Salidas',
      [sp_domo, ndi, grab, unreal, alfa, sp_un], (0.24, 0.20, 0.14))
 
 # Panel de control del ejecutable de Unreal por UDP (modulos/unreal_udp.py)
+# IN_UE: el domemaster que genera Unreal por NDI, directo a out_domo (modulos/in_ue.py)
+modulo('in_ue.py')
 modulo('unreal_udp.py')
 D.sortCustomPages('Domo', '360', '180', '16:9', 'FX', '3D', 'Master', 'Mapping', 'Salidas', 'Unreal')
 

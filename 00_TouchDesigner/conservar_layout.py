@@ -116,6 +116,14 @@ def respaldar(comp):
 def preparar_regeneracion(viejo, version_nueva):
     """Se llama antes de destruir `viejo` (o con None si no hay red). Devuelve el estado que
     `terminar_regeneracion` usa al final: la disposicion a aplicar, los omitidos y lo que habia."""
+    # Regenerar con el NDI de IN_UE recibiendo cuelga el servidor MCP de TouchDesigner (29 sep 2026, causa probable, no aislada: al guardar
+    # la copia de respaldo con un NDI In activo, TouchDesigner sigue vivo pero el exec server no vuelve a responder).
+    # Se aborta antes de tocar nada.
+    if viejo is not None:
+        activo = getattr(viejo.par, 'Uactivo', None)
+        if activo is not None and activo.eval():
+            raise RuntimeError('[DOMO] DOMO.Uactivo (pagina Unreal) esta encendido: apagalo y vuelve a regenerar. '
+                               'No se toco la red.')
     previo = cargar_layout()
     vivo = capturar_layout(viejo)
     omitidos = set(previo['omitidos'])

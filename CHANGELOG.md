@@ -4,6 +4,19 @@ Bitácora de cambios de domo-lab, de lo más reciente a lo más antiguo. Cada en
 dice qué cambió y por qué; el detalle técnico y las mediciones están en
 [04_Docs](04_Docs/). El estado futuro está en la [hoja de ruta](README.md#hoja-de-ruta).
 
+## 29 de septiembre de 2026 · Spout In arreglado, regeneración probada y `IN_UE`
+
+- **`spout_in` de VIDEO_DOME vuelve, sin errores.** La causa era que el Spout In TOP no tiene par de activación y, con el
+  nombre en blanco (el valor por defecto), da `Sender Name is blank` en cada cuadro. Ahora usa un nombre que no existe
+  (`sin_fuente_spout`) cuando `Spoutnombre` está vacío. Verificado con un Spout Out de prueba: recibe 640 × 360.
+- **La regeneración no destructiva funciona en TouchDesigner.** Se corrió el constructor 1.5 sobre la red de David con 731
+  nodos: 0 se movieron, 1 nuevo (`spout_in`), 0 errores, respaldo escrito. `layout_domo.json` ya cubre los 731 nodos.
+- **`IN_UE` (modulos/in_ue.py):** recibe por NDI el domemaster de Unreal y lo pone en `out_domo` sin pasar por el
+  equirectangular (página *Unreal*, `Uactivo`, `Unombre`). El NDI In recibe 2048 × 2048 del programa empaquetado.
+- **Trampa:** regenerar con `Uactivo` encendido colgó el MCP de TouchDesigner (causa probable, sin aislar); el constructor ahora se detiene antes de tocar
+  la red si está encendido. Detalle en [09_Abismo_Unreal_a_NDI.md](04_Docs/09_Abismo_Unreal_a_NDI.md).
+- `DOMO.tox` actualizado con la disposición nueva.
+
 ## 29 de septiembre de 2026 · El abismo: Unreal genera el domo y lo manda por NDI
 
 - **El sentido inverso del proyecto.** Un nivel nuevo, `/Game/Maps/Abismo`, renderiza un fondo marino profundo con partículas y

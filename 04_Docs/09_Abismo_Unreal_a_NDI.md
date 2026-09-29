@@ -10,7 +10,7 @@ dentro de la cúpula.
 ![El abismo como domemaster, en pleno diálogo: criaturas, basura plástica y el lecho](../05_Preview/renders/abismo_domemaster_dialogo.jpg)
 
 Estado, el 29 de septiembre de 2026: **funciona de punta a punta en Unreal** (escena, domemaster y NDI, en el editor y en el
-programa empaquetado, medido con un receptor propio). **Falta probarlo dentro de TouchDesigner** (sección 7).
+programa empaquetado, medido con un receptor propio). **En TouchDesigner** el NDI In recibe el domemaster; el envío directo a `out_domo` está escrito y falta confirmarlo con la imagen en las salidas (sección 7).
 
 ## 1. Cómo se abre
 
@@ -127,23 +127,36 @@ python 03_Unreal\herramientas\ndi_recibir.py Unreal_Abismo salida.png --segundos
 - Un script suelto llamado `enum.py` en la carpeta temporal del usuario tapa a la biblioteca estándar de Python cuando los
   scripts se corren desde ahí: correr los parches desde otra carpeta.
 
-## 7. Recibirlo en TouchDesigner (pendiente de probar)
+## 7. Recibirlo en TouchDesigner: directo, sin el equirectangular
 
-TouchDesigner trae `NDI In TOP`. La fuente aparece como `<equipo> (Unreal_Abismo)`, 2048 × 2048, y es un domemaster, no
-un equirectangular. Hay dos usos:
+`00_TouchDesigner/modulos/in_ue.py` (versión 1.5 del constructor) agrega el módulo `IN_UE` y la página **Unreal** en `DOMO`.
+La fuente NDI llega como un domemaster, no como un equirectangular, y hay dos maneras de usarla:
 
-1. **Al proyector de la cúpula real:** el domemaster de Unreal ya es lo que el proyector espera; se puede mandar tal cual a las
-   salidas (`out_domo`, Spout, NDI o a disco) sin pasar por el lienzo equirectangular. Es lo mejor: no hay conversión de ida y
-   vuelta.
-2. **A la sala virtual de Unreal o al resto del sistema:** hay que llevarlo al lienzo equirectangular común (un `Projection TOP`
-   de fisheye a equirectangular, como hace `IN_180`). Se pierde algo de nitidez en el borde.
+1. **Directo (lo que hace `IN_UE`).** Un NDI In recibe el domemaster, un Fit lo lleva a la resolución de `domo`, un Level le
+   aplica el Master (brillo, contraste, gamma y negro) y un Switch (`salida_domo`) lo pone en `out_domo` en lugar del `domo`
+   que sale del lienzo. Spout, NDI y grabación siguen colgando de `out_domo`, así que reciben el domemaster de Unreal tal cual,
+   **sin la conversión de ida y vuelta** (domemaster → equirectangular → domemaster) que suaviza el borde de la cúpula.
+   Se enciende con `DOMO.Uactivo`; `DOMO.Unombre` es la fuente (`Unreal_Abismo`; el NDI In pide `EQUIPO (fuente)` y el módulo
+   completa el equipo con el de la máquina si solo se escribe la fuente). La orientación y el FOV se ajustan en Unreal
+   (`InclinacionDomo`, `FovDomo`); `Yaw`, `Pitch` y el mapping de `DOMO` no aplican, porque son del lienzo equirectangular.
+2. **Al lienzo equirectangular** (para la sala virtual de Unreal o el resto del sistema): un `Projection TOP` de fisheye a
+   equirectangular, como hace `IN_180`. Se pierde algo de nitidez en el borde. No está armado.
 
-El módulo de TouchDesigner que haría esto (`IN_UE`, con su página en `DOMO`, el mismo Activo y la misma orientación que los
-demás) no está escrito: hace falta TouchDesigner abierto para probarlo por MCP sin arriesgar `build_domo.py`.
+Medido en TouchDesigner (29 sep 2026), con el programa empaquetado mandando: el NDI In recibe **2048 × 2048** de
+`Unreal_Abismo` sin errores; el nombre de la fuente tarda unos segundos en aparecer en el menú y conviene escribirlo completo.
+
+**Trampas de esta parte**
+- Un TOP no se cablea a través del límite de un COMP: `IN_UE/out1` llega a `salida_domo` por un Select (`domemaster_ue`). La
+  primera versión cableaba el Switch directo y la segunda entrada quedaba vacía sin avisar.
+- **Regenerar con `Uactivo` encendido colgó el MCP de TouchDesigner** (causa probable, sin aislar): al guardar la copia de respaldo con un NDI In
+  recibiendo, TouchDesigner sigue vivo pero el servidor MCP deja de responder (el puerto 40404 desaparece). Por eso el
+  constructor se detiene antes de tocar nada si `Uactivo` está encendido: apagarlo y regenerar.
+- Con la fuente en blanco, el Spout In de `VIDEO_DOME` daba `Sender Name is blank`; ahora usa un nombre que no existe y no da
+  error (ver el CHANGELOG).
 
 ## 8. Lo que falta
 
-- Módulo `IN_UE` en TouchDesigner y prueba real de NDI hacia él.
+- Confirmar en TouchDesigner que `out_domo`, Spout y NDI llevan el domemaster de Unreal (el envío directo se armó, pero el servidor MCP se cayó antes de la comprobación visual).
 - Audio: el plugin puede mandar audio por NDI (`bOutputAudio`), la escena todavía no tiene sonido.
 - Control por UDP (`domo.*`) para el abismo: velocidad, densidad, dialogo, inclinación.
 - Verlo dentro de la sala virtual: poner el domemaster como textura de la cúpula de la sala 180, en lugar de un video.

@@ -542,7 +542,9 @@ expr(ndi_in, 'name', "parent().par.Ndinombre")
 expr(ndi_in, 'active', "parent().par.Fuente == 'ndi'")
 spout_in = base.create(syphonspoutinTOP, 'spout_in')
 spout_in.nodeX, spout_in.nodeY = -1100, 240
-expr(spout_in, 'sendername', "parent().par.Spoutnombre")
+# Spout In no tiene par de activacion y con el nombre en blanco da "Sender Name is blank" en cada cuadro (era el
+# error que llevo a quitarlo). Con un nombre que no existe no da error: solo queda negro hasta que llegue el sender.
+expr(spout_in, 'sendername', "parent().par.Spoutnombre.eval() or 'sin_fuente_spout'")
 # Sin visor: asi no cocinan (ni marcan error) mientras la fuente sea el archivo.
 ndi_in.viewer = False
 spout_in.viewer = False
