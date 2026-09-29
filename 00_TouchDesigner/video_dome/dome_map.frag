@@ -40,7 +40,21 @@
 //              corrimiento del recorte por copia
 //   uAnm[i]  = cuanto le afecta el desplazamiento, cuanto el giro,
 //              bordes (0 los cuatro / 1 solo los costados / 2 solo arriba y abajo),
-//              reservado
+//              brillo extra de la pantalla (columna `spare`: 0 = igual, 0.5 = 50 %
+//              mas, -1 = negro). Antes era un campo reservado siempre en 0, asi
+//              que las tablas viejas se ven igual.
+//
+// Cambios del 29 sep 2026 (hay que llevarlos tambien al port HLSL de Unreal):
+//   1. banda y cilindro: el desplazamiento (travel) da la vuelta con fract()
+//      y el marco se queda quieto. Antes se restaba sin envolver y con
+//      Animtravel encendido la pared salia del marco a los pocos segundos:
+//      el cilindro desaparecia para siempre.
+//   2. tunel: coordenadas polares de verdad (distancia angular al centro), asi
+//      que el tunel es redondo y no un ojo con puntas; y el angulo va espejado
+//      (0 -> 1 -> 0) para que no quede una costura dura a un costado.
+//   3. brillo por pantalla en uAnm.w (ver arriba).
+//   screenUV devuelve ademas `uvf`, la coordenada del MARCO (sin el
+//   desplazamiento), que es la que usa el borde suave.
 // ==========================================================================
 #define MAXSCREENS 16
 #define MAXCOPIES 12
@@ -89,9 +103,10 @@ float copyYaw(int k, int n, float span)
 // Coordenada dentro de una pantalla. Devuelve false si la direccion cae fuera.
 bool screenUV(vec3 P, float yaw, float pitch, float roll,
               float hf, float vf, int modo, float tile, float travel,
-              out vec2 uv)
+              out vec2 uv, out vec2 uvf)
 {
     uv = vec2(0.0);
+    uvf = vec2(0.0);
 
     // banda: rectangulo en azimut/elevacion, sin marco propio. Puede dar la
     // vuelta entera al domo sin deformarse en los costados.
@@ -102,8 +117,10 @@ bool screenUV(vec3 P, float yaw, float pitch, float roll,
         da = atan(sin(da), cos(da));                  // envolver a [-PI, PI]
         uv = vec2(0.5 + da / hf, 0.5 + (el - pitch) / vf);
         if (tile > 1.0) uv.x = fract(uv.x * tile);
-        uv.y = uv.y - travel;
-        return (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0);
+        bool dentro = (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0);
+        uvf = uv;                                     // el marco no se mueve
+        if (travel != 0.0) uv.y = fract(uv.y - travel);
+        return dentro;
     }
 
     // cilindro: el video envuelto en una pared cilindrica alrededor del
@@ -124,8 +141,11 @@ bool screenUV(vec3 P, float yaw, float pitch, float roll,
         if (h1 <= h0) return false;
         uv = vec2(0.5 + da / hf, (h - h0) / (h1 - h0));
         if (tile > 1.0) uv.x = fract(uv.x * tile);
-        uv.y = uv.y - travel;                          // el cilindro se lleva
-        return (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0);
+        bool dentro = (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0);
+        uvf = uv;
+        // el cilindro se lleva: la imagen da la vuelta dentro de la pared
+        if (travel != 0.0) uv.y = fract(uv.y - travel);
+        return dentro;
     }
 
     vec3 C  = dirFrom(yaw, pitch);
@@ -145,13 +165,24 @@ bool screenUV(vec3 P, float yaw, float pitch, float roll,
 
     // tunel: coordenadas polares alrededor del centro de la pantalla. El video
     // se enrosca hacia el centro y con repeticiones da anillos que se alejan.
+    // La distancia es angular (acos(z)), asi el tunel sale redondo: con
+    // atan(x,z) y asin(y) por separado salia en forma de ojo, con puntas a los
+    // costados. El angulo va espejado (0 -> 1 -> 0): la imagen da la vuelta
+    // dos veces, simetrica, y no queda una costura dura donde atan salta.
     if (modo == 3) {
-        vec2 q = vec2(atan(x, z) / (hf * 0.5), asin(clamp(y, -1.0, 1.0)) / (vf * 0.5));
+        float d = acos(clamp(z, -1.0, 1.0));
+        vec2 dir = normalize(vec2(x, y) + vec2(1e-7, 0.0));
+        vec2 q = dir * d / vec2(hf * 0.5, vf * 0.5);
         float rad = length(q);
         if (rad > 1.0) return false;
         float ang = atan(q.y, q.x) / (2.0 * PI) + 0.5;
+        ang = 1.0 - abs(2.0 * ang - 1.0);
         float rep = max(tile, 1.0);
         uv = vec2(ang, fract((1.0 - rad) * rep - travel));
+        // borde suave: x = el circulo de afuera (va a 0 en el borde y vale 0.5
+        // en el centro, asi el centro no se oscurece), y = el corte entre
+        // anillos. Con edges 1 solo se funde el borde; con 2 solo los anillos.
+        uvf = vec2((1.0 - rad) * 0.5, uv.y);
         return true;
     }
 
@@ -165,6 +196,7 @@ bool screenUV(vec3 P, float yaw, float pitch, float roll,
                   0.5 + asin(clamp(y, -1.0, 1.0)) / vf);
     }
     if (tile > 1.0) uv.x = fract(uv.x * tile);
+    uvf = uv;
     return (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0);
 }
 
@@ -256,12 +288,12 @@ void main()
         float peso = 0.0;
 
         for (int k = 0; k < copias; ++k) {
-            vec2 uv;
+            vec2 uv, uvf;
             if (!screenUV(P, yaw0 + copyYaw(k, copias, span), radians(uPos[i].y),
                           radians(uPos[i].z), hf_c, vf, modo, uOpt[i].z, travel,
-                          uv)) continue;
+                          uv, uvf)) continue;
 
-            float w = pesoBorde(uv, fth, bordes);
+            float w = pesoBorde(uvf, fth, bordes);
             if (w <= 0.0) continue;
 
             int esp = int(uSize[i].z + 0.5);
@@ -285,6 +317,7 @@ void main()
 
         if (peso <= 0.0) continue;
         vec4 col = suma / peso;                       // la costura queda pareja
+        col.rgb *= max(1.0 + uAnm[i].w, 0.0);         // brillo de la pantalla
         float a = min(peso, 1.0) * clamp(uSize[i].w, 0.0, 1.0);
         // las filas se apilan en el orden de la tabla: la ultima queda arriba
         acc = mix(acc, col, a * col.a);

@@ -199,16 +199,18 @@ aproximado; nada de lo pendiente está prometido para una fecha.
 - [x] Montajes de pantallas 16:9 (21 plantillas) editables en vivo y guardados.
 - [x] Velo de la cúpula al encender las luces.
 - [x] Decodificación de video en la GPU con DX12 (Electra + D3D12 Video + NVDEC) y respaldo a CPU.
+- [x] Paredes negras, piso menos reflectante, fondo desenfocado en los montajes y perfiles de render por pantalla y tarjeta.
+- [x] TouchDesigner: montajes 16:9 corregidos, módulos `IN_FX` e `IN_3D`, master y panel UDP hacia Unreal.
+- [x] Investigación de AMD e Intel ([07_GPUs_AMD_e_Intel.md](04_Docs/07_GPUs_AMD_e_Intel.md)).
 
 **Siguiente**
 
-- [ ] **TouchDesigner:** guardar y versionar el `.toe`; módulos nuevos de entrada para
-  modelos 3D y animaciones (`IN_3D`, `IN_FX`); un master de brillo y negro; y un panel
-  para controlar el ejecutable de Unreal por UDP.
+- [ ] **TouchDesigner:** probar el panel de control por UDP contra el ejecutable abierto, y llevar los arreglos
+  del shader de pantallas a `estudio_pantallas.html`; enchufar un modelo 3D propio en `IN_3D`.
 - [ ] **El build en el visor:** abrirlo con SteamVR o Virtual Desktop y comprobar la cúpula,
   el menú y el movimiento en realidad virtual (hasta ahora solo se probó con `-nohmd`).
 - [ ] **Decodificación en otras tarjetas:** confirmar HEVC y H.264 de 4K en AMD e Intel
-  (hoy solo una RTX 3090); si `NVDECElectra`, que es experimental, cambia en UE 5.9, revisarlo.
+  (hoy solo una RTX 3090; el plan y el criterio están en `07_GPUs_AMD_e_Intel.md`); si `NVDECElectra`, que es experimental, cambia en UE 5.9, revisarlo.
 - [ ] **Remote Control en el build** (`-RCWebControlEnable`), para tener un segundo camino
   de control además del UDP.
 

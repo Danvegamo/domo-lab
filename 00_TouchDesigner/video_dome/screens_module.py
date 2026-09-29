@@ -53,6 +53,9 @@ DEFAULT = dict(yaw=0.0, pitch=45.0, roll=0.0, mode=0,
                rep=1, repspan=360.0, repmir=0, repofs=0.0,
                travel=0.0, spin=0.0, edges=0, spare=0.0,
                name='pantalla')
+# `spare` es desde el 29 sep 2026 el BRILLO extra de la pantalla (0 = igual,
+# 0.5 = 50 % mas, -1 = negro). Conserva el nombre de la columna para que las
+# tablas, versiones y el port de Unreal no cambien de formato.
 
 
 def screen(**kw):
@@ -91,17 +94,21 @@ def _num(v):
 # --------------------------------------------------------------------------
 TEMPLATES = {
     # ---- un punto de vista (ensayo, o publico mirando al frente) ----
+    # (29 sep 2026) un poco mas grandes y con el borde mas suave: a 70 grados
+    # la pantalla sola se leia como una estampilla en el domo. 'grande' y
+    # 'cenital' pasan a curva, porque la plana estira las esquinas pasados
+    # los ~100 grados.
     'cine': [
-        screen(name='cine', yaw=0, pitch=45, hfov=70, vfov=39, mode=0),
+        screen(name='cine', yaw=0, pitch=40, hfov=80, vfov=45, mode=0, feather=0.06),
     ],
     'grande': [
-        screen(name='grande', yaw=0, pitch=48, hfov=95, vfov=53, mode=0),
+        screen(name='grande', yaw=0, pitch=42, hfov=120, vfov=68, mode=1, feather=0.08),
     ],
     'bajo': [
-        screen(name='bajo', yaw=0, pitch=28, hfov=80, vfov=45, mode=0),
+        screen(name='bajo', yaw=0, pitch=30, hfov=90, vfov=51, mode=0, feather=0.06),
     ],
     'cenital': [
-        screen(name='cenital', yaw=0, pitch=70, hfov=90, vfov=51, mode=0),
+        screen(name='cenital', yaw=0, pitch=68, hfov=100, vfov=56, mode=1, feather=0.08),
     ],
 
     # ---- sala llena: la misma imagen enfrente de cada sector ----
@@ -116,8 +123,9 @@ TEMPLATES = {
                rep=4, repspan=360, blend=8, edges=1),
     ],
     'sala_6': [
-        screen(name='seis', yaw=0, pitch=40, hfov=54, vfov=30, mode=0,
-               rep=6, repspan=360, blend=6, edges=1),
+        # 58 + 8 de costura: con 54 + 6 quedaban cunas negras en las esquinas
+        screen(name='seis', yaw=0, pitch=40, hfov=58, vfov=33, mode=0,
+               rep=6, repspan=360, blend=8, edges=1),
     ],
     'sala_4_espejo': [
         # espejadas de a una: los bordes de dos pantallas vecinas se encuentran
@@ -130,9 +138,16 @@ TEMPLATES = {
         # pelicula completa y nadie ve lo mismo que su vecino. El recorte de
         # cada copia es un poco mas ancho que 1/6 para que el solape muestre la
         # MISMA parte de la imagen desde los dos lados y la costura desaparezca.
-        screen(name='mosaico', yaw=0, pitch=40, hfov=54, vfov=54, mode=0,
-               rep=6, repspan=360, repofs=1.0 / 6.0, cropx=-0.01,
-               cropw=1.0 / 6.0 + 0.02, blend=6, edges=1),
+        #
+        # (29 sep 2026) cropx ya no es negativo: el shader hace fract() del
+        # recorte y -0.01 se volvia 0.99, asi que la primera copia mostraba el
+        # borde derecho del cuadro estirado (una muesca del color del borde).
+        # Tambien se recorta el alto (cropy/croph) para que un sexto del ancho
+        # no quede estirado tres veces: sigue siendo un montaje para material
+        # panoramico, pero con 16:9 ya se lee.
+        screen(name='mosaico', yaw=0, pitch=40, hfov=58, vfov=50, mode=1,
+               rep=6, repspan=360, repofs=1.0 / 6.0, cropx=0.004,
+               cropw=1.0 / 6.0 + 0.012, cropy=0.15, croph=0.7, blend=8, edges=1),
     ],
     'sala_corona': [
         # EL QUE MEJOR FUNCIONA. Anillo bajo cosido + una cenital encima.
@@ -152,22 +167,35 @@ TEMPLATES = {
     'sala_corona_panorama': [
         # la corona, pero cada sector con su pedazo del cuadro: la sala arma un
         # panoramico continuo de 360 y las costuras caen donde la imagen sigue
+        # cropx positivo por la misma razon que en sala_6_mosaico
         screen(name='corona_pan', yaw=0, pitch=32, hfov=66, vfov=42, mode=0,
-               rep=6, repspan=360, repofs=1.0 / 6.0, cropx=-0.012,
-               cropw=1.0 / 6.0 + 0.024, blend=8, edges=0),
+               rep=6, repspan=360, repofs=1.0 / 6.0, cropx=0.004,
+               cropw=1.0 / 6.0 + 0.016, cropy=0.1, croph=0.8, blend=8, edges=0),
         screen(name='cenital', yaw=0, pitch=70, hfov=96, vfov=96, mode=1,
                opacity=0.75, feather=0.30),
     ],
 
     # ---- montajes de composicion ----
+    # (29 sep 2026) triptico y espejo pasan a BANDA (rectangulo en azimut y
+    # elevacion): en plana o curva cada pantalla lateral se inclina siguiendo
+    # su gran circulo y el conjunto se cruzaba en V delante del publico. En
+    # banda los bordes siguen las lineas de elevacion, como el anillo. La
+    # banda aprieta el ancho por cos(elevacion), asi que el ancho se calcula
+    # para devolverle el aspecto 16:9: hfov = vfov * 1.78 / cos(pitch).
+    # Las laterales espejadas hacen que cada borde se encuentre con el mismo
+    # borde del cuadro de la del centro.
     'tres': [
-        screen(name='izq', yaw=-38, pitch=45, hfov=34, vfov=19, mode=0, mirror=1),
-        screen(name='centro', yaw=0, pitch=45, hfov=34, vfov=19, mode=0),
-        screen(name='der', yaw=38, pitch=45, hfov=34, vfov=19, mode=0, mirror=1),
+        screen(name='izq', yaw=-74, pitch=40, hfov=70, vfov=30, mode=2, mirror=1, feather=0.05),
+        screen(name='centro', yaw=0, pitch=40, hfov=70, vfov=30, mode=2, feather=0.05),
+        screen(name='der', yaw=74, pitch=40, hfov=70, vfov=30, mode=2, mirror=1, feather=0.05),
     ],
+    # las dos mitades se tocan en el frente por el mismo borde del cuadro: se
+    # lee como una sola imagen simetrica de 186 grados. Es UNA fila con dos
+    # copias espejadas (repmir) sobre un arco de 93: asi la costura del frente
+    # se cose (blend) en vez de dejar una raya oscura entre dos filas.
     'espejo': [
-        screen(name='a', yaw=-42, pitch=45, hfov=60, vfov=34, mode=0),
-        screen(name='b_espejo', yaw=42, pitch=45, hfov=60, vfov=34, mode=0, mirror=1),
+        screen(name='espejo', yaw=0, pitch=40, hfov=93, vfov=40, mode=2, feather=0.05,
+               rep=2, repspan=93, repmir=1, blend=6, edges=0),
     ],
     'anillo': [
         # una banda que da la vuelta entera con el video repetido 3 veces: el
@@ -199,10 +227,12 @@ TEMPLATES = {
                tile=3, travel=1.0, edges=2, feather=0.10),
     ],
     'cilindro_doble': [
-        screen(name='pared', yaw=0, pitch=6, hfov=360, vfov=50, mode=4,
+        # (29 sep 2026) las dos paredes ya no se pisan: la baja llega a 48
+        # grados y la alta arranca en 50
+        screen(name='pared', yaw=0, pitch=6, hfov=360, vfov=42, mode=4,
                tile=3, travel=1.0, edges=2, feather=0.08),
-        screen(name='pared_alta', yaw=180, pitch=40, hfov=360, vfov=40, mode=4,
-               tile=2, travel=-0.6, mirror=2, opacity=0.7, edges=2, feather=0.12),
+        screen(name='pared_alta', yaw=180, pitch=50, hfov=360, vfov=30, mode=4,
+               tile=2, travel=-0.6, mirror=2, opacity=0.8, edges=2, feather=0.12),
     ],
     'cilindro_con_sala': [
         # el cilindro de fondo llevandose, y la sala cosida encima
@@ -214,12 +244,15 @@ TEMPLATES = {
     'fragmentos': [
         # la misma pelicula partida en tres: cada ventana muestra un tercio
         # distinto del cuadro, asi el domo arma un panoramico falso
-        screen(name='frag_izq', yaw=-46, pitch=45, hfov=42, vfov=42, mode=0,
-               cropx=0.0, cropw=0.34),
-        screen(name='frag_centro', yaw=0, pitch=45, hfov=42, vfov=42, mode=0,
-               cropx=0.33, cropw=0.34),
-        screen(name='frag_der', yaw=46, pitch=45, hfov=42, vfov=42, mode=0,
-               cropx=0.66, cropw=0.34),
+        # (29 sep 2026) en banda y con el aspecto de su tercio (0.34 del
+        # ancho por el alto entero = 0.6, corregido por cos(42)): antes
+        # 42 x 42 en plana lo estiraba 1.7 veces y se cruzaban en V
+        screen(name='frag_izq', yaw=-48, pitch=42, hfov=45.6, vfov=56, mode=2,
+               cropx=0.0, cropw=0.34, feather=0.05),
+        screen(name='frag_centro', yaw=0, pitch=42, hfov=45.6, vfov=56, mode=2,
+               cropx=0.33, cropw=0.34, feather=0.05),
+        screen(name='frag_der', yaw=48, pitch=42, hfov=45.6, vfov=56, mode=2,
+               cropx=0.66, cropw=0.34, feather=0.05),
     ],
 }
 

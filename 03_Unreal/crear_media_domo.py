@@ -296,6 +296,7 @@ else if (f == 4)
             }
             float yaw = yaw0 + cy;
             float2 uvp = float2(0.0, 0.0);
+            float2 uvf = float2(0.0, 0.0);   // coordenada del MARCO (sin el desplazamiento): la usa el borde suave
             bool ok = false;
 
             // do { } while (false): permite salir con break de cada forma sin funciones
@@ -310,8 +311,9 @@ else if (f == 4)
                     da = atan2(sin(da), cos(da));
                     uvp = float2(0.5 + da / hfc, 0.5 + (elv - pitch) / vf);
                     if (tile > 1.0) uvp.x = frac(uvp.x * tile);
-                    uvp.y = uvp.y - travel;
                     ok = (uvp.x >= 0.0 && uvp.x <= 1.0 && uvp.y >= 0.0 && uvp.y <= 1.0);
+                    uvf = uvp;
+                    if (travel != 0.0) uvp.y = frac(uvp.y - travel);   // el marco queda quieto, la imagen da la vuelta
                     break;
                 }
                 if (modo == 4)
@@ -328,8 +330,9 @@ else if (f == 4)
                     if (h1 <= h0) break;
                     uvp = float2(0.5 + da / hfc, (h - h0) / (h1 - h0));
                     if (tile > 1.0) uvp.x = frac(uvp.x * tile);
-                    uvp.y = uvp.y - travel;
                     ok = (uvp.x >= 0.0 && uvp.x <= 1.0 && uvp.y >= 0.0 && uvp.y <= 1.0);
+                    uvf = uvp;
+                    if (travel != 0.0) uvp.y = frac(uvp.y - travel);
                     break;
                 }
 
@@ -349,13 +352,18 @@ else if (f == 4)
 
                 if (modo == 3)
                 {
-                    // tunel: polar alrededor del centro de la pantalla
-                    float2 q = float2(atan2(px, pz) / (hfc * 0.5), asin(clamp(py, -1.0, 1.0)) / (vf * 0.5));
-                    float rad = length(q);
+                    // tunel: la distancia angular al centro (acos(pz)) da un tunel redondo; el angulo va
+                    // espejado (0 -> 1 -> 0) para que no quede una costura dura a un costado.
+                    float dAng = acos(clamp(pz, -1.0, 1.0));
+                    float2 dir2 = normalize(float2(px, py) + float2(1e-7, 0.0));
+                    float2 q2 = dir2 * dAng / float2(hfc * 0.5, vf * 0.5);
+                    float rad = length(q2);
                     if (rad > 1.0) break;
-                    float ang = atan2(q.y, q.x) / (2.0 * K_PI) + 0.5;
+                    float ang = atan2(q2.y, q2.x) / (2.0 * K_PI) + 0.5;
+                    ang = 1.0 - abs(2.0 * ang - 1.0);
                     float repT = max(tile, 1.0);
                     uvp = float2(ang, frac((1.0 - rad) * repT - travel));
+                    uvf = float2((1.0 - rad) * 0.5, uvp.y);
                     ok = true;
                     break;
                 }
@@ -368,14 +376,15 @@ else if (f == 4)
                     uvp = float2(0.5 + atan2(px, pz) / hfc, 0.5 + asin(clamp(py, -1.0, 1.0)) / vf);
                 }
                 if (tile > 1.0) uvp.x = frac(uvp.x * tile);
+                uvf = uvp;
                 ok = (uvp.x >= 0.0 && uvp.x <= 1.0 && uvp.y >= 0.0 && uvp.y <= 1.0);
             } while (false);
 
             if (!ok) continue;
 
             float fth2 = max(fth, 0.0001);
-            float lados = smoothstep(0.0, fth2, uvp.x) * smoothstep(0.0, fth2, 1.0 - uvp.x);
-            float arrab = smoothstep(0.0, fth2, uvp.y) * smoothstep(0.0, fth2, 1.0 - uvp.y);
+            float lados = smoothstep(0.0, fth2, uvf.x) * smoothstep(0.0, fth2, 1.0 - uvf.x);
+            float arrab = smoothstep(0.0, fth2, uvf.y) * smoothstep(0.0, fth2, 1.0 - uvf.y);
             float w = (bordes == 1) ? lados : ((bordes == 2) ? arrab : lados * arrab);
             if (w <= 0.0) continue;
 
@@ -396,7 +405,7 @@ else if (f == 4)
         }
 
         if (peso <= 0.0) continue;
-        float3 col = suma / peso;
+        float3 col = suma / peso * max(1.0 + aAnm[i].w, 0.0);
         float aa = min(peso, 1.0) * clamp(aSize[i].w, 0.0, 1.0);
         acc = lerp(acc, col, aa);
     }

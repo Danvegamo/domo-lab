@@ -301,6 +301,11 @@ p = page_s.appendFloat('Stravel', label='Se lleva con la animacion')[0]
 p.normMin, p.normMax, p.val = -2.0, 2.0, 0.0
 p = page_s.appendFloat('Sspin', label='Gira con la animacion')[0]
 p.normMin, p.normMax, p.val = -2.0, 2.0, 0.0
+# Brillo de esta pantalla: columna `spare` de la tabla (0 = igual, 0.5 = 50 %
+# mas, -1 = negro). Asi se iguala una pantalla que el proyector deja mas
+# oscura, o se baja la cenital para que no encandile.
+p = page_s.appendFloat('Sbrillo', label='Brillo de la pantalla (0 = igual)')[0]
+p.normMin, p.normMax, p.val = -1.0, 1.0, 0.0
 
 # Repeticion en anillo: la MISMA pantalla enfrente de cada sector del publico.
 # Un domo lleno no tiene un frente; con rep = 4 o 6 nadie se queda mirando el
@@ -316,6 +321,33 @@ page_s.appendPulse('Addscreen', label='Agregar pantalla')
 page_s.appendPulse('Dupscreen', label='Duplicar esta pantalla')
 page_s.appendPulse('Delscreen', label='Borrar esta pantalla')
 page_s.appendPulse('Readscreen', label='Leer la fila (si editaste la tabla)')
+
+# Ajuste: mueve el montaje ENTERO sin tocar la tabla. La tabla `screens`
+# sigue siendo la del template (o la editada a mano) y `screens_vivo`, un
+# Script DAT, le aplica estos factores antes de mandarla al shader. Con todo en
+# su valor por defecto la tabla pasa igual. Por eso se puede probar en vivo
+# otra separacion o un anillo mas alto y volver con un click, y los templates,
+# las versiones y el port de Unreal siguen viendo la misma tabla.
+page_a = base.appendCustomPage('Ajuste')
+p = page_a.appendFloat('Gancho', label='Ancho de todas las pantallas (x)')[0]
+p.normMin, p.normMax, p.val = 0.5, 1.5, 1.0
+p = page_a.appendFloat('Galto', label='Alto de todas las pantallas (x)')[0]
+p.normMin, p.normMax, p.val = 0.5, 1.5, 1.0
+p = page_a.appendFloat('Gelev', label='Subir o bajar todo (grados)')[0]
+p.normMin, p.normMax, p.val = -25.0, 25.0, 0.0
+p = page_a.appendFloat('Gsep', label='Separacion entre pantallas (x)')[0]
+p.normMin, p.normMax, p.val = 0.5, 1.5, 1.0
+p = page_a.appendInt('Gcopias', label='Copias en anillo (0 = las del template)')[0]
+p.normMin, p.normMax, p.val = 0, 8, 0
+p = page_a.appendFloat('Gsolape', label='Solape extra entre copias (grados)')[0]
+p.normMin, p.normMax, p.val = -8.0, 16.0, 0.0
+p = page_a.appendFloat('Gborde', label='Borde suave (x)')[0]
+p.normMin, p.normMax, p.val = 0.0, 3.0, 1.0
+p = page_a.appendFloat('Gopacidad', label='Opacidad de todas (x)')[0]
+p.normMin, p.normMax, p.val = 0.0, 1.0, 1.0
+p = page_a.appendFloat('Gbrillo', label='Brillo de todas (x)')[0]
+p.normMin, p.normMax, p.val = 0.0, 2.0, 1.0
+page_a.appendPulse('Greset', label='Volver a 1 / 0 (sin ajuste)')
 
 page_e = base.appendCustomPage('Espacio')
 # Domo tipo planetario: elevado, se mira hacia arriba, y la vista da la vuelta.
@@ -446,6 +478,35 @@ p = page_r.appendInt('Recres', label='Lado del render grabado')[0]
 p.normMin, p.normMax, p.val = 1024, 4096, 2048
 
 
+# Topes duros: un ancho de 0 o una opacidad de 3 no son un ajuste, son un
+# error de dedo. El slider va por normMin/normMax; esto es lo que no se puede
+# pasar ni escribiendo el numero. Y el valor por defecto de cada par pasa a ser
+# el de fabrica, asi "Reset to default" vuelve a algo que funciona.
+TOPES = {
+    'Syaw': (-360, 360), 'Spitch': (-90, 90), 'Sroll': (-180, 180),
+    'Shfov': (1, 360), 'Svfov': (1, 180), 'Sopacity': (0, 1),
+    'Sfeather': (0, 0.5), 'Stile': (1, 16), 'Scropx': (0, 1), 'Scropy': (0, 1),
+    'Scropw': (0.01, 1), 'Scroph': (0.01, 1), 'Sblend': (0, 60),
+    'Srep': (1, 12), 'Srepspan': (1, 360), 'Srepofs': (0, 1), 'Sbrillo': (-1, 4),
+    'Gancho': (0.1, 3), 'Galto': (0.1, 3), 'Gelev': (-60, 60), 'Gsep': (0.1, 3),
+    'Gcopias': (0, 12), 'Gsolape': (-30, 45), 'Gborde': (0, 10),
+    'Gopacidad': (0, 1), 'Gbrillo': (0, 4),
+    'Domefov': (90, 360), 'Viewfov': (10, 180), 'Bgblur': (0, 500),
+    'Bgbright': (0, 4), 'Bgzoom': (0.5, 8), 'Bgtile': (1, 16), 'Opacity': (0, 1),
+    'Vignette': (0, 1), 'Guidealpha': (0, 1), 'Volume': (0, 2), 'Speed': (0, 8),
+}
+for _p in base.customPars:
+    if _p.isPulse or _p.isMomentary:
+        continue
+    if _p.name in TOPES:
+        _lo, _hi = TOPES[_p.name]
+        _p.min, _p.clampMin = _lo, True
+        _p.max, _p.clampMax = _hi, True
+    try:
+        _p.default = _p.eval()
+    except Exception:
+        pass
+
 # ==========================================================================
 # 2. Fuente: video + audio
 # ==========================================================================
@@ -536,9 +597,101 @@ else:
 # pantalla y el shader no puede leerlo como arrays.
 # La columna de texto 'name' viaja como un canal en cero y no molesta: los
 # Select CHOP de abajo eligen por nombre.
+# screens_vivo: la tabla con los ajustes globales de la pagina Ajuste. Es lo
+# que lee el shader; `screens` sigue siendo la fuente de verdad que editan los
+# pars de pantalla, los templates y las versiones.
+AJUSTE_CB = r'''# Callbacks de screens_vivo y screens_b_vivo (Script DAT).
+# Copia la tabla de entrada y le aplica la pagina Ajuste de VIDEO_DOME. Leer
+# los pars dentro de onCook deja la dependencia hecha: al mover un par, la
+# tabla se recalcula sola.
+
+def _f(t, i, col, defecto=0.0):
+    try:
+        return float(t[i, col].val)
+    except Exception:
+        return defecto
+
+
+def _put(t, i, col, v):
+    if t[i, col] is not None:
+        t[i, col] = round(float(v), 5)
+
+
+def onCook(scriptOp):
+    scriptOp.clear()
+    if not scriptOp.inputs:
+        return
+    scriptOp.copy(scriptOp.inputs[0])
+    t = scriptOp
+    c = scriptOp.parent()
+    ancho = c.par.Gancho.eval()
+    alto = c.par.Galto.eval()
+    elev = c.par.Gelev.eval()
+    sep = c.par.Gsep.eval()
+    copias = int(c.par.Gcopias.eval())
+    solape = c.par.Gsolape.eval()
+    borde = c.par.Gborde.eval()
+    opa = c.par.Gopacidad.eval()
+    brillo = c.par.Gbrillo.eval()
+    neutro = (ancho == 1 and alto == 1 and elev == 0 and sep == 1 and copias == 0
+              and solape == 0 and borde == 1 and opa == 1 and brillo == 1)
+    if neutro or t.numRows < 2:
+        return
+    for i in range(1, t.numRows):
+        modo = int(_f(t, i, 'mode') + 0.5)
+        hf, vf = _f(t, i, 'hfov', 70), _f(t, i, 'vfov', 39)
+        rep = max(int(_f(t, i, 'rep', 1) + 0.5), 1)
+        span = _f(t, i, 'repspan', 360)
+        anillo = rep > 1 and span >= 359
+        # copias: solo en las filas que ya dan la vuelta en anillo. El ancho
+        # se reparte para que el anillo siga igual de lleno; la plana no
+        # aguanta mas de ~110 grados, asi que pasa a curva.
+        if copias > 0 and anillo and copias != rep:
+            k = rep / float(copias)
+            hf = hf * k
+            vf = min(vf * k, 75.0)
+            rep = copias
+            if modo == 0 and hf > 110:
+                modo = 1
+            _put(t, i, 'rep', rep)
+            _put(t, i, 'mode', modo)
+        # ancho: lo que ya da la vuelta entera (banda o cilindro de 360) no se
+        # abre ni se cierra, solo cambia de alto
+        if hf < 359:
+            hf = min(hf * ancho, 360.0)
+        vf = min(vf * alto, 180.0)
+        _put(t, i, 'hfov', hf)
+        _put(t, i, 'vfov', vf)
+        # elevacion: el tunel va centrado en su punto, no se inclina
+        if modo != 3:
+            _put(t, i, 'pitch', max(-90.0, min(90.0, _f(t, i, 'pitch') + elev)))
+        # separacion: entre filas sueltas se abre el azimut; en un abanico
+        # (copias sobre un arco parcial) se abre el arco
+        if sep != 1:
+            if rep > 1 and span < 359:
+                _put(t, i, 'repspan', min(span * sep, 360.0))
+            elif rep == 1:
+                _put(t, i, 'yaw', _f(t, i, 'yaw') * sep)
+        if solape and rep > 1:
+            _put(t, i, 'blend', max(_f(t, i, 'blend') + solape, 0.0))
+        _put(t, i, 'feather', _f(t, i, 'feather', 0.04) * borde)
+        _put(t, i, 'opacity', max(0.0, min(1.0, _f(t, i, 'opacity', 1) * opa)))
+        _put(t, i, 'spare', (1.0 + _f(t, i, 'spare')) * brillo - 1.0)
+    return
+'''
+
+aj_dat = base.create(textDAT, 'ajuste_callbacks')
+aj_dat.nodeX, aj_dat.nodeY = -1000, 320
+aj_dat.text = AJUSTE_CB
+
+vivo = base.create(scriptDAT, 'screens_vivo')
+vivo.nodeX, vivo.nodeY = -1000, 160
+vivo.inputConnectors[0].connect(tabla)
+setpar(vivo, ['callbacks'], aj_dat.path)
+
 chop = base.create(dattoCHOP, 'screens_chop')
 chop.nodeX, chop.nodeY = -900, 160
-setpar(chop, ['dat'], tabla.path)
+setpar(chop, ['dat'], vivo.path)
 setpar(chop, ['output'], 'chanpercol')
 setpar_any(chop, ['firstrow'], ['names', 'firstrowisnames'], 'First Row')
 # y 'First Column' = values: por defecto el DAT to CHOP se COME la primera
@@ -595,7 +748,15 @@ tabla_b.text = tabla.text
 
 chop_b = base.create(dattoCHOP, 'screens_chop_b')
 chop_b.nodeX, chop_b.nodeY = -900, 80
-setpar(chop_b, ['dat'], tabla_b.path)
+vivo_b = base.create(scriptDAT, 'screens_b_vivo')
+vivo_b.nodeX, vivo_b.nodeY = -1000, 80
+vivo_b.inputConnectors[0].connect(tabla_b)
+setpar(vivo_b, ['callbacks'], aj_dat.path)
+setpar(chop_b, ['dat'], vivo_b.path)
+# los Script DAT nacen con su propio DAT de callbacks; usan ajuste_callbacks
+for _n in ('screens_vivo_callbacks', 'screens_b_vivo_callbacks'):
+    if base.op(_n) is not None:
+        base.op(_n).destroy()
 setpar(chop_b, ['output'], 'chanpercol')
 setpar_any(chop_b, ['firstrow'], ['names', 'firstrowisnames'], 'First Row')
 setpar_any(chop_b, ['firstcol', 'firstcolumn'], ['values', 'ignore'], 'First Column')
@@ -1168,7 +1329,7 @@ CAMPOS = [('Sname', 'name'), ('Son', 'on'), ('Smode', 'mode'),
           ('Srep', 'rep'), ('Srepspan', 'repspan'),
           ('Srepmir', 'repmir'), ('Srepofs', 'repofs'),
           ('Sblend', 'blend'), ('Sedges', 'edges'),
-          ('Stravel', 'travel'), ('Sspin', 'spin')]
+          ('Stravel', 'travel'), ('Sspin', 'spin'), ('Sbrillo', 'spare')]
 
 # escribir la fila desde los pars dispara onValueChange de nuevo; esta bandera
 # corta el ida y vuelta
@@ -1500,6 +1661,11 @@ def onPulse(par):
         borrar_momento(comp)
     elif par.name == 'Refreshmoments':
         refrescar_momentos(comp)
+    elif par.name == 'Greset':
+        for n, v in (('Gancho', 1.0), ('Galto', 1.0), ('Gelev', 0.0), ('Gsep', 1.0),
+                     ('Gcopias', 0), ('Gsolape', 0.0), ('Gborde', 1.0),
+                     ('Gopacidad', 1.0), ('Gbrillo', 1.0)):
+            getattr(comp.par, n).val = v
     elif par.name == 'Openeditor':
         ed = comp.op('editor')
         if ed is not None:
@@ -1563,11 +1729,11 @@ CAJAS = [
      ['movie1', 'ndi_in', 'spout_in', 'fuente', 'audio_movie', 'audio_gain', 'audio_out', 'soft', 'video_out']),
     ('2_pantallas', 'PANTALLAS  ·  tabla -> CHOP -> arrays del shader',
      (0.12, 0.22, 0.12),
-     ['screens_mod', 'screens', 'screens_chop', 'watcher',
+     ['screens_mod', 'screens', 'screens_vivo', 'ajuste_callbacks', 'screens_chop', 'watcher',
       'sel_pos', 'sel_size', 'sel_crop', 'sel_opt', 'sel_rep', 'sel_anm']),
     ('2b_momentos', 'MOMENTOS  ·  un montaje por tramo, con fusion',
      (0.24, 0.20, 0.10),
-     ['moments', 'moments_exec', 'screens_b', 'screens_chop_b',
+     ['moments', 'moments_exec', 'screens_b', 'screens_b_vivo', 'screens_chop_b',
       'sel_pos_b', 'sel_size_b', 'sel_crop_b', 'sel_opt_b', 'sel_rep_b',
       'sel_anm_b']),
     ('3_fondo', 'FONDO  ·  desenfocado antes de mapear', (0.10, 0.16, 0.24),

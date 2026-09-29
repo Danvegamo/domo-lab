@@ -728,6 +728,7 @@ TSharedRef<SWidget> FDomeMenu::SeccionPantalla()
 					Deslizador(LOCTEXT("PAncho", "Ancho (grados)"), TEXT("S_Ancho"), 1.f, 360.f, 1.f),
 					Deslizador(LOCTEXT("PAlto", "Alto (grados)"), TEXT("S_Alto"), 1.f, 180.f, 1.f),
 					Deslizador(LOCTEXT("POpac", "Opacidad"), TEXT("S_Opacidad"), 0.f, 1.f, 0.01f),
+					Deslizador(LOCTEXT("PBrillo", "Brillo extra (0 = igual)"), TEXT("S_Brillo"), -1.f, 2.f, 0.02f),
 					Deslizador(LOCTEXT("PBorde", "Borde suave"), TEXT("S_Borde"), 0.f, 0.5f, 0.005f) }),
 				false)
 		]

@@ -23,7 +23,13 @@ de pantallas; el archivo `.toe` es el resultado de correrlo y de guardar.
 00_TouchDesigner/shaders/domo_mapping.frag  el domemaster y el lienzo de la sala VR, con FOV, Pitch y mapping, en un solo paso
 00_TouchDesigner/shaders/patron.frag        el patrón de prueba del lienzo
 00_TouchDesigner/shaders/pantalla169.frag   una pantalla plana sobre el lienzo (disponible, ya no está en la red)
+00_TouchDesigner/shaders/efectos.frag       las ocho visualizaciones de IN_FX, pintadas sobre la esfera
+00_TouchDesigner/modulos/in_fx.py           el módulo IN_FX (efectos generativos), sección 5.5
+00_TouchDesigner/modulos/in_3d.py           el módulo IN_3D (objetos 3D con render cubemap), sección 5.6
+00_TouchDesigner/modulos/master.py          brillo, contraste, gamma y negro con fundido, sección 6
+00_TouchDesigner/modulos/unreal_udp.py      el panel de control del ejecutable de Unreal por UDP, sección 10
 00_TouchDesigner/video_dome/                el sistema de pantallas (VIDEO_DOME), ver sección 5.3
+00_TouchDesigner/video_dome/plantillas_ue.json  la tabla final de las 21 plantillas, para el port de Unreal
 05_Preview/pruebas/                         capturas del patrón en TouchDesigner y en Unreal
 ```
 
@@ -52,19 +58,30 @@ funcionar. El script solo hace falta para reconstruirlo o cambiarlo.
 ## 2. Estructura
 
 ```
-DOMO                          COMP raíz, atajo parent.DOMO, páginas Domo, 360, 180, 16:9, Mapping y Salidas
+DOMO                          COMP raíz, atajo parent.DOMO, páginas Domo, 360, 180, 16:9, FX, 3D, Master, Mapping, Salidas y Unreal
   IN_360                      video 360 equirectangular (+ costura opcional, + giro esférico)
   IN_180                      domemaster fisheye, VR180 mono o VR180 lado a lado (+ giro esférico)
   IN_169                      video plano sobre pantallas en la cúpula (VIDEO_DOME adentro, + Pitch y Roll)
-  AUDIO                       sigue a la fuente al aire (solo suena ese video), o un archivo, o la entrada
+  IN_FX                       ocho visualizaciones generativas en GLSL, reactivas al audio (+ giro esférico)
+  IN_3D                       objetos 3D animados alrededor del público, render cubemap (+ giro esférico)
+  AUDIO                       sigue a la fuente al aire (solo suena ese video), o un archivo, o la entrada;
+                              además saca los niveles (nivel, graves, medios, agudos) para IN_FX e IN_3D
   patron                      el patrón de prueba, cuarta entrada de la mezcla
   mezcla -> equi              la fuente elegida, como lienzo equirectangular 2:1
+  master                      brillo, contraste, gamma y negro con fundido (página Master)
   giro                        Yaw, como corrimiento horizontal del lienzo
   domo -> out_domo            el domemaster fisheye (GLSL): FOV, Pitch y mapping antes de recortar
   spout_domo / ndi_domo       salidas del domemaster
   grabar                      Movie File Out del domemaster (HAP)
   para_unreal -> alfa_unreal -> spout_unreal   el equirectangular que espera la sala VR (mismo shader que domo)
+  udp_unreal                  panel de control del ejecutable de Unreal (página Unreal)
 ```
+
+El constructor ejecuta los archivos de `modulos/` en su propio espacio de
+nombres con la función `modulo()`, así que los módulos nuevos usan las mismas
+utilidades (`mk`, `wire`, `caja`, `lienzo`, `orientador`, `negro_y_salida`) y
+se regeneran con el mismo `build_domo.py`. La versión del constructor es la 1.4
+(29 de septiembre de 2026).
 
 Cada módulo de entrada es un Base COMP con su parámetro `Activo`, su `out1` y
 una caja de comentario (Annotate COMP) que explica qué hace. Solo el módulo
@@ -321,7 +338,12 @@ seis bloques:
 | Fuente | `Vactivo`, `Vfuente` (archivo / ndi / spout), `Vmoviefile`, `Vndinombre`, `Vspoutnombre`, `Vplay` | `IN_169.Activo` y `Fuente`, `Moviefile`, `Ndinombre`, `Spoutnombre`, `Play` de VIDEO_DOME |
 | Montaje | `Vtemplate` | `Template` |
 | Domo interno | `Vyawglobal`, `Vdpitch`, `Vdroll`, `Vdomefov`, `Vflipx` | `Yawglobal`, `IN_169.Pitch` y `IN_169.Roll`, `Domefov`, `Flipx` |
+| Ajuste de todo el montaje | `Vgancho`, `Vgalto`, `Vgelev`, `Vgsep`, `Vgcopias`, `Vgsolape`, `Vgborde`, `Vgopacidad`, `Vgbrillo` | página Ajuste de VIDEO_DOME (ver arriba) |
 | Pantalla elegida | `Vscreen`, `Vsmode` (forma: plana, curva, banda, túnel, cilindro), `Vsyaw`, `Vspitch`, `Vshfov`, `Vsautovfov`, `Vsvfov`, `Vsrep`, `Vsrepspan`, `Vsblend` | `Screen`, `Smode`, `Syaw`, `Spitch`, `Shfov`, `Sautovfov`, `Svfov`, `Srep`, `Srepspan`, `Sblend` |
+| Pantalla elegida: detalle | `Vsrepmir`, `Vsrepofs`, `Vson`, `Vsroll`, `Vsmirror`, `Vsopacity`, `Vsbrillo`, `Vsfeather`, `Vsedges`, `Vstile` | `Srepmir`, `Srepofs`, `Son`, `Sroll`, `Smirror`, `Sopacity`, `Sbrillo` (columna `spare`), `Sfeather`, `Sedges`, `Stile` |
+| Recorte del cuadro | `Vscropx`, `Vscropy`, `Vscropw`, `Vscroph` | `Scropx`, `Scropy`, `Scropw`, `Scroph` |
+| Animación | `Vstravel`, `Vsspin`, `Vanimtravel`, `Vanimspin` | `Stravel`, `Sspin`, `Animtravel`, `Animspin` |
+| Look | `Vopacity` | `Opacity` |
 | Fondo | `Vbg`, `Vbgblur`, `Vbgbright`, `Vbgsat`, `Vbgzoom`, `Vbgtile`, `Vbgyaw`, `Vbgfollow` | `Bg`, `Bgblur`, `Bgbright`, `Bgsat`, `Bgzoom`, `Bgtile`, `Bgyaw`, `Bgfollow` |
 | Guías | `Vguides`, `Vguidealpha`, `Vviewfov`, `Vviewpitch`, `Vviewyaw`, `Vviews`, `Vpreview` | `Guides`, `Guidealpha`, `Viewfov`, `Viewpitch`, `Viewyaw`, `Views`, `Preview` |
 
@@ -379,6 +401,89 @@ Las capturas `05_Preview/pruebas/td_169_sala_corona.png` y
 `td_169_anillo_doble.png` son `out_domo` con cada template elegido desde la
 página 16:9 y una imagen de prueba 16:9 como archivo.
 
+#### Plantillas revisadas y ajuste en vivo (29 de septiembre de 2026)
+
+Se renderizaron las 21 plantillas con una carta de prueba 16:9 asimétrica
+(rejilla, colores, "ARRIBA", "1" a la izquierda, "2" a la derecha) en un
+VIDEO_DOME de prueba con el mismo `dome_map.frag`, y se miró cada domemaster.
+Sirvió para encontrar tres fallas del shader y varias plantillas mal
+dimensionadas. La tabla final de todas las plantillas, con todos sus campos,
+está en `video_dome/plantillas_ue.json` para sincronizar el port de Unreal.
+
+**Fallas del shader, corregidas en `dome_map.frag`** (el layout de uniforms no
+cambió; `dome_guides.frag` sigue la misma geometría):
+
+1. **El cilindro desaparecía.** En banda y cilindro el desplazamiento (`travel`)
+   se restaba sin dar la vuelta: con `Animtravel` en 0,05, a los 20 segundos
+   la imagen ya estaba fuera del marco y no volvía nunca. Por eso `cilindro`,
+   `cilindro_doble` y `cilindro_con_sala` se veían vacíos o como un anillo suelto
+   cerca del cénit. Ahora el marco se comprueba sin desplazar y la imagen corre
+   adentro con `fract()`; el borde suave usa la coordenada del marco, así que
+   los bordes se quedan quietos mientras la imagen sube.
+2. **El túnel era un ojo con una costura.** Las polares se armaban con
+   `atan(x, z)` y `asin(y)` por separado, que no miden lo mismo: a 170 grados
+   salía una forma de ojo con puntas a los costados y un corte duro donde el
+   ángulo salta. Ahora la distancia es angular (`acos(z)`), el túnel es redondo,
+   y el ángulo va espejado (0 → 1 → 0): la imagen da la vuelta dos veces,
+   simétrica, sin costura.
+3. **Brillo por pantalla.** La columna `spare` (antes reservada, siempre 0) es
+   ahora el brillo extra de la pantalla: `col.rgb *= 1 + spare`. Las tablas
+   viejas se ven igual.
+
+**Plantillas cambiadas** (valores en `screens_module.py`):
+
+| Plantilla | Antes | Ahora | Por qué |
+|---|---|---|---|
+| `cine` | plana 70 × 39 a 45° | plana 80 × 45 a 40°, borde 0,06 | se leía como una estampilla |
+| `grande` | plana 95 × 53 a 48° | curva 120 × 68 a 42°, borde 0,08 | la plana estira las esquinas pasados ~100° |
+| `bajo` | plana 80 × 45 a 28° | plana 90 × 51 a 30°, borde 0,06 | más presencia |
+| `cenital` | plana 90 × 51 a 70° | curva 100 × 56 a 68°, borde 0,08 | más grande, sin esquinas estiradas |
+| `sala_6` | 54 × 30, costura 6 | 58 × 33, costura 8 | quedaban cuñas negras entre copias |
+| `sala_6_mosaico` | `cropx` −0,01, 54 × 54 plana | `cropx` 0,004, recorte de alto 0,15–0,85, curva 58 × 50 | el `cropx` negativo daba la vuelta a 0,99 y la primera copia mostraba el borde del cuadro estirado |
+| `sala_corona_panorama` | `cropx` −0,012 | `cropx` 0,004, recorte de alto 0,1–0,9 | la misma muesca |
+| `tres` | tres planas 34 × 19 | tres bandas 70 × 30 a 40°, laterales espejadas | eran diminutas y en plana se cruzaban en V |
+| `espejo` | dos filas planas 60 × 34 | una fila banda 93 × 40 con dos copias espejadas y costura 6 | la V desaparece y la costura del frente se cose |
+| `cilindro_doble` | paredes 6–56° y 40–80° encimadas | 6–48° y 50–80° | se pisaban |
+| `fragmentos` | planas 42 × 42 | bandas 45,6 × 56 | cada tercio salía estirado 1,7 veces |
+
+La banda aprieta el ancho por `cos(elevación)`; para que un 16:9 conserve su
+aspecto en banda, el ancho es `alto × 1,78 / cos(elevación)`. Las plantillas
+que ya se veían bien (`sala_2`, `sala_4`, `sala_corona`, `anillo`) no se
+tocaron; `anillo_doble`, `tunel`, `tunel_con_sala`, `cilindro` y
+`cilindro_con_sala` mejoran solo por el arreglo del shader. `sala_6_mosaico` y
+`sala_corona_panorama` siguen pensadas para material panorámico: con un 16:9
+cada sexto del cuadro sale estirado, menos que antes.
+
+![Las 21 plantillas con la carta de prueba, domemaster con el frente abajo](../05_Preview/pruebas/td_169_plantillas_carta.png)
+
+**Ajuste de todo el montaje sin tocar la tabla.** VIDEO_DOME tiene una página
+nueva, **Ajuste**, y un Script DAT, `screens_vivo`, entre la tabla `screens` y
+el DAT to CHOP. `screens` sigue siendo la fuente de verdad (la editan los
+parámetros de pantalla, los templates y las versiones); `screens_vivo` le
+aplica los factores de Ajuste antes de mandarla al shader. Con todo en su valor
+por defecto la tabla pasa igual, así que se puede probar en vivo otra
+separación o un anillo más alto y volver con un clic, y lo que ve Unreal por
+`domo.Plantilla` sigue siendo la plantilla limpia. La capa B de los momentos
+tiene su gemelo `screens_b_vivo`.
+
+| Parámetro (Ajuste) | En DOMO | Qué hace | Rango del slider |
+|---|---|---|---|
+| `Gancho` | `Vgancho` | multiplica el ancho de todas las pantallas (lo que ya da la vuelta, 360, no se toca) | 0,5 a 1,5 |
+| `Galto` | `Vgalto` | multiplica el alto | 0,5 a 1,5 |
+| `Gelev` | `Vgelev` | suma grados de elevación a todas (menos al túnel, que va centrado) | −25 a 25 |
+| `Gsep` | `Vgsep` | separación: abre el azimut de las filas sueltas (`tres`, `fragmentos`) y el arco de los abanicos | 0,5 a 1,5 |
+| `Gcopias` | `Vgcopias` | fuerza el número de copias de los anillos; el ancho se reparte para que el anillo siga igual de lleno, y una plana de más de 110° pasa a curva. 0 = las del template | 0 a 8 |
+| `Gsolape` | `Vgsolape` | grados que se suman a la costura entre copias | −8 a 16 |
+| `Gborde` | `Vgborde` | multiplica el borde suave | 0 a 3 |
+| `Gopacidad` | `Vgopacidad` | multiplica la opacidad | 0 a 1 |
+| `Gbrillo` | `Vgbrillo` | multiplica el brillo de todas | 0 a 2 |
+| `Greset` | (solo en VIDEO_DOME) | vuelve todo a 1 y 0 | pulso |
+
+Además, todos los parámetros de pantalla tienen topes duros (no se puede
+escribir un ancho de 0 ni una opacidad de 3) y su valor por defecto es el de
+fábrica, así que *Reset to Default* vuelve a algo que funciona. En TouchDesigner
+los flotantes no tienen paso propio: el paso lo da el rango del slider.
+
 `video_dome/web/estudio_pantallas.html` es un estudio en WebGL2, un solo archivo
 sin dependencias, que dibuja el domemaster con el mismo mapeo del shader: se
 mueven las pantallas con el mouse, se comparan montajes y se copia la tabla
@@ -411,7 +516,8 @@ Páginas de `VIDEO_DOME`, con sus parámetros tal como los crea `build_video_dom
 |---|---|
 | Video | `Moviefile`, `Fuente` (archivo / ndi / spout), `Ndinombre`, `Spoutnombre`, `Play`, `Cue`, `Speed`, `Loopvideo`, `Audio`, `Volume` |
 | Montaje | `Template`, `Applytemplate`, `Yawglobal`, `Domefov`, `Res`, `Flipx` |
-| Pantalla | `Screen` (la fila), `Sname`, `Son`, `Smode`, `Syaw`, `Spitch`, `Sroll`, `Shfov`, `Svfov`, `Sautovfov`, `Smirror`, `Sopacity`, `Sfeather`, `Stile`, `Scropx`, `Scropy`, `Scropw`, `Scroph`, `Sblend`, `Sedges`, `Stravel`, `Sspin`, `Srep`, `Srepspan`, `Srepmir`, `Srepofs`; pulses `Addscreen`, `Dupscreen`, `Delscreen`, `Readscreen` |
+| Pantalla | `Screen` (la fila), `Sname`, `Son`, `Smode`, `Syaw`, `Spitch`, `Sroll`, `Shfov`, `Svfov`, `Sautovfov`, `Smirror`, `Sopacity`, `Sfeather`, `Stile`, `Scropx`, `Scropy`, `Scropw`, `Scroph`, `Sblend`, `Sedges`, `Stravel`, `Sspin`, `Sbrillo`, `Srep`, `Srepspan`, `Srepmir`, `Srepofs`; pulses `Addscreen`, `Dupscreen`, `Delscreen`, `Readscreen` |
+| Ajuste | `Gancho`, `Galto`, `Gelev`, `Gsep`, `Gcopias`, `Gsolape`, `Gborde`, `Gopacidad`, `Gbrillo`, `Greset` |
 | Espacio | `Viewfov`, `Viewpitch`, `Viewyaw`, `Views`, `Animtravel`, `Animspin` |
 | Editor | `Openeditor`, `Edit`, `Editwhat` (mover / tamaño / girar), `Editsnap`, `Editstep` |
 | Fondo | `Bg` (off / wash / wrap / custom), `Bgblur`, `Bgbright`, `Bgsat`, `Bgzoom`, `Bgtile`, `Bgyaw`, `Bgfollow` |
@@ -464,11 +570,140 @@ defecto y por `out1`, que es lo que graban `grabar` y `ndi_domo`.
 | `Graves`, `Medios`, `Agudos` | ±12 dB en 100 Hz, 1 kHz y 8 kHz |
 | `Retardo` | 0 a 2000 ms |
 | `Limitador` | limitador de picos |
+| `Sensibilidad` | ganancia de los niveles para los visuales (4 por defecto) |
+| `Suavizado` | caída de los niveles: 0 seca, 0,95 lenta (0,85 por defecto) |
+
+**Niveles para los visuales.** Tres Audio Filter CHOP (pasa bajos 160 Hz,
+pasa banda 1 kHz, pasa altos 4 kHz) salen de la cadena ya limitada, y el Script
+CHOP `niveles` calcula el RMS de la cadena y de cada banda, lo multiplica por
+`Sensibilidad` (las bandas altas llevan más ganancia porque su RMS es menor) y
+entrega cuatro canales de una muestra, `nivel`, `graves`, `medios` y `agudos`,
+con ataque inmediato y caída suave. IN_FX e IN_3D los leen con un Select CHOP.
+Lo que suena es lo que se ve: con el 360, el 180 o el 16:9 al aire es el audio
+de su video (medido con la película al aire: nivel 0,08, graves 0,10, medios
+0,12). Con FX o 3D al aire, `Fuente = video` da silencio, así que para que
+reaccionen hay que poner `Fuente` en `archivo` (una pista) o `entrada` (la
+mezcla de la sala).
+
+### 5.5 IN_FX: visualizaciones generativas
+
+`modulos/in_fx.py` y `shaders/efectos.frag`. Un GLSL TOP, `efectos`, escribe
+directamente el lienzo equirectangular 2:1: cada píxel calcula su dirección en
+la esfera y el efecto se evalúa sobre esa dirección, no sobre `(u, v)`. Así no
+hay costura detrás del público ni un pellizco en el cénit, que es lo que más se
+mira en un domo. Se eligió equirectangular y no una salida 16:9 hacia
+VIDEO_DOME porque un efecto generativo no tiene cuadro, tiene espacio: pintado
+sobre la esfera llena la cúpula entera y pasa por la misma orientación (Yaw,
+Pitch, Roll, Horizonte, Curva) y el mismo domemaster que un 360. Si hiciera
+falta un efecto dentro de una pantalla, el TOP `efectos` se puede usar como
+fondo `custom` de VIDEO_DOME.
+
+| Efecto | Qué es |
+|---|---|
+| `tunel` | un tubo cuyo eje es la vertical: el público vuela hacia el cénit, con líneas de neón y niebla al fondo |
+| `ondas` | anillos que bajan del cénit y dos focos que pasean; la interferencia dibuja la figura |
+| `estrellas` | campo de estrellas en coordenadas log-polares alrededor del cénit: acercarse es correr el radio, así el vuelo no termina |
+| `caleidoscopio` | ruido fractal plegado en espejo en 4 a 12 sectores alrededor del cénit |
+| `plasma` | suma de senos sobre la dirección, clásico |
+| `flujo` | ruido deformado por ruido sobre la esfera; se lee como tinta en agua |
+| `rejilla` | techo y piso en perspectiva, estilo synthwave, con un sol al frente |
+| `aurora` | cinco cortinas que ondulan en azimut con rayos verticales y cielo estrellado |
+
+Cadena: `velocidad` (Constant CHOP) → `reloj` (Speed CHOP, integra el tiempo:
+cambiar la velocidad no da un salto, y el audio lo empuja con `Empuje`) →
+`efectos` → `lienzo` (Fit TOP al ancho de DOMO) → `orientar` → `activo` →
+`out1`. `audio` lee `AUDIO/niveles`.
+
+| Parámetro (página Efectos; en DOMO, página FX) | Qué hace | Por defecto |
+|---|---|---|
+| `Activo` (`Factivo`) | apagado, negro y no cocina | encendido |
+| `Efecto` (`Fefecto`) | uno de los ocho | `tunel` |
+| `Velocidad` (`Fvelocidad`) | multiplica el reloj (0 a 3) | 1 |
+| `Giro` (`Fgiro`) | giro continuo en azimut, grados por segundo (±30) | 0 |
+| `Escala` (`Fescala`) | tamaño del patrón: más es más fino (0,25 a 3) | 1 |
+| `Detalle` (`Fdetalle`) | octavas del ruido, grosor de líneas, sectores del caleidoscopio (0 a 1) | 0,5 |
+| `Intensidad` (`Fintensidad`) | brillo del efecto (0 a 2) | 1 |
+| `Color1`, `Color2` (`Fcolor1`, `Fcolor2`) | los dos colores con que se arma todo | celeste y magenta |
+| `Reactividad` (`Freactividad`) | cuánto pesan los niveles de audio (0 = nada) | 0,5 |
+| `Empuje` (`Fempuje`) | cuánto aceleran los graves el reloj | 0,5 |
+| `Resfx` (`Fresfx`) | resolución propia del efecto: 1024 × 512, 2048 × 1024 o 4096 × 2048 | 2048 |
+| `Yaw`, `Pitch`, `Roll`, `Horizonte`, `Curva` (`Fyaw`...) | página Orientacion, el mismo `orientar` del 360 | 0 y 1 |
+
+Verificado el 29 de septiembre de 2026: los ocho efectos renderizados y
+convertidos a domemaster sin costura atrás ni pellizco en el cénit; `aurora`
+llega a Unreal por `para_unreal` con las cortinas en la mitad superior del
+lienzo.
+
+![Los ocho efectos como domemaster](../05_Preview/pruebas/td_fx_efectos_domemaster.png)
+
+### 5.6 IN_3D: objetos 3D alrededor del público
+
+`modulos/in_3d.py`. La cámara está en el centro de la sala y el Render TOP
+`render` dibuja un **cubemap** (seis caras, todas las direcciones);
+`cubo_a_equi` (Projection TOP `cubemap → equirectangular`) lo pasa al lienzo y
+`al_frente` (Transform TOP, `tx = −0.25`, `repeat`) deja el frente de la escena
+en `u = 0.5`. Esa corrección se midió con dos esferas marcadoras: el Projection
+TOP deja el frente de la escena (−Z) en `u = 0.75` y la derecha (+X) en
+`u = 1.0`; la derecha queda un cuarto de vuelta después del frente, como en el
+lienzo, así que no hay espejo. Se usa cubemap y no el modo fisheye del Render
+TOP porque el fisheye deforma en el vértice (los polígonos grandes se rompen si
+no se teselan) y porque el Line MAT no funciona con fisheye.
+
+La escena usa la convención de TouchDesigner: Y arriba, el frente de la sala
+en −Z, X a la derecha. Todo sale de SOPs primitivos: un toro sobre el público
+(centrado en el eje del cénit, a 7,5 m de altura, cabeceando), cinco anillos
+concéntricos que giran en sentidos opuestos, esferas en órbita y cajas en
+espiral hasta el cénit. Anillos, esferas y cajas se instancian desde tres
+Script CHOP (`inst_anillos`, `inst_esferas`, `inst_cajas`) con un solo archivo
+de callbacks, `instancias_py`, en numpy. Los graves inflan esferas y cajas; el
+nivel estira los anillos. No hay `fbxCOMP` ni `fileinSOP`: crearlos desde el
+MCP colgó el servidor de TouchDesigner.
+
+| Parámetro (páginas Objetos3D y Camara; en DOMO, página 3D) | Qué hace | Por defecto |
+|---|---|---|
+| `Activo` (`Tactivo`) | apagado, negro y no cocina | encendido |
+| `Velocidad` (`Tvelocidad`) | velocidad de la animación (0 a 3) | 1 |
+| `Toro`, `Anillos`, `Esferas`, `Cajas`, `Modelo` | qué grupos se dibujan | todos menos `Modelo` |
+| `Ncajas`, `Nesferas` | cantidad de instancias | 160 y 18 |
+| `Tamano`, `Distancia` | escala de los objetos y de sus distancias al público | 1 y 1 |
+| `Color1`, `Color2` | color A (toro y anillos) y B (esferas, cajas, modelo) | celeste y rosa |
+| `Emision` | brillo propio del material (0 = solo la luz) | 0,35 |
+| `Alambre` | wireframe | apagado |
+| `Reactividad` | cuánto pesan los niveles de audio | 0,5 |
+| `Orbitaradio`, `Orbitavel`, `Orbitaalto` | la cámara orbita el centro: radio en metros, grados por segundo, altura | 1,5 m, 8°/s, 0 |
+| `Mirarcentro` | la cámara gira para mirar siempre al centro (el frente de la sala gira con ella) | apagado |
+| `Cubo` | resolución de cada cara: 512, 1024 o 2048 | 1024 |
+| `Fondo` | color de fondo | negro |
+| `Yaw`, `Pitch`, `Roll`, `Horizonte`, `Curva` | página Orientacion | 0 y 1 |
+
+![IN_3D como domemaster: el toro en el cénit, anillos, esferas y cajas](../05_Preview/pruebas/td_3d_domemaster.png)
+
+**Enchufar un modelo propio.** `IN_3D/modelo` es una geometría vacía (un Add
+SOP sin puntos) que ya está en la lista del render, con el material B, la
+escala de `Tamano` y un giro lento, apagada por el parámetro `Modelo`. Para
+usarla: entrar a `modelo`, reemplazar `aqui_el_modelo` por un File In SOP
+(`.obj`, `.fbx`, `.bgeo`) o arrastrar el archivo a esa red, activar display y
+render en ese SOP y encender `Modelo` (o `Tmodelo` en DOMO). Hacerlo a mano en
+la interfaz, no por MCP. Un FBX con varias piezas va mejor como un FBX COMP
+dentro de `IN_3D`, agregado al parámetro Geometry de `render`. El modelo se ve
+desde adentro: conviene ponerlo entre 5 y 15 metros del centro (`ty` de
+`modelo` y `Distancia`).
 
 ## 6. Mezcla, modelo de sala y salidas
 
-`mezcla` (Switch TOP) elige entre IN_360, IN_180, IN_169 y `patron` según
-`DOMO.Fuente`; `equi` es el lienzo común. De ahí:
+`mezcla` (Switch TOP) elige entre IN_360, IN_180, IN_169, `patron`, IN_FX e
+IN_3D según `DOMO.Fuente` (en ese orden, que es el de las entradas); `equi` es
+el lienzo común. Después viene el **master** (página Master,
+`modulos/master.py`): un Level TOP entre `equi` y `giro`, así que toca todas
+las fuentes y todas las salidas por igual (domemaster, Spout, NDI, grabación y
+el lienzo de Unreal). `Brillo`, `Contraste` y `Gamma`, y `Negro`, que no corta
+sino que funde en `Fundido` segundos: `negro_rampa` es un Speed CHOP que sube o
+baja a `1/Fundido` por segundo entre 0 y 1, así el fundido dura exactamente eso
+y se puede revertir a mitad de camino. `Negroactual` muestra dónde va. Con todo
+en neutro, `master_on` deja pasar `equi` y el Level TOP no cocina.
+`Negrounreal` manda además `domo.Negro` al ejecutable. Verificado: con `Negro`
+encendido el máximo de `out_domo` es 0,0; con `Brillo` 0,5 la imagen baja a la
+mitad. De ahí:
 
 1. **`giro`** (Transform TOP, `tx = Yaw / 360`, unidades en fracción, extensión
    `repeat`) aplica el Yaw como corrimiento horizontal del lienzo. Es un giro
@@ -569,7 +804,7 @@ Parámetros del COMP raíz:
 
 | Página Domo | Qué hace |
 |---|---|
-| `Fuente` | `v360`, `v180`, `v169`, `patron` |
+| `Fuente` | `v360`, `v180`, `v169`, `patron`, `fx`, `3d` |
 | `Modelo` | `domo180` (planetario), `domo90` (sala de pie con barandas, pantalla de 180 inclinada 45°), `domo45` (tipo Maloka, pantalla de 180 inclinada 27°), `custom`; los tres primeros usan FOV 180 |
 | `Fovcustom` | FOV en grados si el modelo es `custom` (10 a 360) |
 | `Yaw` | girar el contenido en azimut (±180) |
@@ -603,6 +838,16 @@ siguen existiendo y se aplican después, a todas las fuentes por igual.
 | `Escala` | menor que 1 mete más grados en el círculo (el piso entra parejo por el borde); mayor que 1 acerca |
 | `Rotar` | girar el domemaster en grados (positivo, antihorario) |
 | `Pisoborde` | solo lectura: grados de piso que llegan al borde con el cénit centrado |
+
+| Página Master | Qué hace | Por defecto |
+|---|---|---|
+| `Brillo` | multiplica la imagen (0 a 2, tope 4) | 1 |
+| `Contraste` | contraste (0,5 a 2) | 1 |
+| `Gamma` | gamma (0,5 a 2) | 1 |
+| `Negro` | fundido a negro | apagado |
+| `Fundido` | duración del fundido en segundos (0 a 10) | 2 |
+| `Negrounreal` | manda también `domo.Negro 0/1` al ejecutable | apagado |
+| `Negroactual` | solo lectura: 0 imagen, 1 negro | |
 
 | Página Salidas | Qué hace |
 |---|---|
@@ -762,11 +1007,36 @@ del video en el borde.
   solo la primera vez se sube el valor del módulo. Los parámetros de solo
   lectura (`Version`, `Donde`) ya no se restauran, para que muestren la
   versión del constructor que corrió.
+- **Los slots nuevos de un GLSL TOP nacen en 1, no en 0.** Al subir `vec` a 3,
+  `vec2valuex..w` valen 1. En el VIDEO_DOME de prueba eso metía `travel = 1` y
+  corría la pared del cilindro entera: parecía que la plantilla estaba mal.
+  Escribir siempre los cuatro componentes.
+- **Pulsos sin Parameter Execute.** Un Parameter CHOP incluye los pulsos como
+  un 1 de un cuadro y un CHOP Execute los recibe en `onOffToOn` (probado con
+  `par.pulse()` y con un Momentary). Es lo que usa el panel Unreal, y no crea
+  la dependencia cíclica que colgaba el MCP.
+- **`scriptOp.store()` dentro de `onCook` hace un ciclo.** Guardar en el propio
+  operador mientras cocina da "Cook dependency loop detected". El estado va en
+  una variable del módulo de callbacks.
+- **Un Script CHOP con entradas de audio es time slice.** Para sacar una sola
+  muestra hay que poner `scriptOp.isTimeSlice = False` antes de `numSamples`.
+- **En un parámetro del propio COMP, `op('x')` no busca adentro.** Una
+  expresión en un parámetro de DOMO que mire a un hijo va con `me.op('x')`.
+- **En un parámetro OP de un COMP el nombre pelado es un hermano.** El material
+  de una geometría dentro de IN_3D es `mat_a`, no `../mat_a`: con `../` TD lo
+  busca en DOMO y dibuja con el material por defecto, blanco, sin error.
+- **El Script CHOP y el Script DAT nacen con su propio DAT de callbacks.** Si se
+  apunta `callbacks` a otro, el que trae de fábrica sobra y el constructor lo
+  borra.
 - **Resolución.** El domemaster viene en 2048 porque 4096 con todas las capas
   de VIDEO_DOME encendidas llena la memoria de la GPU. Subir `Res` solo para
   grabar.
 
 ## 9. Cómo agregar un módulo nuevo
+
+Desde la versión 1.4 lo más limpio es un archivo en `modulos/` que
+`build_domo.py` ejecuta con `modulo('nombre.py')`, como `in_fx.py` e
+`in_3d.py`; el patrón es el mismo de abajo.
 
 Un módulo es un Base COMP hijo de DOMO que entrega el lienzo equirectangular
 por `out1`. El patrón que siguen los tres existentes:
@@ -797,3 +1067,50 @@ por `out1`. El patrón que siguen los tres existentes:
    último) y agregar el caso a la expresión de `al_aire.index`.
 6. Agregar el nuevo COMP a la lista de la caja `nota_modulos` y volver a correr
    el constructor: la configuración de los módulos existentes se conserva sola.
+
+## 10. Panel Unreal: el ejecutable desde TouchDesigner
+
+El ejecutable de la sala VR (`ADomeMediaController`) escucha en
+`127.0.0.1:7000` líneas de texto que empiezan con `domo.`, las mismas que su
+consola. La página **Unreal** de DOMO las manda con un UDP Out DAT,
+`udp_unreal`, sin salir de TouchDesigner (`modulos/unreal_udp.py`).
+
+No hay Parameter Execute DAT, a propósito: uno mirando los parámetros de su
+propio COMP colgó el MCP. `unreal_pars` (Parameter CHOP) lee los parámetros
+`U*`, `Vtemplate` y `Negro`, y `unreal_exec` (CHOP Execute) reacciona: los
+pulsos llegan por `onOffToOn` y los menús y toggles por `onValueChange`. Todo lo
+enviado queda en la tabla `unreal_log` (las últimas 60 líneas) y en el campo de
+solo lectura `Uultimo`. Desde Python se puede mandar cualquier línea con
+`op('/project1/DOMO/unreal_exec').module.mandar('domo.Estado')`.
+
+| Parámetro | Manda |
+|---|---|
+| `Uactivo`, `Uhost`, `Upuerto` | encender el envío, IP y puerto (127.0.0.1:7000) |
+| `Ucue` + `Uircue` | `domo.Cue N` (desde 1) |
+| `Uanterior`, `Usiguiente` | `domo.Anterior`, `domo.Siguiente` (y mueven `Ucue`) |
+| `Upausa` | `domo.Pausa` |
+| `Uluces` | al cambiar: `domo.Luces auto`, `domo.Luces 0`, `domo.Luces 1` |
+| `Unegro` | al cambiar: `domo.Negro 1` o `0` |
+| `Umodo` | al cambiar: `domo.Modo caminar`, `volar` o `fantasma` |
+| `Ufuente` | al cambiar: `domo.Fuente Spout` o `Media` |
+| `Uplantilla` + `Uenviarplantilla` | `domo.Plantilla id` (las 21 plantillas de VIDEO_DOME) |
+| `Useguir` | cada vez que cambia `Vtemplate`, manda `domo.Plantilla` con esa plantilla |
+| `Uabrir` + `Uabrirenviar` | `domo.Abrir ruta` (ruta completa con barras normales) |
+| `Uparam`, `Uvalor` + `Uparamenviar` | `domo.Param Nombre Valor` (por ejemplo `Resplandor 0.5`) |
+| `Ucomando` + `Uenviar` | la línea libre; si no empieza con `domo.` se le agrega |
+
+Probado el 29 de septiembre de 2026 contra un receptor UDP de prueba en el
+puerto 7001: llegaron `domo.Siguiente`, `domo.Luces 0`, `domo.Modo volar`,
+`domo.Plantilla sala_4`, `domo.Param Resplandor 0.5`,
+`domo.Abrir C:/ruta/video.mp4`, `domo.Estado`, `domo.Plantilla sala_corona`
+(por `Useguir`) y `domo.Negro 1` (por el master con `Negrounreal`). No se probó
+contra el ejecutable abierto.
+
+## 11. Rendimiento medido
+
+29 de septiembre de 2026, RTX 3090, TouchDesigner 2025.32460, con la salida a
+Unreal encendida: 60 fps (el tope de la timeline) con `Res` en 4096 y al aire
+el 16:9 (plantilla `anillo`), IN_FX (`tunel`, y también `flujo` y `aurora` con
+`Resfx` en 4096 y `Detalle` 1), IN_3D (`Cubo` 2048 y 600 cajas) o el patrón.
+Ninguna combinación bajó de 59,9 fps. Con la GPU compartida con Unreal abierto
+no se midió.

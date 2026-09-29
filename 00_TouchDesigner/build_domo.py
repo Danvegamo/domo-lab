@@ -13,16 +13,23 @@ volver a correr tras editar este archivo sin perder la configuracion.
 
 Estructura que deja:
 
-    DOMO                      COMP raiz, atajo `parent.DOMO`, paginas Domo, 360, 180, 16:9, Mapping y Salidas
+    DOMO                      COMP raiz, atajo `parent.DOMO`, paginas Domo, 360, 180, 16:9, FX, 3D,
+                              Master, Mapping, Salidas y Unreal
       IN_360                  video 360 equirectangular (+ costura opcional, + giro esferico Yaw/Pitch/Roll)
       IN_180                  domemaster fisheye, VR180 mono o VR180 lado a lado (+ giro esferico)
       IN_169                  video plano sobre pantallas en la cupula (VIDEO_DOME adentro, + Pitch/Roll)
-      AUDIO                   sigue a la fuente al aire (solo suena ese video), o un archivo, o la entrada
+      IN_FX                   visualizaciones generativas en GLSL (modulos/in_fx.py)
+      IN_3D                   objetos 3D animados, render cubemap (modulos/in_3d.py)
+      AUDIO                   sigue a la fuente al aire (solo suena ese video), o un archivo, o la entrada;
+                              ademas saca los niveles (nivel, graves, medios, agudos) para los visuales
       mezcla -> equi          la fuente elegida, como lienzo equirectangular 2:1
+      master                  brillo, contraste, gamma y negro con fundido, para todas las salidas
+                              (modulos/master.py)
       domo -> out_domo        el domemaster fisheye (GLSL domo_mapping: FOV, Pitch y mapping sin recortar)
       spout_domo / ndi_domo   salidas del domemaster
       para_unreal -> alfa_unreal -> spout_unreal   el equirectangular que espera la sala VR (mismo shader)
       grabar                  Movie File Out del domemaster
+      udp_unreal              panel de control del ejecutable de Unreal por UDP (modulos/unreal_udp.py)
 
 Cada modulo tiene su parametro `Activo`: apagado, el modulo entrega negro y
 no cocina (el Switch solo cocina la entrada elegida). Cada bloque lleva su
@@ -42,7 +49,7 @@ except NameError:
 
 RAIZ = op('/project1')
 NOMBRE = 'DOMO'
-VERSION = '1.3 (18 sep 2026)'
+VERSION = '1.4 (29 sep 2026)'
 
 # ---------------------------------------------------------------- utilidades
 
@@ -221,6 +228,14 @@ def orientador(comp, entrada, x, guia='0', costura_pos='0', yaw='parent().par.Ya
     return [dat, g, sw], sw
 
 
+def modulo(nombre):
+    """Ejecuta modulos/<nombre> en este mismo espacio de nombres: el modulo ve
+    D, mk, wire, caja... y lo que defina queda disponible aqui (MASTER_SALIDA)."""
+    ruta = os.path.join(BUILD_DIR, 'modulos', nombre)
+    with open(ruta, encoding='utf-8') as fh:
+        exec(compile(fh.read(), ruta, 'exec'), globals())
+
+
 def pagina_orientacion(comp, nombre_pagina, con_yaw=True):
     """Pars Yaw, Pitch y Roll del modulo (quedan en Bind contra la raiz).
     IN_169 no lleva Yaw propio: su azimut es Yawglobal de VIDEO_DOME."""
@@ -284,10 +299,12 @@ D.viewer = True
 D.par.parentshortcut = 'DOMO'
 
 pg = D.appendCustomPage('Domo')
+# El orden del menu ES el orden de las entradas de `mezcla`: lo nuevo va al
+# final para no mover los indices que ya existian.
 menu(pg, 'Fuente', 'Fuente al aire',
-     ['v360', 'v180', 'v169', 'patron'],
+     ['v360', 'v180', 'v169', 'patron', 'fx', '3d'],
      ['Video 360 (IN_360)', 'Video 180 / domemaster (IN_180)', 'Video plano 16:9 (IN_169)',
-      'Patron de prueba (calibrar la sala)'], 0)
+      'Patron de prueba (calibrar la sala)', 'Efectos generativos (IN_FX)', 'Objetos 3D (IN_3D)'], 0)
 menu(pg, 'Modelo', 'Modelo de sala',
      ['domo180', 'domo90', 'domo45', 'custom'],
      ['Domo 180 (media esfera, planetario)', 'Sala 90: de pie con barandas (pantalla 180, inclinada 45)',
@@ -533,6 +550,16 @@ caja(M, 'nota', 'IN_169: video plano sobre pantallas en la cupula',
      [vd, sel_vd, a_equi, giro169] + nodos_or169 +
      [M.op('negro'), M.op('activo'), M.op('out1')], (0.22, 0.17, 0.13))
 
+# ------------------------------------------------------------ IN_FX e IN_3D
+#
+# Los dos modulos nuevos (29 sep 2026) viven en archivos aparte para que este
+# constructor no siga creciendo: modulos/in_fx.py (efectos GLSL) y
+# modulos/in_3d.py (objetos 3D con render cubemap). Siguen el mismo patron que
+# IN_360: pagina propia con Activo, lienzo equirectangular 2:1, orientar y
+# negro_y_salida. Los dos leen los niveles de AUDIO/niveles.
+modulo('in_fx.py')
+modulo('in_3d.py')
+
 # ------------------------------- paginas 360, 180 y 16:9 en la raiz DOMO
 #
 # Cada fuente se edita al mismo nivel desde la raiz: la pagina 360 (IN_360),
@@ -582,6 +609,16 @@ V169 = [
     ('Vspoutnombre', VD, 'Spoutnombre', 'Sender Spout (nombre)'),
     ('Vplay', VD, 'Play', 'Reproducir'),
     ('Vtemplate', VD, 'Template', 'Template (se aplica al elegirlo, pisa la tabla)'),
+    # ajuste de todo el montaje sin tocar la tabla (pagina Ajuste de VIDEO_DOME)
+    ('Vgancho', VD, 'Gancho', 'Ancho de todas las pantallas (x)'),
+    ('Vgalto', VD, 'Galto', 'Alto de todas las pantallas (x)'),
+    ('Vgelev', VD, 'Gelev', 'Subir o bajar todo (grados)'),
+    ('Vgsep', VD, 'Gsep', 'Separacion entre pantallas (x)'),
+    ('Vgcopias', VD, 'Gcopias', 'Copias en anillo (0 = las del template)'),
+    ('Vgsolape', VD, 'Gsolape', 'Solape extra entre copias (grados)'),
+    ('Vgborde', VD, 'Gborde', 'Borde suave de todas (x)'),
+    ('Vgopacidad', VD, 'Gopacidad', 'Opacidad de todas (x)'),
+    ('Vgbrillo', VD, 'Gbrillo', 'Brillo de todas (x)'),
     # el domo interno de VIDEO_DOME, visto y movido desde afuera
     ('Vyawglobal', VD, 'Yawglobal', 'Girar todo el montaje (azimut, grados)'),
     ('Vdpitch', 'IN_169', 'Pitch', 'Inclinar el domo interno: el frente hacia el cenit (grados)'),
@@ -598,6 +635,25 @@ V169 = [
     ('Vsrep', VD, 'Srep', 'Copias en anillo'),
     ('Vsrepspan', VD, 'Srepspan', 'Arco que ocupan las copias (separacion, grados)'),
     ('Vsblend', VD, 'Sblend', 'Costura entre copias (grados)'),
+    ('Vsrepmir', VD, 'Srepmir', 'Espejar copias alternas'),
+    ('Vsrepofs', VD, 'Srepofs', 'Corrimiento del recorte por copia (0 a 1)'),
+    ('Vson', VD, 'Son', 'Encendida'),
+    ('Vsroll', VD, 'Sroll', 'Rotacion en su plano (grados)'),
+    ('Vsmirror', VD, 'Smirror', 'Espejo'),
+    ('Vsopacity', VD, 'Sopacity', 'Opacidad'),
+    ('Vsbrillo', VD, 'Sbrillo', 'Brillo de la pantalla (0 = igual, -1 = negro)'),
+    ('Vsfeather', VD, 'Sfeather', 'Borde suave'),
+    ('Vsedges', VD, 'Sedges', 'Bordes que se degradan'),
+    ('Vstile', VD, 'Stile', 'Repeticiones adentro'),
+    ('Vscropx', VD, 'Scropx', 'Recorte: x'),
+    ('Vscropy', VD, 'Scropy', 'Recorte: y'),
+    ('Vscropw', VD, 'Scropw', 'Recorte: ancho'),
+    ('Vscroph', VD, 'Scroph', 'Recorte: alto'),
+    ('Vstravel', VD, 'Stravel', 'Cuanto se lleva con la animacion'),
+    ('Vsspin', VD, 'Sspin', 'Cuanto gira con la animacion'),
+    ('Vanimtravel', VD, 'Animtravel', 'Animacion: velocidad de desplazamiento (vueltas/seg)'),
+    ('Vanimspin', VD, 'Animspin', 'Animacion: velocidad de giro (grados/seg)'),
+    ('Vopacity', VD, 'Opacity', 'Opacidad general del video'),
     ('Vbg', VD, 'Bg', 'Fondo'),
     ('Vbgblur', VD, 'Bgblur', 'Fondo: desenfoque'),
     ('Vbgbright', VD, 'Bgbright', 'Fondo: brillo'),
@@ -614,15 +670,81 @@ V169 = [
     ('Vviews', VD, 'Views', 'Puntos de vista del publico'),
     ('Vpreview', VD, 'Preview', 'Simulador de domo (mirar desde adentro)'),
 ]
+P_FX = [
+    ('Factivo', 'IN_FX', 'Activo', 'Modulo FX activo'),
+    ('Fefecto', 'IN_FX', 'Efecto', 'Efecto'),
+    ('Fvelocidad', 'IN_FX', 'Velocidad', 'Velocidad (x)'),
+    ('Fgiro', 'IN_FX', 'Giro', 'Giro continuo (grados por segundo)'),
+    ('Fescala', 'IN_FX', 'Escala', 'Escala (mas = patron mas fino)'),
+    ('Fdetalle', 'IN_FX', 'Detalle', 'Detalle'),
+    ('Fintensidad', 'IN_FX', 'Intensidad', 'Intensidad'),
+    ('Fcolor1r', 'IN_FX', 'Color1r', 'Color A'),
+    ('Fcolor1g', 'IN_FX', 'Color1g', 'Color A'),
+    ('Fcolor1b', 'IN_FX', 'Color1b', 'Color A'),
+    ('Fcolor2r', 'IN_FX', 'Color2r', 'Color B'),
+    ('Fcolor2g', 'IN_FX', 'Color2g', 'Color B'),
+    ('Fcolor2b', 'IN_FX', 'Color2b', 'Color B'),
+    ('Freactividad', 'IN_FX', 'Reactividad', 'Reaccion al audio (0 = nada)'),
+    ('Fempuje', 'IN_FX', 'Empuje', 'El audio acelera el tiempo (x)'),
+    ('Fresfx', 'IN_FX', 'Resfx', 'Resolucion del efecto'),
+    ('Fyaw', 'IN_FX', 'Yaw', 'Girar en azimut (grados)'),
+    ('Fpitch', 'IN_FX', 'Pitch', 'Inclinar: el frente hacia el cenit (grados)'),
+    ('Froll', 'IN_FX', 'Roll', 'Rodar sobre el eje del frente (grados)'),
+    ('Fhorizonte', 'IN_FX', 'Horizonte', 'Subir el horizonte (grados)'),
+    ('Fcurva', 'IN_FX', 'Curva', 'Curva de la elevacion (1 pareja)'),
+]
+P_3D = [
+    ('Tactivo', 'IN_3D', 'Activo', 'Modulo 3D activo'),
+    ('Tvelocidad', 'IN_3D', 'Velocidad', 'Velocidad de la animacion (x)'),
+    ('Ttoro', 'IN_3D', 'Toro', 'Toro sobre el publico'),
+    ('Tanillos', 'IN_3D', 'Anillos', 'Anillos concentricos'),
+    ('Tesferas', 'IN_3D', 'Esferas', 'Esferas en orbita'),
+    ('Tcajas', 'IN_3D', 'Cajas', 'Cajas en espiral'),
+    ('Tmodelo', 'IN_3D', 'Modelo', 'Modelo propio (IN_3D/modelo)'),
+    ('Tncajas', 'IN_3D', 'Ncajas', 'Cantidad de cajas'),
+    ('Tnesferas', 'IN_3D', 'Nesferas', 'Cantidad de esferas'),
+    ('Ttamano', 'IN_3D', 'Tamano', 'Tamano de los objetos (x)'),
+    ('Tdistancia', 'IN_3D', 'Distancia', 'Distancia al publico (x)'),
+    ('Tcolor1r', 'IN_3D', 'Color1r', 'Color A (toro y anillos)'),
+    ('Tcolor1g', 'IN_3D', 'Color1g', 'Color A (toro y anillos)'),
+    ('Tcolor1b', 'IN_3D', 'Color1b', 'Color A (toro y anillos)'),
+    ('Tcolor2r', 'IN_3D', 'Color2r', 'Color B (esferas y cajas)'),
+    ('Tcolor2g', 'IN_3D', 'Color2g', 'Color B (esferas y cajas)'),
+    ('Tcolor2b', 'IN_3D', 'Color2b', 'Color B (esferas y cajas)'),
+    ('Temision', 'IN_3D', 'Emision', 'Brillo propio (0 = solo luz)'),
+    ('Talambre', 'IN_3D', 'Alambre', 'Alambre (wireframe)'),
+    ('Treactividad', 'IN_3D', 'Reactividad', 'Reaccion al audio (0 = nada)'),
+    ('Torbitaradio', 'IN_3D', 'Orbitaradio', 'Orbita de la camara: radio (m)'),
+    ('Torbitavel', 'IN_3D', 'Orbitavel', 'Orbita: velocidad (grados por segundo)'),
+    ('Torbitaalto', 'IN_3D', 'Orbitaalto', 'Altura de la camara (m)'),
+    ('Tmirarcentro', 'IN_3D', 'Mirarcentro', 'La camara mira siempre al centro'),
+    ('Tcubo', 'IN_3D', 'Cubo', 'Resolucion de cada cara del cubo'),
+    ('Tfondor', 'IN_3D', 'Fondor', 'Color de fondo'),
+    ('Tfondog', 'IN_3D', 'Fondog', 'Color de fondo'),
+    ('Tfondob', 'IN_3D', 'Fondob', 'Color de fondo'),
+    ('Tyaw', 'IN_3D', 'Yaw', 'Girar en azimut (grados)'),
+    ('Tpitch', 'IN_3D', 'Pitch', 'Inclinar: el frente hacia el cenit (grados)'),
+    ('Troll', 'IN_3D', 'Roll', 'Rodar sobre el eje del frente (grados)'),
+    ('Thorizonte', 'IN_3D', 'Horizonte', 'Subir el horizonte (grados)'),
+    ('Tcurva', 'IN_3D', 'Curva', 'Curva de la elevacion (1 pareja)'),
+]
 PAGINAS = [
     ('360', P360, {'Ractivo': 'Video', 'Ryaw': 'Mover la esfera (antes del domemaster)',
                    'Rhorizonte': 'Horizonte y piso: comprimir la elevacion en la cupula',
                    'Rpatron': 'Costura'}),
     ('180', P180, {'Mactivo': 'Video', 'Myaw': 'Orientacion (antes del domemaster)'}),
     ('16:9', V169, {'Vactivo': 'Fuente', 'Vtemplate': 'Montaje',
+                    'Vgancho': 'Ajuste de todo el montaje (sin tocar la tabla; 1 y 0 = sin ajuste)',
                     'Vyawglobal': 'Domo interno (orientacion y FOV)',
-                    'Vscreen': 'Pantalla elegida', 'Vbg': 'Fondo',
+                    'Vscreen': 'Pantalla elegida', 'Vsrepmir': 'Pantalla elegida: detalle',
+                    'Vscropx': 'Pantalla elegida: recorte del cuadro',
+                    'Vstravel': 'Animacion', 'Vopacity': 'Look',
+                    'Vbg': 'Fondo',
                     'Vguides': 'Guias: seguir el domo interno desde afuera'}),
+    ('FX', P_FX, {'Factivo': 'Efecto', 'Fcolor1r': 'Color y audio',
+                  'Fyaw': 'Orientacion (antes del domemaster)'}),
+    ('3D', P_3D, {'Tactivo': 'Objetos', 'Ttamano': 'Aspecto', 'Torbitaradio': 'Camara',
+                  'Tyaw': 'Orientacion (antes del domemaster)'}),
 ]
 
 
@@ -637,7 +759,12 @@ for nombre_pag, filas, cabeceras in PAGINAS:
             pagina.appendHeader('H' + nombre.lower(), label=cabeceras[nombre])
         src = destino(ruta, par)
         estilo = src.style
-        if estilo == 'Menu':
+        if estilo == 'RGB':
+            # un color son tres pars (r, g, b); se crea el trio con el primero
+            if nombre.endswith('r') and getattr(D.par, nombre, None) is None:
+                pagina.appendRGB(nombre[:-1], label=etiqueta)
+            p = getattr(D.par, nombre)
+        elif estilo == 'Menu':
             p = pagina.appendMenu(nombre, label=etiqueta)[0]
             p.menuNames = list(src.menuNames)
             p.menuLabels = list(src.menuLabels)
@@ -662,7 +789,7 @@ for nombre_pag, filas, cabeceras in PAGINAS:
             p.default = src.default
         except Exception:
             pass
-D.sortCustomPages('Domo', '360', '180', '16:9', 'Mapping', 'Salidas')
+D.sortCustomPages('Domo', '360', '180', '16:9', 'FX', '3D', 'Mapping', 'Salidas')
 
 # Lecturas: cuantos grados bajo el horizonte llegan al borde de la cupula. Son
 # de solo lectura y van por expresion; el restaurar de abajo no las toca.
@@ -696,6 +823,9 @@ flotante(pm, 'Medios', 'Medios 1 kHz (dB)', 0, -12, 12)
 flotante(pm, 'Agudos', 'Agudos 8 kHz (dB)', 0, -12, 12)
 flotante(pm, 'Retardo', 'Retardo para sincronizar con la imagen (ms)', 0, 0, 2000)
 toggle(pm, 'Limitador', 'Limitador de picos', True)
+flotante(pm, 'Sensibilidad', 'Visuales: sensibilidad al audio (x)', 4.0, 0, 16)
+flotante(pm, 'Suavizado', 'Visuales: caida de los niveles (0 = seca, 0.95 = lenta)', 0.85, 0, 0.99)
+M.par.Suavizado.max, M.par.Suavizado.clampMax = 0.99, True
 
 # Sigue a la fuente: un Audio Movie CHOP por modulo, atado a su Movie File In
 # (asi el sonido va sincronizado con ESE video, incluso con otra velocidad), y
@@ -722,7 +852,7 @@ wire(a180, al_aire, 1)
 wire(a169, al_aire, 2)
 wire(silencio, al_aire, 3)
 expr(al_aire, 'index',
-     "(lambda D, f: 3 if f == 'patron' else "
+     "(lambda D, f: 3 if f in ('patron', 'fx', '3d') else "
      "(0 if D.op('IN_360').par.Activo else 3) if f == 'v360' else "
      "(1 if D.op('IN_180').par.Activo else 3) if f == 'v180' else "
      "(2 if D.op('IN_169').par.Activo and D.op('IN_169/VIDEO_DOME').par.Fuente == 'archivo' else 3))"
@@ -767,6 +897,64 @@ dev = mk(M, audiodeviceoutCHOP, 'salida', 1400, -100)
 expr(dev, 'active', 'parent().par.Activo')
 wire(din, dev)
 
+# Niveles para los visuales (IN_FX, IN_3D): nivel general y tres bandas, de 0
+# a ~1, con ataque inmediato y caida suave. Lo que suena es lo que se ve: con
+# un 360, un 180 o un 16:9 al aire es su video; con FX o 3D al aire AUDIO da
+# silencio en modo `video`, asi que para que reaccionen hay que poner Fuente
+# en `archivo` (una pista) o `entrada` (la mezcla de la sala).
+f_gr = mk(M, audiofilterCHOP, 'filtro_graves', 1400, -300, filter='lowpass', units='frequency', cutofffrequency=160)
+f_me = mk(M, audiofilterCHOP, 'filtro_medios', 1400, -420, filter='bandpass', units='frequency', cutofffrequency=1000)
+f_ag = mk(M, audiofilterCHOP, 'filtro_agudos', 1400, -540, filter='highpass', units='frequency', cutofffrequency=4000)
+for f in (f_gr, f_me, f_ag):
+    wire(din, f)
+niv_dat = mk(M, textDAT, 'niveles_py', 1600, -540)
+niv_dat.text = '''# Niveles de audio para los visuales. Entradas: la cadena completa y los tres
+# filtros. RMS de cada una por la Sensibilidad (las bandas altas pesan menos
+# en RMS, por eso llevan mas ganancia), ataque inmediato y caida suave.
+import numpy as np
+
+NOMBRES = ('nivel', 'graves', 'medios', 'agudos')
+GANANCIA = (1.0, 1.6, 2.5, 5.0)
+# el valor anterior vive en el modulo y no en scriptOp.store(): guardar en el
+# propio operador mientras cocina dispara "Cook dependency loop detected"
+_prev = [0.0, 0.0, 0.0, 0.0]
+
+
+def onCook(scriptOp):
+    c = scriptOp.parent()
+    sens = c.par.Sensibilidad.eval()
+    suav = c.par.Suavizado.eval()
+    prev = _prev
+    out = []
+    for k in range(4):
+        v = 0.0
+        if k < len(scriptOp.inputs) and scriptOp.inputs[k] is not None:
+            a = scriptOp.inputs[k].numpyArray()
+            if a is not None and a.size:
+                v = float(np.sqrt(np.mean(a * a))) * sens * GANANCIA[k]
+        v = min(v, 1.5) if v == v else 0.0     # sin NaN
+        p = prev[k] if k < len(prev) else 0.0
+        if v < p:
+            v = p * suav + v * (1.0 - suav)
+        out.append(v)
+    _prev[:] = out
+    scriptOp.clear()
+    # las entradas son audio (time slice); la salida es un valor por cuadro
+    scriptOp.isTimeSlice = False
+    scriptOp.numSamples = 1
+    for n, v in zip(NOMBRES, out):
+        scriptOp.appendChan(n).vals = [v]
+    return
+'''
+niv = mk(M, scriptCHOP, 'niveles', 1600, -300)
+setpar(niv, 'callbacks', 'niveles_py')
+if M.op('niveles_callbacks') is not None:      # el Script CHOP trae el suyo: sobra
+    M.op('niveles_callbacks').destroy()
+wire(din, niv, 0)
+wire(f_gr, niv, 1)
+wire(f_me, niv, 2)
+wire(f_ag, niv, 3)
+
 caja(M, 'nota', 'AUDIO: la cadena de sonido',
      'Por defecto sigue a la fuente al aire: al_aire elige el audio del video de DOMO.Fuente '
      '(de_360, de_180 o de_169, cada uno atado a su Movie File In y sincronizado con el) y los '
@@ -774,9 +962,18 @@ caja(M, 'nota', 'AUDIO: la cadena de sonido',
      'silencio. Fuente tambien puede ser un archivo aparte o la entrada del equipo. Luego '
      'ganancia, EQ de tres bandas, retardo en milisegundos para cuadrar con la imagen y un '
      'limitador. Sale por el dispositivo por defecto y por out1 (NDI y grabacion). El audio_out '
-     'de VIDEO_DOME queda apagado: el unico sonido sale de aqui.',
-     [a360, a180, a169, silencio, al_aire, a_arch, a_in, sw_a, gan, eq, ret, din, a_out, dev],
+     'de VIDEO_DOME queda apagado: el unico sonido sale de aqui. niveles (Script CHOP) saca nivel, '
+     'graves, medios y agudos para IN_FX e IN_3D (Sensibilidad, Suavizado); con FX o 3D al aire, '
+     'poner Fuente en archivo o entrada para que reaccionen.',
+     [a360, a180, a169, silencio, al_aire, a_arch, a_in, sw_a, gan, eq, ret, din, a_out, dev,
+      f_gr, f_me, f_ag, niv_dat, niv],
      (0.20, 0.13, 0.20))
+
+# IN_FX e IN_3D se construyen antes que AUDIO: su Select CHOP a
+# AUDIO/niveles quedo con el aviso de ruta invalida hasta volver a cocinar
+for _n in ('IN_FX/audio', 'IN_3D/audio'):
+    if D.op(_n) is not None:
+        D.op(_n).cook(force=True)
 
 # --------------------------------------------------------- mezcla y modelo
 
@@ -795,15 +992,21 @@ wire(D.op('IN_360'), mez, 0)
 wire(D.op('IN_180'), mez, 1)
 wire(D.op('IN_169'), mez, 2)
 wire(patron, mez, 3)
+wire(D.op('IN_FX'), mez, 4)
+wire(D.op('IN_3D'), mez, 5)
 expr(mez, 'index', 'parent().par.Fuente.menuIndex')
 equi = mk(D, nullTOP, 'equi', 0, 250)
 wire(mez, equi)
+
+# Master (modulos/master.py): brillo, contraste, gamma y negro con fundido,
+# entre equi y giro para que alcance a todas las fuentes y salidas.
+modulo('master.py')
 
 # Yaw: un corrimiento horizontal del lienzo equirectangular es un giro puro en
 # azimut, independiente del orden de rotaciones del Projection TOP.
 giro = mk(D, transformTOP, 'giro', 200, 250, tunit='fraction', extend='repeat')
 expr(giro, 'tx', 'parent().par.Yaw / 360.0')
-wire(equi, giro)
+wire(MASTER_SALIDA, giro)
 
 # Medido con el patron (17 sep 2026): equirect -> fisheye deja el centro del
 # fisheye en el horizonte del frente; rx = 90 sube el cenit al centro, ry = 90
@@ -931,12 +1134,18 @@ caja(D, 'nota_salidas', 'Salidas',
      'SpoutDomeReceiver (TD_Domo_Lab). Los toggles estan en la pagina Salidas.',
      [sp_domo, ndi, grab, unreal, alfa, sp_un], (0.24, 0.20, 0.14))
 
+# Panel de control del ejecutable de Unreal por UDP (modulos/unreal_udp.py)
+modulo('unreal_udp.py')
+D.sortCustomPages('Domo', '360', '180', '16:9', 'FX', '3D', 'Master', 'Mapping', 'Salidas', 'Unreal')
+
 caja(D, 'nota_modulos', 'Modulos de entrada',
      'Cada modulo lee su propio archivo y entrega el mismo lienzo equirectangular. Su parametro '
      'Activo apagado entrega negro y deja de cocinar. Solo el modulo elegido en DOMO.Fuente llega '
      'a la salida; los demas no gastan GPU aunque esten activos, y solo ese suena (AUDIO). Cada uno '
-     'tiene su pagina en la raiz (360, 180, 16:9) con su orientacion esferica.',
-     [D.op('IN_360'), D.op('IN_180'), D.op('IN_169'), D.op('AUDIO')], (0.14, 0.14, 0.18))
+     'tiene su pagina en la raiz (360, 180, 16:9, FX, 3D) con su orientacion esferica. IN_FX e IN_3D '
+     'no leen archivos: generan la imagen y reaccionan a AUDIO/niveles.',
+     [D.op('IN_360'), D.op('IN_180'), D.op('IN_169'), D.op('IN_FX'), D.op('IN_3D'), D.op('AUDIO')],
+     (0.14, 0.14, 0.18))
 
 caja(D, 'nota_169', 'Pagina 16:9: el video plano desde aqui',
      'El 16:9 se maneja desde la pagina 16:9 de DOMO, igual que el 360 y el 180 desde sus paginas. Template '
@@ -1027,7 +1236,7 @@ for nombre_pag, filas, cabeceras in PAGINAS:
             enlazados += 1
         except Exception as e:
             print('[DOMO] no se pudo enlazar %s -> %s.%s: %s' % (nombre, abajo.owner.path, abajo.name, e))
-print('[DOMO] paginas 360, 180 y 16:9: %d pars enlazados' % enlazados)
+print('[DOMO] paginas 360, 180, 16:9, FX y 3D: %d pars enlazados' % enlazados)
 
 # El sonido de DOMO sale solo por AUDIO/salida. El audio_out propio de
 # VIDEO_DOME sonaba siempre (aunque el 16:9 no estuviera al aire): aqui se

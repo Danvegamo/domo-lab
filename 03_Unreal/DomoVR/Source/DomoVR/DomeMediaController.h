@@ -190,6 +190,10 @@ struct FDomePantallaFila
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
 	float Giro = 0.f;
+
+	/** Brillo extra de esta pantalla: 0 igual, 0,5 un 50 % mas, -1 negro. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Brillo = 0.f;
 };
 
 /** Capa de fondo de los montajes de pantallas (la pagina Fondo de VIDEO_DOME en TouchDesigner):

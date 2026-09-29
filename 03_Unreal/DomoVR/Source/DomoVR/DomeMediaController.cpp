@@ -268,108 +268,286 @@ namespace
 		{ TEXT("fragmentos"), TEXT("Fragmentos (un tercio cada una)") },
 	};
 
-	/** Las plantillas de video_dome/screens_module.py (TouchDesigner), a las mismas cifras. */
+	/** Las plantillas de video_dome/screens_module.py (TouchDesigner), a las mismas cifras.
+	 *  GENERADO por 03_Unreal/generar_plantillas.py desde 00_TouchDesigner/video_dome/plantillas_ue.json: no editar a mano. */
 	TArray<FDomePantallaFila> ArmarPlantilla(const FString& Id)
 	{
 		TArray<FDomePantallaFila> R;
-		if (Id == TEXT("grande")) { R.Add(Fila(TEXT("grande"), 0, 48, 95, 53)); }
-		else if (Id == TEXT("bajo")) { R.Add(Fila(TEXT("bajo"), 0, 28, 80, 45)); }
-		else if (Id == TEXT("cenital")) { R.Add(Fila(TEXT("cenital"), 0, 70, 90, 51)); }
+		if (Id == TEXT("cine"))
+		{
+			{
+				FDomePantallaFila F = Fila(TEXT("cine"), 0.f, 40.f, 80.f, 45.f, 0);
+				F.Borde = 0.06f;
+				R.Add(F);
+			}
+		}
+		else if (Id == TEXT("grande"))
+		{
+			{
+				FDomePantallaFila F = Fila(TEXT("grande"), 0.f, 42.f, 120.f, 68.f, 1);
+				F.Borde = 0.08f;
+				R.Add(F);
+			}
+		}
+		else if (Id == TEXT("bajo"))
+		{
+			{
+				FDomePantallaFila F = Fila(TEXT("bajo"), 0.f, 30.f, 90.f, 51.f, 0);
+				F.Borde = 0.06f;
+				R.Add(F);
+			}
+		}
+		else if (Id == TEXT("cenital"))
+		{
+			{
+				FDomePantallaFila F = Fila(TEXT("cenital"), 0.f, 68.f, 100.f, 56.f, 1);
+				F.Borde = 0.08f;
+				R.Add(F);
+			}
+		}
 		else if (Id == TEXT("sala_2"))
 		{
-			FDomePantallaFila F = Fila(TEXT("dos_grandes"), 0, 44, 170, 59, 1);
-			F.Copias = 2; F.Arco = 360; F.Solape = 12; F.Bordes = 1;
-			R.Add(F);
+			{
+				FDomePantallaFila F = Fila(TEXT("dos_grandes"), 0.f, 44.f, 170.f, 59.f, 1);
+				F.Solape = 12.f;
+				F.Copias = 2;
+				F.Bordes = 1;
+				R.Add(F);
+			}
 		}
-		else if (Id == TEXT("sala_4") || Id == TEXT("sala_4_espejo"))
+		else if (Id == TEXT("sala_4"))
 		{
-			FDomePantallaFila F = Fila(Id == TEXT("sala_4") ? TEXT("cuatro") : TEXT("cuatro_espejo"), 0, 42, 82, 46);
-			F.Copias = 4; F.Arco = 360; F.Solape = 8; F.Bordes = 1;
-			F.bEspejoAlterno = Id == TEXT("sala_4_espejo");
-			R.Add(F);
+			{
+				FDomePantallaFila F = Fila(TEXT("cuatro"), 0.f, 42.f, 82.f, 46.f, 0);
+				F.Solape = 8.f;
+				F.Copias = 4;
+				F.Bordes = 1;
+				R.Add(F);
+			}
 		}
 		else if (Id == TEXT("sala_6"))
 		{
-			FDomePantallaFila F = Fila(TEXT("seis"), 0, 40, 54, 30);
-			F.Copias = 6; F.Arco = 360; F.Solape = 6; F.Bordes = 1;
-			R.Add(F);
+			{
+				FDomePantallaFila F = Fila(TEXT("seis"), 0.f, 40.f, 58.f, 33.f, 0);
+				F.Solape = 8.f;
+				F.Copias = 6;
+				F.Bordes = 1;
+				R.Add(F);
+			}
+		}
+		else if (Id == TEXT("sala_4_espejo"))
+		{
+			{
+				FDomePantallaFila F = Fila(TEXT("cuatro_espejo"), 0.f, 42.f, 82.f, 46.f, 0);
+				F.Solape = 8.f;
+				F.Copias = 4;
+				F.Bordes = 1;
+				F.bEspejoAlterno = true;
+				R.Add(F);
+			}
 		}
 		else if (Id == TEXT("sala_6_mosaico"))
 		{
-			FDomePantallaFila F = Fila(TEXT("mosaico"), 0, 40, 54, 54);
-			F.Copias = 6; F.Arco = 360; F.Corrimiento = 1.f / 6.f; F.CropX = -0.01f; F.CropW = 1.f / 6.f + 0.02f; F.Solape = 6; F.Bordes = 1;
-			R.Add(F);
+			{
+				FDomePantallaFila F = Fila(TEXT("mosaico"), 0.f, 40.f, 58.f, 50.f, 1);
+				F.CropX = 0.004f;
+				F.CropY = 0.15f;
+				F.CropW = 0.1787f;
+				F.CropH = 0.7f;
+				F.Solape = 8.f;
+				F.Copias = 6;
+				F.Corrimiento = 0.1667f;
+				F.Bordes = 1;
+				R.Add(F);
+			}
 		}
-		else if (Id == TEXT("sala_corona") || Id == TEXT("sala_corona_panorama"))
+		else if (Id == TEXT("sala_corona"))
 		{
-			const bool bPan = Id == TEXT("sala_corona_panorama");
-			FDomePantallaFila F = Fila(bPan ? TEXT("corona_pan") : TEXT("corona"), 0, 32, 66, 42);
-			F.Copias = 6; F.Arco = 360; F.Solape = 8; F.Bordes = 0;
-			if (bPan) { F.Corrimiento = 1.f / 6.f; F.CropX = -0.012f; F.CropW = 1.f / 6.f + 0.024f; }
-			else { F.bEspejoAlterno = true; }
-			R.Add(F);
-			FDomePantallaFila C = Fila(TEXT("cenital"), 0, 70, 96, 96, 1);
-			C.Opacidad = bPan ? 0.75f : 0.85f; C.Borde = 0.30f;
-			R.Add(C);
+			{
+				FDomePantallaFila F = Fila(TEXT("corona"), 0.f, 32.f, 66.f, 42.f, 0);
+				F.Solape = 8.f;
+				F.Copias = 6;
+				F.bEspejoAlterno = true;
+				R.Add(F);
+			}
+			{
+				FDomePantallaFila F = Fila(TEXT("cenital"), 0.f, 70.f, 96.f, 96.f, 1);
+				F.Opacidad = 0.85f;
+				F.Borde = 0.3f;
+				R.Add(F);
+			}
+		}
+		else if (Id == TEXT("sala_corona_panorama"))
+		{
+			{
+				FDomePantallaFila F = Fila(TEXT("corona_pan"), 0.f, 32.f, 66.f, 42.f, 0);
+				F.CropX = 0.004f;
+				F.CropY = 0.1f;
+				F.CropW = 0.1827f;
+				F.CropH = 0.8f;
+				F.Solape = 8.f;
+				F.Copias = 6;
+				F.Corrimiento = 0.1667f;
+				R.Add(F);
+			}
+			{
+				FDomePantallaFila F = Fila(TEXT("cenital"), 0.f, 70.f, 96.f, 96.f, 1);
+				F.Opacidad = 0.75f;
+				F.Borde = 0.3f;
+				R.Add(F);
+			}
 		}
 		else if (Id == TEXT("tres"))
 		{
-			FDomePantallaFila A = Fila(TEXT("izq"), -38, 45, 34, 19); A.Espejo = 1;
-			FDomePantallaFila B = Fila(TEXT("centro"), 0, 45, 34, 19);
-			FDomePantallaFila C = Fila(TEXT("der"), 38, 45, 34, 19); C.Espejo = 1;
-			R.Add(A); R.Add(B); R.Add(C);
+			{
+				FDomePantallaFila F = Fila(TEXT("izq"), -74.f, 40.f, 70.f, 30.f, 2);
+				F.Espejo = 1;
+				F.Borde = 0.05f;
+				R.Add(F);
+			}
+			{
+				FDomePantallaFila F = Fila(TEXT("centro"), 0.f, 40.f, 70.f, 30.f, 2);
+				F.Borde = 0.05f;
+				R.Add(F);
+			}
+			{
+				FDomePantallaFila F = Fila(TEXT("der"), 74.f, 40.f, 70.f, 30.f, 2);
+				F.Espejo = 1;
+				F.Borde = 0.05f;
+				R.Add(F);
+			}
 		}
 		else if (Id == TEXT("espejo"))
 		{
-			FDomePantallaFila A = Fila(TEXT("a"), -42, 45, 60, 34);
-			FDomePantallaFila B = Fila(TEXT("b_espejo"), 42, 45, 60, 34); B.Espejo = 1;
-			R.Add(A); R.Add(B);
+			{
+				FDomePantallaFila F = Fila(TEXT("espejo"), 0.f, 40.f, 93.f, 40.f, 2);
+				F.Borde = 0.05f;
+				F.Solape = 6.f;
+				F.Copias = 2;
+				F.Arco = 93.f;
+				F.bEspejoAlterno = true;
+				R.Add(F);
+			}
 		}
 		else if (Id == TEXT("anillo"))
 		{
-			FDomePantallaFila F = Fila(TEXT("anillo"), 0, 40, 360, 34, 2); F.Repeticion = 3;
-			R.Add(F);
+			{
+				FDomePantallaFila F = Fila(TEXT("anillo"), 0.f, 40.f, 360.f, 34.f, 2);
+				F.Repeticion = 3.f;
+				R.Add(F);
+			}
 		}
 		else if (Id == TEXT("anillo_doble"))
 		{
-			FDomePantallaFila A = Fila(TEXT("anillo_bajo"), 0, 28, 360, 24, 2); A.Repeticion = 4;
-			FDomePantallaFila B = Fila(TEXT("anillo_alto"), 180, 58, 360, 22, 2); B.Repeticion = 2; B.Espejo = 2; B.Opacidad = 0.85f;
-			R.Add(A); R.Add(B);
+			{
+				FDomePantallaFila F = Fila(TEXT("anillo_bajo"), 0.f, 28.f, 360.f, 24.f, 2);
+				F.Repeticion = 4.f;
+				R.Add(F);
+			}
+			{
+				FDomePantallaFila F = Fila(TEXT("anillo_alto"), 180.f, 58.f, 360.f, 22.f, 2);
+				F.Espejo = 2;
+				F.Opacidad = 0.85f;
+				F.Repeticion = 2.f;
+				R.Add(F);
+			}
 		}
 		else if (Id == TEXT("tunel"))
 		{
-			FDomePantallaFila F = Fila(TEXT("tunel"), 0, 90, 170, 170, 3); F.Repeticion = 4;
-			R.Add(F);
+			{
+				FDomePantallaFila F = Fila(TEXT("tunel"), 0.f, 90.f, 170.f, 170.f, 3);
+				F.Repeticion = 4.f;
+				R.Add(F);
+			}
 		}
 		else if (Id == TEXT("tunel_con_sala"))
 		{
-			FDomePantallaFila A = Fila(TEXT("tunel"), 0, 90, 170, 170, 3); A.Repeticion = 5; A.Opacidad = 0.6f;
-			FDomePantallaFila B = Fila(TEXT("sala"), 0, 38, 70, 39); B.Copias = 4; B.Arco = 360; B.Borde = 0.06f;
-			R.Add(A); R.Add(B);
+			{
+				FDomePantallaFila F = Fila(TEXT("tunel"), 0.f, 90.f, 170.f, 170.f, 3);
+				F.Opacidad = 0.6f;
+				F.Repeticion = 5.f;
+				R.Add(F);
+			}
+			{
+				FDomePantallaFila F = Fila(TEXT("sala"), 0.f, 38.f, 70.f, 39.f, 0);
+				F.Borde = 0.06f;
+				F.Copias = 4;
+				R.Add(F);
+			}
 		}
 		else if (Id == TEXT("cilindro"))
 		{
-			FDomePantallaFila F = Fila(TEXT("cilindro"), 0, 8, 360, 60, 4); F.Repeticion = 3; F.Recorrido = 1; F.Bordes = 2; F.Borde = 0.10f;
-			R.Add(F);
+			{
+				FDomePantallaFila F = Fila(TEXT("cilindro"), 0.f, 8.f, 360.f, 60.f, 4);
+				F.Borde = 0.1f;
+				F.Repeticion = 3.f;
+				F.Recorrido = 1.f;
+				F.Bordes = 2;
+				R.Add(F);
+			}
 		}
 		else if (Id == TEXT("cilindro_doble"))
 		{
-			FDomePantallaFila A = Fila(TEXT("pared"), 0, 6, 360, 50, 4); A.Repeticion = 3; A.Recorrido = 1; A.Bordes = 2; A.Borde = 0.08f;
-			FDomePantallaFila B = Fila(TEXT("pared_alta"), 180, 40, 360, 40, 4); B.Repeticion = 2; B.Recorrido = -0.6f; B.Espejo = 2; B.Opacidad = 0.7f; B.Bordes = 2; B.Borde = 0.12f;
-			R.Add(A); R.Add(B);
+			{
+				FDomePantallaFila F = Fila(TEXT("pared"), 0.f, 6.f, 360.f, 42.f, 4);
+				F.Borde = 0.08f;
+				F.Repeticion = 3.f;
+				F.Recorrido = 1.f;
+				F.Bordes = 2;
+				R.Add(F);
+			}
+			{
+				FDomePantallaFila F = Fila(TEXT("pared_alta"), 180.f, 50.f, 360.f, 30.f, 4);
+				F.Espejo = 2;
+				F.Opacidad = 0.8f;
+				F.Borde = 0.12f;
+				F.Repeticion = 2.f;
+				F.Recorrido = -0.6f;
+				F.Bordes = 2;
+				R.Add(F);
+			}
 		}
 		else if (Id == TEXT("cilindro_con_sala"))
 		{
-			FDomePantallaFila A = Fila(TEXT("cilindro"), 0, 8, 360, 70, 4); A.Repeticion = 3; A.Recorrido = 1; A.Opacidad = 0.55f; A.Bordes = 2; A.Borde = 0.10f;
-			FDomePantallaFila B = Fila(TEXT("sala"), 0, 38, 70, 39); B.Copias = 4; B.Arco = 360; B.Solape = 8; B.Bordes = 1;
-			R.Add(A); R.Add(B);
+			{
+				FDomePantallaFila F = Fila(TEXT("cilindro"), 0.f, 8.f, 360.f, 70.f, 4);
+				F.Opacidad = 0.55f;
+				F.Borde = 0.1f;
+				F.Repeticion = 3.f;
+				F.Recorrido = 1.f;
+				F.Bordes = 2;
+				R.Add(F);
+			}
+			{
+				FDomePantallaFila F = Fila(TEXT("sala"), 0.f, 38.f, 70.f, 39.f, 0);
+				F.Solape = 8.f;
+				F.Copias = 4;
+				F.Bordes = 1;
+				R.Add(F);
+			}
 		}
 		else if (Id == TEXT("fragmentos"))
 		{
-			FDomePantallaFila A = Fila(TEXT("frag_izq"), -46, 45, 42, 42); A.CropX = 0.f; A.CropW = 0.34f;
-			FDomePantallaFila B = Fila(TEXT("frag_centro"), 0, 45, 42, 42); B.CropX = 0.33f; B.CropW = 0.34f;
-			FDomePantallaFila C = Fila(TEXT("frag_der"), 46, 45, 42, 42); C.CropX = 0.66f; C.CropW = 0.34f;
-			R.Add(A); R.Add(B); R.Add(C);
+			{
+				FDomePantallaFila F = Fila(TEXT("frag_izq"), -48.f, 42.f, 45.6f, 56.f, 2);
+				F.CropW = 0.34f;
+				F.Borde = 0.05f;
+				R.Add(F);
+			}
+			{
+				FDomePantallaFila F = Fila(TEXT("frag_centro"), 0.f, 42.f, 45.6f, 56.f, 2);
+				F.CropX = 0.33f;
+				F.CropW = 0.34f;
+				F.Borde = 0.05f;
+				R.Add(F);
+			}
+			{
+				FDomePantallaFila F = Fila(TEXT("frag_der"), 48.f, 42.f, 45.6f, 56.f, 2);
+				F.CropX = 0.66f;
+				F.CropW = 0.34f;
+				F.Borde = 0.05f;
+				R.Add(F);
+			}
 		}
 		else { R.Add(Fila(TEXT("cine"), 0, 45, 70, 39)); }
 		return R;
@@ -864,6 +1042,7 @@ bool ADomeMediaController::CargarPlaylist(const FString& Ruta)
 				LeerNumero(FO, TEXT("corrimiento"), F.Corrimiento);
 				LeerNumero(FO, TEXT("recorrido"), F.Recorrido);
 				LeerNumero(FO, TEXT("giro"), F.Giro);
+				LeerNumero(FO, TEXT("brillo"), F.Brillo);
 				C.Pantallas.Add(F);
 			}
 		}
@@ -1753,6 +1932,7 @@ namespace
 		if (N == TEXT("Corrimiento")) return &F.Corrimiento;
 		if (N == TEXT("Recorrido")) return &F.Recorrido;
 		if (N == TEXT("Giro")) return &F.Giro;
+		if (N == TEXT("Brillo")) return &F.Brillo;
 		return nullptr;
 	}
 }
@@ -1859,7 +2039,7 @@ void ADomeMediaController::EmpujarPantallas(const FDomeCue& C)
 		M->SetVectorParameterValue(FName(*(FString(TEXT("PCrop")) + S)), FLinearColor(F.CropX, F.CropY, F.CropW, F.CropH));
 		M->SetVectorParameterValue(FName(*(FString(TEXT("POpt")) + S)), FLinearColor(F.bEncendida ? 1.f : 0.f, F.Borde, F.Repeticion, F.Solape));
 		M->SetVectorParameterValue(FName(*(FString(TEXT("PRep")) + S)), FLinearColor(static_cast<float>(F.Copias), F.Arco, F.bEspejoAlterno ? 1.f : 0.f, F.Corrimiento));
-		M->SetVectorParameterValue(FName(*(FString(TEXT("PAnm")) + S)), FLinearColor(F.Recorrido, F.Giro, static_cast<float>(F.Bordes), 0.f));
+		M->SetVectorParameterValue(FName(*(FString(TEXT("PAnm")) + S)), FLinearColor(F.Recorrido, F.Giro, static_cast<float>(F.Bordes), F.Brillo));
 	}
 }
 
@@ -2393,6 +2573,7 @@ bool ADomeMediaController::GuardarPlaylist()
 				P->SetStringField(TEXT("bordes"), BordesATexto(F.Bordes));
 				P->SetNumberField(TEXT("recorrido"), F.Recorrido);
 				P->SetNumberField(TEXT("giro"), F.Giro);
+				if (F.Brillo != 0.f) { P->SetNumberField(TEXT("brillo"), F.Brillo); }
 				Filas.Add(MakeShared<FJsonValueObject>(P));
 			}
 			O->SetArrayField(TEXT("pantallas"), Filas);

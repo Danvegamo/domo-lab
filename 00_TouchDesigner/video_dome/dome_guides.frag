@@ -101,7 +101,10 @@ bool frameUV(vec3 P, float yaw, float pitch, float roll,
     float z = dot(P, C);
     if (z <= 0.001) return false;
     if (modo == 3) {
-        vec2 q = vec2(atan(x, z) / (hf * 0.5), asin(clamp(y, -1.0, 1.0)) / (vf * 0.5));
+        // distancia angular al centro, igual que dome_map.frag desde el
+        // 29 sep 2026: el tunel es redondo
+        float d = acos(clamp(z, -1.0, 1.0));
+        vec2 q = normalize(vec2(x, y) + vec2(1e-7, 0.0)) * d / vec2(hf * 0.5, vf * 0.5);
         // (el cilindro se resuelve antes, junto con la banda)
         float rad = length(q);
         // el marco del tunel es su circulo exterior

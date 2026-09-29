@@ -4,6 +4,24 @@ Bitácora de cambios de domo-lab, de lo más reciente a lo más antiguo. Cada en
 dice qué cambió y por qué; el detalle técnico y las mediciones están en
 [04_Docs](04_Docs/). El estado futuro está en la [hoja de ruta](README.md#hoja-de-ruta).
 
+## 29 de septiembre de 2026 · TouchDesigner: montajes 16:9, efectos, 3D y panel de Unreal
+
+- **Montajes 16:9 arreglados.** Tres fallas de `dome_map.frag` (no solo los valores): el cilindro desaparecía a los
+  ~20 s con el desplazamiento encendido, el túnel salía en forma de ojo con una costura dura, y un recorte negativo
+  metía una muesca del borde del cuadro. Se corrigieron y se llevaron también al HLSL de Unreal. Se ajustaron los
+  valores de `cine`, `grande`, `bajo`, `cenital`, `sala_6`, `sala_6_mosaico`, `sala_corona_panorama`, `tres`, `espejo`,
+  `cilindro_doble` y `fragmentos`. Nuevo **brillo por pantalla** (columna `spare`).
+- **Valores en vivo:** página *Ajuste* en VIDEO_DOME y 34 parámetros con rango en la página 16:9 de DOMO (ancho, alto,
+  elevación, separación, copias, solape, borde, opacidad, brillo).
+- **Módulos nuevos en TouchDesigner:** `IN_FX` (8 efectos GLSL reactivos al audio), `IN_3D` (objetos 3D animados con
+  cámara orbital, sin importar modelos; ranura `modelo` para uno propio), un **master** de brillo, contraste, gamma y negro,
+  y un **panel de control de Unreal por UDP** (`127.0.0.1:7000`, líneas `domo.*`).
+- **Unreal sigue a TouchDesigner:** las plantillas del ejecutable se generan desde
+  `00_TouchDesigner/video_dome/plantillas_ue.json` con `03_Unreal/generar_plantillas.py`, así que las cifras no divergen;
+  hay un deslizador de brillo por pantalla en el menú.
+- Verificado con capturas de cada módulo, 60 fps con la salida a 4096 y 9 comandos UDP recibidos por un receptor de
+  prueba. Sin verificar: el panel contra el ejecutable abierto y `estudio_pantallas.html`, que no tiene los arreglos del shader.
+
 ## 29 de septiembre de 2026 · Sala, fondo desenfocado, perfiles de render y ajustes guardados
 
 - **Paredes negras.** En el ejecutable las paredes de la sala 180 salían con la textura de
