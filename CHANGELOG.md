@@ -4,6 +4,23 @@ Bitácora de cambios de domo-lab, de lo más reciente a lo más antiguo. Cada en
 dice qué cambió y por qué; el detalle técnico y las mediciones están en
 [04_Docs](04_Docs/). El estado futuro está en la [hoja de ruta](README.md#hoja-de-ruta).
 
+## 29 de septiembre de 2026 · Regenerar TouchDesigner sin perder la disposición
+
+- **La disposición de la red ya no se pierde al regenerar por MCP.** `build_domo.py` (versión 1.5) guarda la posición,
+  el tamaño y el color de cada nodo y la caja de cada nota antes de destruir `/project1/DOMO`, y los devuelve al
+  terminar (`00_TouchDesigner/conservar_layout.py`). La disposición queda en `layout_domo.json`, un nodo por línea.
+- **Los nodos borrados a mano no vuelven.** Se guardan en la lista `omitidos` (hoy, `IN_169/VIDEO_DOME/spout_in`) y el
+  constructor los borra al terminar.
+- **Copia de seguridad antes de destruir:** `00_TouchDesigner/respaldo/DOMO_AAAAMMDD_HHMMSS.tox`, las últimas ocho,
+  fuera de git. El constructor lista lo que había en la red anterior y ya no crea.
+- **`domo_lab.toe` con el orden nuevo de la red** (136 nodos movidos y notas redimensionadas). Se le quitaron las rutas
+  de video de esta máquina y `Fuente` queda en el patrón de prueba. Los DATs `moments_exec` y `watcher` de
+  VIDEO_DOME ya no escriben la ruta absoluta del repositorio: usan `project.folder`.
+- Verificado con una prueba de la lógica contra una red simulada. Sin verificar dentro de TouchDesigner: la
+  primera regeneración real por MCP.
+- Sin actualizar: `DOMO.tox` sigue siendo el del 29 de septiembre a mediodía (sin el orden nuevo); se vuelve a guardar
+  desde TouchDesigner.
+
 ## 29 de septiembre de 2026 · README nuevo en tres idiomas, capturas del build y hoja de ruta
 
 - **README rehecho** con cabecera, insignias, novedades, galería, secciones desplegables, diagramas Mermaid (arquitectura

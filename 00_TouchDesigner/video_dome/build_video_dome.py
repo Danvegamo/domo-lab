@@ -45,6 +45,20 @@ FRAG_PATH = os.path.join(BASE_DIR, 'dome_map.frag')
 GUIDE_PATH = os.path.join(BASE_DIR, 'dome_guides.frag')
 SCREENS_MOD_PATH = os.path.join(BASE_DIR, 'screens_module.py')
 VERSIONS_DIR = os.path.join(BASE_DIR, 'versiones')
+
+
+def _versions_dir_py():
+    """Linea que fija VERSIONS_DIR dentro de los DATs generados. Si la carpeta cuelga de la del
+    proyecto se escribe relativa (asi el .toe y el .tox no llevan la ruta de esta maquina); si no,
+    la ruta completa."""
+    try:
+        rel = os.path.relpath(VERSIONS_DIR, project.folder)
+    except ValueError:
+        rel = '..'
+    if not rel.startswith('..'):
+        return "import os\nVERSIONS_DIR = os.path.join(project.folder, %r)\n" % rel.replace('\\', '/')
+    return "VERSIONS_DIR = r'" + VERSIONS_DIR + "'\n"
+
 # El simulador de domo (theinfranet/TouchDesigner-Fulldome-Simulator) es
 # opcional y no viene en el repo: si el .tox no esta, la red se construye sin
 # el visor preview_dome.
@@ -1194,7 +1208,7 @@ else:
 mexec = base.create(executeDAT, 'moments_exec')
 mexec.nodeX, mexec.nodeY = -900, 0
 setpar(mexec, ['framestart'], True)
-mexec.text = ("VERSIONS_DIR = r'" + VERSIONS_DIR + "'\n" + '''
+mexec.text = (_versions_dir_py() + '''
 import json
 import os
 
@@ -1315,7 +1329,7 @@ setpar(watcher, ['pars'], '*')
 setpar(watcher, ['valuechange'], True)
 setpar(watcher, ['onpulse'], True)
 
-watcher.text = ("VERSIONS_DIR = r'" + VERSIONS_DIR + "'\n" + '''
+watcher.text = (_versions_dir_py() + '''
 import json
 import os
 

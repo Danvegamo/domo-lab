@@ -11,6 +11,11 @@ pero antes guarda el valor de todos los parametros personalizados (rutas de
 video, angulos, nombres de Spout...) y los reescribe al final. Asi se puede
 volver a correr tras editar este archivo sin perder la configuracion.
 
+Tampoco pierde la disposicion de la red (conservar_layout.py): la posicion, el
+tamano y el color de cada nodo y de cada nota vuelven a su sitio, los nodos que
+borraste a mano no se vuelven a crear, y antes de destruir la red vieja se deja
+una copia en respaldo/. La disposicion queda escrita en layout_domo.json.
+
 Estructura que deja:
 
     DOMO                      COMP raiz, atajo `parent.DOMO`, paginas Domo, 360, 180, 16:9, FX, 3D,
@@ -49,7 +54,7 @@ except NameError:
 
 RAIZ = op('/project1')
 NOMBRE = 'DOMO'
-VERSION = '1.4 (29 sep 2026)'
+VERSION = '1.5 (29 sep 2026)'
 
 # ---------------------------------------------------------------- utilidades
 
@@ -259,9 +264,13 @@ def pagina_orientacion(comp, nombre_pagina, con_yaw=True):
 
 # ------------------------------------------------- conservar la configuracion
 
+with open(os.path.join(BUILD_DIR, 'conservar_layout.py'), encoding='utf-8') as _fh:
+    exec(compile(_fh.read(), 'conservar_layout.py', 'exec'), globals())
+
 guardado = {}
 vd_previo = {'pars': {}, 'screens': None, 'moments': None}
 viejo = RAIZ.op(NOMBRE)
+_layout = preparar_regeneracion(viejo, VERSION)
 if viejo:
     # VIDEO_DOME (dentro de IN_169) guarda su montaje en pars y en dos tablas;
     # su propio constructor no lo puede conservar porque aqui se destruye todo
@@ -1247,5 +1256,8 @@ if vd is not None and vd.op('audio_out') is not None:
     ao.expr = ''
     ao.mode = ParMode.CONSTANT
     ao.val = False
+
+# Ultimo paso: cada nodo vuelve a su sitio y se borra lo que se habia borrado a mano.
+terminar_regeneracion(D, _layout, VERSION)
 
 print('[DOMO] construido: %s, %d operadores' % (D.path, len(D.findChildren())))

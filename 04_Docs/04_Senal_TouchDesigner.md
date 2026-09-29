@@ -28,6 +28,8 @@ de pantallas; el archivo `.toe` es el resultado de correrlo y de guardar.
 00_TouchDesigner/modulos/in_3d.py           el módulo IN_3D (objetos 3D con render cubemap), sección 5.6
 00_TouchDesigner/modulos/master.py          brillo, contraste, gamma y negro con fundido, sección 6
 00_TouchDesigner/modulos/unreal_udp.py      el panel de control del ejecutable de Unreal por UDP, sección 10
+00_TouchDesigner/conservar_layout.py       conserva la disposición de la red al regenerar (posiciones, notas, nodos borrados)
+00_TouchDesigner/layout_domo.json           la disposición guardada: un nodo por línea, más la lista de omitidos
 00_TouchDesigner/video_dome/                el sistema de pantallas (VIDEO_DOME), ver sección 5.3
 00_TouchDesigner/video_dome/plantillas_ue.json  la tabla final de las 21 plantillas, para el port de Unreal
 05_Preview/pruebas/                         capturas del patrón en TouchDesigner y en Unreal
@@ -50,6 +52,28 @@ sender), destruye el COMP, lo vuelve a crear y reescribe esos valores al final.
 El montaje de `VIDEO_DOME` (sus parámetros y las tablas `screens` y `moments`)
 se conserva por la misma vía. Por eso se puede editar `build_domo.py` y volver
 a correrlo sin perder la configuración de la sesión.
+
+**La disposición de la red también se conserva** (desde la versión 1.5 del constructor,
+`conservar_layout.py`). Regenerar por MCP ya no deshace lo que acomodaste a mano:
+
+- La posición, el tamaño y el color de cada nodo, y la caja de cada nota, vuelven a su sitio. Se leen de la red que
+  está viva en TouchDesigner (manda esa) y, si falta algo, de `00_TouchDesigner/layout_domo.json`, que el constructor
+  reescribe al terminar con un nodo por línea, así que se lee bien en un diff de git.
+- Los nodos que **borraste** a mano no se vuelven a crear. Quedan en la lista `omitidos` del mismo archivo. Solo se
+  deduce que borraste uno cuando la red viva se construyó con la misma versión del constructor que dejó el archivo
+  (parámetro `Version` de DOMO); con otra versión no se puede saber si falta porque lo borraste o porque el
+  constructor todavía no lo creaba. Para recuperar un nodo omitido, quítalo de esa lista y regenera. Hoy hay uno:
+  `IN_169/VIDEO_DOME/spout_in`.
+- Antes de destruir la red vieja se guarda una copia en `00_TouchDesigner/respaldo/DOMO_AAAAMMDD_HHMMSS.tox` (las
+  últimas ocho; la carpeta no va a git). Lo que **agregaste** a mano y el constructor no crea se pierde de la red nueva,
+  pero está en esa copia, y el constructor lo lista en el Textport al terminar.
+- Los nodos nuevos que trae una versión del constructor entran en la posición que el constructor les da.
+- No se conserva lo que no está en esta lista: los valores de parámetros no personalizados que hayas cambiado a mano en
+  un nodo generado (por ejemplo, la resolución de un GLSL) se pierden al regenerar; los personalizados sí se guardan,
+  como antes.
+
+Si acomodas la red y quieres dejarla en el repositorio sin regenerar, guarda el `.toe`; el archivo de disposición se
+actualiza la próxima vez que corra el constructor.
 
 La otra forma de abrirlo es la obvia: un `.toe` guardado después de correr el
 constructor ya trae `/project1/DOMO` armado y no necesita el script para
