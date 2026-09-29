@@ -13,7 +13,7 @@ formas conviven en los mismos niveles: un parámetro, `Fuente`, elige entre
 
 | Pieza | Dónde | Qué hace |
 |---|---|---|
-| `MP_Domo` | `/Game/Media` | el reproductor de Media Framework; abre los archivos con Windows Media Foundation (`WmfMedia`) |
+| `MP_Domo` | `/Game/Media` | el reproductor de Media Framework; abre los archivos con Electra (`ElectraPlayer`, decodifica en la GPU) y, si no puede, con Windows Media Foundation (`WmfMedia`, CPU) |
 | `MT_Domo` | `/Game/Media` | la textura donde cae cada cuadro: sRGB, sin mips, salida *new style* (se lee como una textura 2D común) |
 | `M_DomoMedia` / `MI_DomoMedia` | `/Game/Media` | el material de la cúpula para video. `M_Domo`, el de Spout, no se toca |
 | `ADomeMediaController` | `Source/DomoVR/DomeMediaController.{h,cpp}` | lee la playlist, abre cada cue, pasa sus parámetros al material, maneja el audio, el fundido a negro, el teclado y los comandos `domo.*` |
@@ -86,22 +86,27 @@ consecuencias, pero el código de salida no es 0.
 El módulo C++ tiene que estar compilado (`UnrealBuildTool DomoVREditor Win64
 Development`, [02_Sala_Unreal.md](02_Sala_Unreal.md), sección 8). La clase
 depende de `MediaAssets`, `AudioMixer` y `Json`, y el proyecto habilita los
-plugins `RemoteControl` y `RemoteControlWebInterface`.
+plugins `RemoteControl` y `RemoteControlWebInterface`, más `ElectraPlayer`, `ElectraCodecs`,
+`D3D12VideoDecodersElectra` y `NVDECElectra` para decodificar el video en la GPU (sección 5).
 
 ## 3. Cómo preparar los videos
 
-Media Framework en Windows abre los `.mp4` con Media Foundation, que decodifica
-por hardware. Lo que funciona sin sorpresas:
+El ejecutable decodifica el video en la **GPU** con el reproductor Electra de
+Unreal, sin salir de DirectX 12 (sección 5, «Video que se traba: qué pasaba y cómo se arregló»). Por eso
+casi cualquier `.mp4` de H.264 o HEVC abre tal cual, sin transcodificar, incluso
+HEVC de 4096 × 4096:
 
 | Dato | Valor |
 |---|---|
-| Contenedor | `.mp4` con `faststart` |
-| Video | H.264 High o Main, `yuv420p` (8 bits), nivel 5.1 |
-| Tamaño | 4096 × 2048 para 360 (2:1); 2048 × 2048 para domemaster o VR180; el ancho no pasa de 4096 |
-| Cuadros | hasta 30 por segundo a 4096 × 2048 (el techo del nivel 5.1) |
-| Audio | AAC estéreo, 48 kHz |
+| Contenedor | `.mp4`; con `faststart` (el átomo `moov` al principio) abre más rápido |
+| Video | H.264 (High, Main) o HEVC (Main o Main10), 4:2:0. Verificado hasta 4096 × 4096 |
+| Cuadros | verificado 30 y 60 por segundo a 4096 × 2048 |
+| Audio | AAC (estéreo o 5.1) |
 
-Un 360 cualquiera, a esa receta:
+Cuando Electra no acepta un archivo (MPEG-4 parte 2, por ejemplo, o un perfil
+HEVC 4:4:4) el ejecutable lo reintenta solo con `WmfMedia` y lo escribe en el
+log (`se reintenta con WmfMedia`); ese camino decodifica en CPU. Para convertir
+un video a una receta segura de H.264:
 
 ```
 ffmpeg -i entrada.mov -vf "scale=4096:2048:flags=lanczos,format=yuv420p" ^
@@ -109,15 +114,13 @@ ffmpeg -i entrada.mov -vf "scale=4096:2048:flags=lanczos,format=yuv420p" ^
   -c:a aac -b:a 192k -ac 2 -ar 48000 -movflags +faststart salida.mp4
 ```
 
-Para un domemaster o un VR180 cambia solo el `scale` (`2048:2048`). Si el
-original viene a 60 cuadros, `-r 30`; H.264 a 4096 × 2048 y 60 cuadros pide
-nivel 5.2, que queda fuera de lo verificado. Con NVENC (`-c:v h264_nvenc
--preset p5 -cq 19 -profile:v high`) el encode es mucho más rápido; no se probó en la cúpula.
+Para un domemaster o un VR180 cambia solo el `scale` (`2048:2048`). Con NVENC
+(`-c:v h264_nvenc -preset p5 -cq 19 -profile:v high`) el encode es mucho más
+rápido.
 
-Lo que no conviene: HAP y ProRes (Media Foundation no los abre), cualquier
-cosa de 10 bits (la textura es de 8 bits por canal, como el receptor de Spout),
-anchos de 8192 y HEVC. HEVC puede funcionar con las *HEVC Video Extensions* de
-Microsoft instaladas, pero no se probó.
+Lo que no conviene: ProRes (ni Electra ni Media Foundation lo abren) y anchos de
+8192. La textura de la cúpula es de 8 bits por canal, como el receptor de Spout,
+así que un video de 10 bits se ve, pero sin la precisión extra.
 
 **Videos de prueba.** `python 03_Unreal/generar_video_patron.py` escribe el
 patrón de `shaders/patron.frag` como H.264 de 4096 × 2048, con un contador de
@@ -310,30 +313,63 @@ La colisión sale de mallas con `Use Complex Collision As Simple`
 de FBX les generaba un casco convexo sólido a la cúpula y al muro, y eso
 expulsaba al jugador por el techo.
 
-### Video que se traba: qué pasa y cómo se arregla
+### Video que se traba: qué pasaba y cómo se arregló
 
 Medido el 29 de septiembre de 2026 con el video de Dan (`Programme DomoArte - short
-_5.1_h265.mp4`: HEVC de 4096×4096, 30 fps, 60 Mbps, audio 5.1, 13,5 GB): el
-juego seguía a más de 100 fps y el reloj del video avanzaba al ritmo real, pero el
-proceso gastaba unos **3 núcleos más** que con un video de 2K (6,7 contra 3,3 con
-`t.MaxFPS 60`). Es el decodificador: el reproductor de Windows (WmfMedia)
-decodifica HEVC en **CPU** porque el proyecto usa DX12 (su decodificación por
-hardware solo existe con DX11), y 16 megapíxeles por cuadro a 30 fps no le
-alcanzan. ffmpeg decodifica ese mismo archivo a 117 fps usando unos 8 núcleos.
+_5.1_h265.mp4`: HEVC Main nivel 6.0 de 4096×4096, 30 fps, 60 Mbps, audio 5.1, 13,5 GB).
+Con el reproductor de Windows (`WmfMedia`) el juego seguía a más de 100 fps y el reloj del
+video avanzaba bien, pero el proceso gastaba unos **6,5 núcleos** de CPU (3 más que con un
+video de 2K): `WmfMedia` decodifica HEVC en CPU porque el proyecto usa DX12 (su decodificación
+por hardware solo existe con DX11), y 16 megapíxeles por cuadro a 30 fps no le alcanzan.
 
-La salida es un video más liviano, no un ajuste del motor:
+**Solución (sin cambiar a DX11):** el ejecutable usa ahora **Electra**, el reproductor propio
+de Unreal, con dos decodificadores de GPU que sí trabajan con DX12:
 
-- **Menú > Fuente y video > Optimizar video**, o `domo.Optimizar [lado]`: hace con
-  ffmpeg una copia H.264 del video actual (2048 de lado por defecto; el control
-  "Lado de la copia" lo cambia) en `Movies/optimizados/`, la agrega a la lista con los
-  mismos ajustes de imagen y pasa a ella. Sigue reproduciendo mientras convierte y
-  muestra el avance. Ruta de GPU completa (decodifica, escala y codifica con NVENC;
-  casi no usa CPU) y, si falla, con la CPU decodificando y, si falla, x264 (más lento).
-  Un clip de 40 s tardó unos 20 s; el video de 29 min, unos 9.
-- Necesita ffmpeg: junto al ejecutable, en la carpeta de los videos o en el `PATH`.
-- Al abrir un video de 3500 px o más de lado el menú avisa que puede trabarse.
-- Con la copia (H.264, 2048×2048) el uso de CPU vuelve al de un video de 2K.
-- `domo.Estado` ahora escribe también los cuadros por segundo y el cuadro más lento.
+- `D3D12VideoDecodersElectra`: decodificación por hardware con la API D3D12 Video de Windows
+  (cualquier fabricante). Cubre H.264 y HEVC hasta el nivel 5.x.
+- `NVDECElectra`: el decodificador de NVIDIA (NVDEC). Es el que abre HEVC de 4096×4096 nivel 6,
+  que el de D3D12 no acepta. Es experimental en UE 5.8 y solo existe con tarjetas NVIDIA.
+
+Ambos van habilitados en `DomoVR.uproject` junto a `ElectraPlayer` y `ElectraCodecs`. Electra elige
+el mejor decodificador disponible para cada archivo. Con el mismo video de Dan:
+
+| Reproductor | CPU (núcleos) | Decodificador de la GPU |
+|---|---|---|
+| `WmfMedia` (antes) | 6,5 | 0 % |
+| `ElectraPlayer` (ahora) | 1,5 | 15 % |
+
+El reloj del video avanza en tiempo real (44,8 s de video tras 45 s) y el audio 5.1 suena.
+Más pruebas con clips generados con ffmpeg (todas con GPU, entre 1,4 y 2,0 núcleos):
+HEVC 2048² nivel 5.0, HEVC 4096² nivel 6.0 (`hvc1` y `hev1`), HEVC Main10 4096×2048 a 60 fps y
+H.264 4096×2048 a 60 fps con audio. Un MPEG-4 parte 2 de 1080p cae a `WmfMedia`, como se espera.
+
+- El decodificador se elige en **Menú > Fuente y video > Decodificador de video** (Automático,
+  Electra, Protron, Windows Media Foundation) o con `domo.Reproductor auto|electra|protron|wmf`.
+  `domo.Estado` escribe el reproductor en uso.
+- **Optimizar video** (más abajo) sigue existiendo para los casos en que se cae a `WmfMedia`, o
+  para una GPU sin NVDEC. Ahora el aviso de «video pesado» solo sale si el reproductor es `WmfMedia`.
+
+**Otras opciones que existen en UE 5.8 para decodificar en GPU con DX12** (y por qué no son la primaria):
+
+| Opción | Estado | Nota |
+|---|---|---|
+| Electra + `D3D12VideoDecodersElectra` | usada | H.264 y HEVC hasta nivel 5.x; no acepta HEVC nivel 6 |
+| Electra + `NVDECElectra` | usada | H.264, HEVC, AV1 y VP9 según la tarjeta; experimental; solo NVIDIA |
+| Protron (`ElectraProtron`) | disponible en el menú | reproductor de `.mp4` locales sobre los mismos decodificadores; en las pruebas no mejoró a Electra |
+| `WmfMedia` con DX11 | descartada | Media Foundation solo decodifica en GPU con el RHI de DX11 |
+| HAP (`HAPMedia`) | no probada | códec que la GPU descomprime sin decodificar; archivos de 10 a 20 veces más grandes; exige convertir |
+| Secuencia de imágenes (`ImgMedia`) | no probada | EXR o PNG por cuadro; ancho de disco enorme |
+| Copia liviana con ffmpeg | disponible | **Optimizar video**: H.264 de 2048 con NVENC |
+
+**Optimizar video** (`domo.Optimizar [lado]`): hace con ffmpeg una copia H.264 del video actual
+(2048 de lado por defecto; el control «Lado de la copia» lo cambia) en `Movies/optimizados/`, la
+agrega a la lista con los mismos ajustes de imagen y pasa a ella. Sigue reproduciendo mientras
+convierte y muestra el avance. Usa la GPU completa (decodifica, escala y codifica con NVENC; casi
+no usa CPU) y, si falla, la CPU decodificando y, si falla, x264 (más lento). Un clip de 40 s
+tardó unos 20 s; el video de 29 min, unos 9. Necesita ffmpeg: junto al ejecutable, en la carpeta
+de los videos o en el `PATH`.
+
+`domo.Estado` escribe también los cuadros por segundo y el cuadro más lento.
 
 ### La sala 45 (y la 90) en el ejecutable
 
@@ -387,7 +423,7 @@ traer varias líneas.
 Corre `RunUAT BuildCookRun` (Win64, Development, `-build -cook -stage -pak
 -archive`) con los tres niveles y deja el build en `03_Unreal\Build\Windows\`
 (fuera de git). `Config/DefaultGame.ini` agrega `+DirectoriesToAlwaysStageAsNonUFS=(Path="Movies")`:
-los videos y la playlist no entran al `.pak`, porque Media Foundation necesita
+los videos y la playlist no entran al `.pak`, porque el reproductor necesita
 un archivo real, y quedan sueltos en `Build\Windows\DomoVR\Content\Movies\`,
 donde se pueden cambiar sin volver a empaquetar. También agrega los tres mapas
 a `MapsToCook` y `/Game/Media` a `DirectoriesToAlwaysCook` (el preset no lo
@@ -456,7 +492,10 @@ Resultados del 18 de septiembre de 2026, en `-game` con los binarios del editor:
 | `horizonte` 20 | la banda amarilla entra por el borde de la cúpula |
 | domemaster y VR180 del mismo patrón | el frente idéntico al del 360 (con el contador legible) |
 | `"169"` | el patrón entero como pantalla plana al frente, negro alrededor |
-| *3gracias* (`test roto pintura.mp4`, H.264 Main 4096 × 2048, 76 Mb/s, nivel 5.1) | abre con `WmfMedia` sin transcodificar; textura 4096 × 2048, `tasa=1.00` |
+| *3gracias* (`test roto pintura.mp4`, H.264 Main 4096 × 2048, 76 Mb/s, nivel 5.1) | abre sin transcodificar (verificado con `WmfMedia`, antes de pasar a Electra); textura 4096 × 2048, `tasa=1.00` |
+| Video de Dan (HEVC 4096×4096 nivel 6, 60 Mbps, 5.1) con `ElectraPlayer` | textura 4096 × 4096, reloj en tiempo real, audio; 1,5 núcleos de CPU y 15 % del decodificador de la GPU (con `WmfMedia`: 6,5 núcleos y 0 %) |
+| Clips de prueba con Electra (HEVC 2048² nivel 5, HEVC 4096² nivel 6, Main10 a 60 fps, H.264 4096 × 2048 a 60 fps) | los cinco abren con la GPU, de 1,4 a 2,0 núcleos |
+| MPEG-4 parte 2 de 1080p | Electra lo rechaza; el ejecutable lo reintenta con `WmfMedia` y lo reproduce |
 | Sala 45 (`DomoVR_45`) | desde el ojo del `PlayerStart`, el patrón y *3gracias* sobre la pantalla inclinada, frente al público |
 | Audio | `pistas_audio=1` y nivel 0,077 con el patrón (el pitido); 0,000 con *3gracias*, cuya pista de audio es silencio (−91 dB medido con ffmpeg); de vuelta al patrón, 0,077 otra vez |
 | Negro | cúpula negra y nivel del audio a cero; al quitarlo vuelve |
@@ -480,10 +519,11 @@ este proyecto, y no existen en el build empaquetado.
 ## 8. Límites
 
 - **8 bits.** `MT_Domo` es de 8 bits por canal, igual que el receptor de
-  Spout. Un video de 10 bits no mejora nada (y con Media Foundation
-  probablemente no abre).
-- **Códecs.** H.264 hasta 4096 de ancho y 30 cuadros por segundo es lo
-  verificado. HAP, ProRes, 8K y 60 cuadros a 4096 × 2048 quedan fuera.
+  Spout. Un video de 10 bits abre (Electra), pero sin la precisión extra.
+- **Códecs.** H.264 y HEVC hasta 4096 × 4096 y 60 cuadros a 4096 × 2048 están
+  verificados con Electra. HAP, ProRes y 8K quedan fuera. HEVC de nivel 6 pide una tarjeta
+  NVIDIA (NVDEC); en otra GPU el ejecutable cae a `WmfMedia` (CPU) o hay que usar
+  **Optimizar video**.
 - **Una pantalla.** El formato `"169"` es una sola pantalla
   (`pantalla169.frag`). Los montajes de muchas pantallas, templates y
   recorridos de `VIDEO_DOME` siguen siendo cosa de TouchDesigner.
@@ -502,7 +542,7 @@ este proyecto, y no existen en el build empaquetado.
   SteamVR o Virtual Desktop y mirar la cúpula en VR.
 - **Los `Failed to create pipeline state` del arranque del build** (sección 7).
 - **Remote Control en el build** con `-RCWebControlEnable`: no probado.
-- **HEVC y 60 cuadros**: no probados.
+- **Otras tarjetas.** La decodificación de GPU se probó solo en una RTX 3090; en AMD o Intel el HEVC nivel 6 no está verificado.
 - **Indicador de uso Nanite: resuelto** el 18 de septiembre de 2026. Las
   superficies de la sala son instancias de `M_SalaPBR`, que lleva el
   indicador; el aviso ya no sale en `-game` ([02_Sala_Unreal.md](02_Sala_Unreal.md),

@@ -28,6 +28,26 @@
 			"Enabled": true
 		},
 		{
+			"Name": "WmfMedia",
+			"Enabled": true
+		},
+		{
+			"Name": "ElectraPlayer",
+			"Enabled": true
+		},
+		{
+			"Name": "ElectraCodecs",
+			"Enabled": true
+		},
+		{
+			"Name": "D3D12VideoDecodersElectra",
+			"Enabled": true
+		},
+		{
+			"Name": "NVDECElectra",
+			"Enabled": true
+		},
+		{
 			"Name": "ModelContextProtocol",
 			"Enabled": true
 		},

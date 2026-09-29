@@ -48,6 +48,7 @@ private:
 	bool bEnViewport = false;
 
 	TArray<TSharedPtr<FString>> OpcionesFuente;
+	TArray<TSharedPtr<FString>> OpcionesReproductor;
 	TArray<TSharedPtr<FString>> OpcionesCue;
 	TArray<TSharedPtr<FString>> OpcionesFormato;
 	TArray<TSharedPtr<FString>> OpcionesLuces;

@@ -53,6 +53,17 @@ $Argumentos = @(
     "-build", "-cook", "-map=$Mapas", "-stage", "-pak", "-prereqs",
     "-archive", "-archivedirectory=`"$Salida`""
 )
+# El staging deja en Movies\ la playlist.json y los controles.json del proyecto y pisa los del build
+# (los que se editaron desde el menu del ejecutable). Se guardan aparte y se devuelven al terminar.
+$MoviesBuildAntes = Join-Path $Salida "Windows\DomoVR\Content\Movies"
+$Respaldo = Join-Path $env:TEMP "domo_movies_respaldo"
+$Conservar = @("playlist.json", "controles.json")
+Remove-Item $Respaldo -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Path $Respaldo -Force | Out-Null
+foreach ($Nombre in $Conservar) {
+    $Ruta = Join-Path $MoviesBuildAntes $Nombre
+    if (Test-Path $Ruta) { Copy-Item $Ruta $Respaldo }
+}
 Write-Host "RunUAT BuildCookRun (log: $Log)..."
 $Inicio = Get-Date
 & $RunUAT @Argumentos 2>&1 | Tee-Object -FilePath $Log | Select-String -Pattern "BUILD SUCCESSFUL|BUILD FAILED|Error:|ExitCode=" | ForEach-Object { $_.Line }
@@ -63,6 +74,13 @@ if ($Codigo -ne 0) { exit $Codigo }
 # Comprobar (y si hace falta completar) la carpeta Movies del build.
 $MoviesBuild = Join-Path $Salida "Windows\DomoVR\Content\Movies"
 New-Item -ItemType Directory -Path $MoviesBuild -Force | Out-Null
+foreach ($Nombre in $Conservar) {
+    $Guardado = Join-Path $Respaldo $Nombre
+    if (Test-Path $Guardado) {
+        Copy-Item $Guardado $MoviesBuild -Force
+        Write-Host "$Nombre del build conservada (la del menu, no la del proyecto)."
+    }
+}
 $Playlist = Join-Path $MoviesProyecto "playlist.json"
 if (Test-Path $Playlist) {
     if (-not (Test-Path (Join-Path $MoviesBuild "playlist.json"))) {

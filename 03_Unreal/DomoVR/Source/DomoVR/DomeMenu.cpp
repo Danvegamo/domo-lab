@@ -142,6 +142,7 @@ FDomeMenu::FDomeMenu(ADomeMediaController* InDuenio)
 	: Duenio(InDuenio)
 {
 	OpcionesFuente = { Opcion(TEXT("Spout (TouchDesigner en vivo)")), Opcion(TEXT("Media (videos de la lista)")) };
+	OpcionesReproductor = { Opcion(TEXT("Automatico")), Opcion(TEXT("Electra (GPU, D3D12)")), Opcion(TEXT("Protron (mp4 local, GPU)")), Opcion(TEXT("Windows Media Foundation (CPU)")) };
 	OpcionesFormato = {
 		Opcion(TEXT("360 equirectangular")), Opcion(TEXT("Domemaster (fisheye 180)")), Opcion(TEXT("VR180 mono")),
 		Opcion(TEXT("VR180 lado a lado")), Opcion(TEXT("Plano 16:9 en una pantalla")) };
@@ -412,6 +413,23 @@ TSharedRef<SWidget> FDomeMenu::SeccionVideo()
 					Deb->SpoutReceiver->SpoutSenderName = FName(*Texto.ToString());
 				}
 			}))
+	];
+
+	Caja->AddSlot().AutoHeight().Padding(0, 2)
+	[
+		Fila(LOCTEXT("Decodificador", "Decodificador de video"),
+			Combo(&OpcionesReproductor,
+				[Deb]()
+				{
+					if (!Deb.IsValid()) { return 0; }
+					const FString N = Deb->Reproductor.ToString();
+					return N == TEXT("ElectraPlayer") ? 1 : N == TEXT("ElectraProtron") ? 2 : N == TEXT("WmfMedia") ? 3 : 0;
+				},
+				[Deb](int32 I)
+				{
+					static const TCHAR* Nombres[] = { TEXT("auto"), TEXT("electra"), TEXT("protron"), TEXT("wmf") };
+					if (Deb.IsValid()) { Deb->PonerReproductor(Nombres[FMath::Clamp(I, 0, 3)]); }
+				}))
 	];
 
 	Caja->AddSlot().AutoHeight().Padding(0, 2)

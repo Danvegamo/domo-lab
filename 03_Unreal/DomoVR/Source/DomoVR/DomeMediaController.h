@@ -358,9 +358,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
 	bool bControlTeclado = true;
 
-	/** Reproductor de Media Framework a forzar. WmfMedia por defecto; vacio = automatico. */
+	/** Reproductor de Media Framework a forzar. ElectraPlayer por defecto (decodifica H.264 y HEVC en la
+	 *  GPU con D3D12 Video y NVDEC); si no abre un archivo se reintenta con WmfMedia. Vacio = automatico. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
-	FName Reproductor = FName(TEXT("WmfMedia"));
+	FName Reproductor = FName(TEXT("ElectraPlayer"));
+
+	/** Cambia el reproductor: auto, electra (decodificador D3D12 en la GPU), protron (mp4 local sobre
+	 *  Electra) o wmf (Windows Media Foundation, decodifica HEVC en CPU con DX12). Reabre el cue. */
+	UFUNCTION(BlueprintCallable, Category = "Domo")
+	void PonerReproductor(const FString& Nombre);
 
 	/** Los cues cargados de la playlist (solo lectura; se editan en el JSON). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Domo")
@@ -649,6 +655,9 @@ private:
 	bool bInicializado = false;
 	bool bCueAbierto = false;
 	bool bPendienteAvanzar = false;
+	/** Si el reproductor elegido (Electra) no abre el archivo, se reintenta una vez con WmfMedia. */
+	bool bRespaldoPendiente = false;
+	bool bAbiertoConRespaldo = false;
 	float AlfaNegro = 0.f;
 	double UltimoReintento = 0.0;
 	FString CarpetaPlaylist;

@@ -21,6 +21,10 @@ formato nuevo para domo y vista aquí dentro de la sala VR.*
 - **Unreal Engine 5.8** recibe esa señal por **Spout** y la proyecta en una
   **sala de planetario en realidad virtual**, para ver el contenido desde una
   butaca, con visor o en pantalla.
+- **Un ejecutable de Windows sin TouchDesigner**: reproduce los videos de una lista
+  directamente en la cúpula, con un menú en pantalla, jugador que camina o vuela,
+  teclas remapeables, montajes de pantallas 16:9 editables en vivo, control por UDP y
+  decodificación de video en la GPU (Electra con D3D12 Video y NVDEC, sin salir de DirectX 12).
 - **Tres modelos de sala** (180 horizontal, 45 tipo Maloka con público
   sentado, 90 de pie con barandas) y las **fichas de los domos de Colombia**,
   para repetir el proceso con otra sala cambiando datos y no código.
@@ -90,6 +94,10 @@ Spout), Blender 4 solo si se quiere regenerar la sala.
    comprobación de [03_Puente_Spout.md](04_Docs/03_Puente_Spout.md).
 3. Para VR: OpenXR está habilitado; con SteamVR o Virtual Desktop corriendo,
    *Play → VR Preview*.
+4. Sin TouchDesigner: `03_Unreal/empaquetar.ps1` (con el editor cerrado) deja el ejecutable en
+   `03_Unreal/Build/Windows/DomoVR.exe`. Los videos y la lista van en `Content/Movies/` junto
+   a él; con F2 se abre el menú. Los videos H.264 y HEVC de hasta 4096 × 4096 se decodifican en
+   la GPU. Ver [06_Unreal_standalone.md](04_Docs/06_Unreal_standalone.md).
 
 ### Por dónde seguir
 
@@ -100,6 +108,7 @@ Spout), Blender 4 solo si se quiere regenerar la sala.
 | abrir o regenerar la sala en Unreal | [04_Docs/02_Sala_Unreal.md](04_Docs/02_Sala_Unreal.md) |
 | conectar TouchDesigner con Unreal (Spout) | [04_Docs/03_Puente_Spout.md](04_Docs/03_Puente_Spout.md) |
 | reproducir videos en la cúpula sin TouchDesigner y empaquetar la sala como programa suelto | [04_Docs/06_Unreal_standalone.md](04_Docs/06_Unreal_standalone.md) |
+| qué cambió y cuándo | [CHANGELOG.md](CHANGELOG.md) |
 | los otros modelos de sala (45 tipo Maloka, sentado; 90 de pie con barandas) | [04_Docs/05_Modelos_de_sala.md](04_Docs/05_Modelos_de_sala.md) |
 | las cúpulas de Colombia y cómo corregir sus datos | [06_Modelos/Domos_de_Colombia.md](06_Modelos/Domos_de_Colombia.md) |
 | probar montajes de pantallas en el navegador, sin TouchDesigner | [00_TouchDesigner/video_dome/web/estudio_pantallas.html](00_TouchDesigner/video_dome/web/estudio_pantallas.html) |
@@ -174,7 +183,46 @@ La lista completa, con fechas, está en la sección 5 de
 04_Docs/                la documentación, numerada en orden de lectura
 05_Preview/             renders de Blender, capturas de Unreal y las pruebas del patrón
 06_Modelos/             domos_colombia.json y su documento
+CHANGELOG.md            bitácora de cambios
 ```
+
+## Hoja de ruta
+
+Lo que ya funciona está en el [CHANGELOG](CHANGELOG.md). Esto es lo que sigue, en orden
+aproximado; nada de lo pendiente está prometido para una fecha.
+
+**Hecho (septiembre de 2026)**
+
+- [x] Sala 180 fiel al Planetario de Bogotá, salas 45 y 90, importador que no borra ajustes.
+- [x] Ejecutable sin TouchDesigner: menú en pantalla, playlist, control por UDP.
+- [x] Jugador que camina, vuela o atraviesa, con teclas remapeables.
+- [x] Montajes de pantallas 16:9 (21 plantillas) editables en vivo y guardados.
+- [x] Velo de la cúpula al encender las luces.
+- [x] Decodificación de video en la GPU con DX12 (Electra + D3D12 Video + NVDEC) y respaldo a CPU.
+
+**Siguiente**
+
+- [ ] **TouchDesigner:** guardar y versionar el `.toe`; módulos nuevos de entrada para
+  modelos 3D y animaciones (`IN_3D`, `IN_FX`); un master de brillo y negro; y un panel
+  para controlar el ejecutable de Unreal por UDP.
+- [ ] **El build en el visor:** abrirlo con SteamVR o Virtual Desktop y comprobar la cúpula,
+  el menú y el movimiento en realidad virtual (hasta ahora solo se probó con `-nohmd`).
+- [ ] **Decodificación en otras tarjetas:** confirmar HEVC y H.264 de 4K en AMD e Intel
+  (hoy solo una RTX 3090); si `NVDECElectra`, que es experimental, cambia en UE 5.9, revisarlo.
+- [ ] **Remote Control en el build** (`-RCWebControlEnable`), para tener un segundo camino
+  de control además del UDP.
+
+**Más adelante**
+
+- [ ] Fundido entre cues y un segundo reproductor para mezclar dos videos (hoy hay uno solo).
+- [ ] La costura fundida del 360 dentro del material de la cúpula (hoy solo el giro esférico).
+- [ ] Textura de la cúpula en 16 bits o HDR (hoy 8 bits, igual que el receptor de Spout).
+- [ ] Códec HAP como alternativa cuando el disco sea más barato que la GPU.
+- [ ] Más salas de Colombia, con medidas en sitio.
+- [ ] Un paquete listo para descargar (build de Windows) en las *releases* de GitHub,
+  con los videos de prueba generados por script.
+
+Las propuestas se abren como *issue* o *pull request*; ver la sección Contribuir.
 
 ## Contribuir
 

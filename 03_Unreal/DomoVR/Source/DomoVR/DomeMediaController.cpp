@@ -868,7 +868,10 @@ void ADomeMediaController::AbrirCue(int32 Indice)
 	}
 	FuenteArchivo->SetFilePath(Ruta);
 
-	MediaPlayer->SetDesiredPlayerName(Reproductor);
+	const FName Respaldo(TEXT("WmfMedia"));
+	bAbiertoConRespaldo = bRespaldoPendiente;
+	bRespaldoPendiente = false;
+	MediaPlayer->SetDesiredPlayerName(bAbiertoConRespaldo ? Respaldo : Reproductor);
 	MediaPlayer->PlayOnOpen = true;
 	MediaPlayer->SetLooping(C.Loop);
 	bPendienteAvanzar = false;
@@ -1009,6 +1012,10 @@ void ADomeMediaController::Tick(float DeltaSeconds)
 			FpsAcumTiempo = 0.f;
 			FpsAcumMax = 0.f;
 			FpsAcumCuadros = 0;
+		}
+		if (bRespaldoPendiente && Fuente == EDomeFuente::Media && Cues.IsValidIndex(CueActual))
+		{
+			AbrirCue(CueActual);
 		}
 		ActualizarFormatoAuto();
 		RevisarPeso();
@@ -1380,14 +1387,50 @@ void ADomeMediaController::AlTerminarVideo()
 	}
 }
 
+void ADomeMediaController::PonerReproductor(const FString& Nombre)
+{
+	FName Nuevo = NAME_None;
+	if (Nombre.Equals(TEXT("electra"), ESearchCase::IgnoreCase) || Nombre.Equals(TEXT("ElectraPlayer"), ESearchCase::IgnoreCase))
+	{
+		Nuevo = FName(TEXT("ElectraPlayer"));
+	}
+	else if (Nombre.Equals(TEXT("protron"), ESearchCase::IgnoreCase) || Nombre.Equals(TEXT("ElectraProtron"), ESearchCase::IgnoreCase))
+	{
+		Nuevo = FName(TEXT("ElectraProtron"));
+	}
+	else if (Nombre.Equals(TEXT("wmf"), ESearchCase::IgnoreCase) || Nombre.Equals(TEXT("WmfMedia"), ESearchCase::IgnoreCase))
+	{
+		Nuevo = FName(TEXT("WmfMedia"));
+	}
+	else if (!Nombre.Equals(TEXT("auto"), ESearchCase::IgnoreCase) && !Nombre.IsEmpty())
+	{
+		Nuevo = FName(*Nombre);
+	}
+	Reproductor = Nuevo;
+	UE_LOG(LogDomoMedia, Display, TEXT("Reproductor: %s"), Nuevo.IsNone() ? TEXT("automatico") : *Nuevo.ToString());
+	if (Fuente == EDomeFuente::Media && Cues.IsValidIndex(CueActual))
+	{
+		AbrirCue(CueActual);
+	}
+}
+
 void ADomeMediaController::AlFallarApertura(FString Url)
 {
 	if (!EstaActivo())
 	{
 		return;
 	}
+	const FName Respaldo(TEXT("WmfMedia"));
+	if (!bAbiertoConRespaldo && !Reproductor.IsNone() && Reproductor != Respaldo)
+	{
+		// Electra rechaza lo que la GPU no decodifica (por ejemplo HEVC nivel 6, de 4096x4096); WmfMedia lo abre en CPU.
+		UE_LOG(LogDomoMedia, Warning, TEXT("%s no pudo abrir %s; se reintenta con WmfMedia (decodifica en CPU)."), *Reproductor.ToString(),
+			Url.IsEmpty() && Cues.IsValidIndex(CueActual) ? *Cues[CueActual].Archivo : *Url);
+		bRespaldoPendiente = true;
+		return;
+	}
 	UE_LOG(LogDomoMedia, Warning, TEXT("No se pudo abrir %s con %s. Revisar el codec (H.264 o HEVC en .mp4; ver 04_Docs/06_Unreal_standalone.md)."),
-		*Url, *Reproductor.ToString());
+		*Url, bAbiertoConRespaldo ? *Respaldo.ToString() : *Reproductor.ToString());
 	Mensaje(FString::Printf(TEXT("No se pudo abrir %s"), *FPaths::GetCleanFilename(Url)), 6.f);
 	// No reintentar en bucle: queda cerrado hasta el proximo cambio de cue.
 	bCueAbierto = false;
@@ -1723,9 +1766,10 @@ void ADomeMediaController::RevisarPeso()
 		return;
 	}
 	bPesoRevisado = true;
-	if (FMath::Max(D.X, D.Y) >= 3500)
+	// Solo WmfMedia decodifica en CPU; Electra usa la GPU (D3D12 Video o NVDEC) y no necesita la copia liviana.
+	if (FMath::Max(D.X, D.Y) >= 3500 && MediaPlayer->GetPlayerName() == FName(TEXT("WmfMedia")))
 	{
-		Mensaje(FString::Printf(TEXT("Video pesado (%dx%d): puede trabarse. Menu > Fuente y video > Optimizar video hace una copia liviana."), D.X, D.Y), 12.f);
+		Mensaje(FString::Printf(TEXT("Video pesado (%dx%d) decodificado en CPU: puede trabarse. Menu > Fuente y video > Optimizar video hace una copia liviana."), D.X, D.Y), 12.f);
 	}
 }
 
@@ -2619,6 +2663,12 @@ namespace
 				if (A.Num() > 0) { C.LadoOptimizado = FCString::Atoi(*A[0]); }
 				C.OptimizarVideoActual();
 			});
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdReproductor(TEXT("domo.Reproductor"), TEXT("domo.Reproductor auto|electra|protron|wmf: elige el decodificador de video (electra y protron usan la GPU con DX12)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& A, UWorld* W)
+		{
+			ConControlador(W, [&](ADomeMediaController& C) { C.PonerReproductor(A.Num() > 0 ? A[0] : TEXT("auto")); });
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdPlantilla(TEXT("domo.Plantilla"), TEXT("domo.Plantilla id: montaje de pantallas 16:9 (cine, sala_2, sala_4, sala_corona, tunel, anillo, cilindro...)."),
