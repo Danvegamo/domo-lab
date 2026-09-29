@@ -192,6 +192,7 @@ relativa a `Content/` (`Movies/playlist.json`), que en el build es
 | Inicio | volver al principio del cue |
 | S | alternar la fuente entre Media y Spout |
 | F1 | ayuda y estado en pantalla |
+| F2 o M | mostrar u ocultar el menú en pantalla (ver abajo) |
 
 Av Pág, Re Pág, B y punto son las teclas que mandan los presentadores
 inalámbricos, así que uno de esos sirve de control de cabina. El controlador
@@ -250,6 +251,54 @@ para esto).
 **Audio.** Sale del mismo reproductor que la imagen, por un
 `MediaSoundComponent` no espacial (suena igual en toda la sala), así que cambia
 con el cue sin nada más. El fundido a negro también baja el audio.
+
+### Menú en pantalla (sin teclado ni consola)
+
+Desde el 29 de septiembre de 2026 el ejecutable trae un menú en pantalla para
+operar la cúpula con el mouse, sin TouchDesigner. Sale del código
+(`DomeMenu.cpp`, Slate), no de un asset, así que viaja dentro del build sin
+pasos manuales. En el ejecutable arranca visible; **F2 o M** lo muestran y lo
+ocultan (también el botón *Ocultar*). En el editor arranca oculto
+(`-DomoMenu=0|1` pisa las dos cosas). Con el menú abierto aparece el cursor.
+
+| Sección | Qué hace |
+|---|---|
+| Fuente y video | Desplegable de fuente (Spout o Media); nombre del sender de Spout (Enter para aplicar); desplegable con los videos de la lista; anterior, play/pausa, reiniciar, siguiente; barra de tiempo; **Abrir video…** (diálogo de Windows, uno o varios archivos de cualquier carpeta), **Traer la carpeta** (agrega los videos de la carpeta de la lista que no estén), **Recargar lista**, **Guardar lista** (escribe `playlist.json`, con una copia `.bak` la primera vez); Repetir, Pasar al siguiente, Negro |
+| Imagen en la cúpula | Formato del video (360, domemaster, VR180, VR180 lado a lado, plano 16:9) y deslizadores de Brillo, Volumen, Giro, Inclinar, Rodar, Horizonte, Curva, FOV del contenido y el mapping del domemaster (Centro X e Y, Escala, Rotar). Valen para el cue actual y se guardan con *Guardar lista* |
+| Pantalla 16:9 | Azimut, elevación, ancho, alto, borde y curvatura de la pantalla del formato plano |
+| Sala, luces y vista | Luces (automáticas, encendidas, apagadas), punto de vista (espectador, cabina mirando la cúpula o las pantallas, tarima, cada pasillo hacia su salida), calidad (VR o Render), sala (180, 90, 45) y salir |
+
+Un video que se agrega desde el menú toma el formato del nombre del archivo
+(`domemaster`, `360`, `vr180`, `16x9`…) o, si el nombre no dice nada, de sus
+proporciones al abrirlo (cuadrado = domemaster, 2:1 = 360, lo demás = plano).
+Se puede cambiar en la sección de imagen. Los puntos de vista son actores
+`TargetPoint` con la etiqueta `domo_vista` que crea `realismo_sala.py` a partir
+del manifiesto, así que siguen a la planta si Blender la cambia.
+
+**Verificación.** El menú se dibujó en un PNG dentro del build empaquetado con
+`domo.MenuFoto <ruta.png> [ancho alto]` (con `-DomoMenuTodo` salen abiertas
+todas las secciones). **Los clics del mouse no se probaron con un mouse real**:
+los desplegables, el diálogo de archivos y los deslizadores se revisaron por
+construcción y por sus efectos (los mismos métodos que los comandos `domo.*`,
+que sí se probaron), no pulsándolos.
+
+### Control por UDP (TouchDesigner, Resolume, QLab, un script)
+
+El ejecutable escucha líneas de texto en `127.0.0.1:7000`. Cada línea es un
+comando de consola `domo.*`; cualquier otra cosa se ignora (no se puede mandar
+`quit` ni otros comandos del motor). Ejemplos: `domo.Cue 2`, `domo.Luces 0`,
+`domo.Negro 1`, `domo.Param Yaw 45`, `domo.Sender TD_Domo_Lab`,
+`domo.Abrir C:/videos/domemaster.mp4` (lo agrega a la lista y lo pone),
+`domo.Guardar`, `domo.Menu 0`. Un mensaje puede traer varias líneas.
+
+- El puerto se cambia con `PuertoUdp` (config del controlador) o
+  `-DomoUdp=<puerto>`; `0` lo apaga.
+- Por defecto solo escucha en este equipo. Para recibir desde otro
+  computador de la red: `bUdpEnRed=True` o `-DomoUdpRed`. **No hay
+  autenticación**: úsese en una red de confianza.
+- El menú muestra en qué puerto escucha. Se probó mandando un datagrama desde
+  PowerShell (`domo.Luces 0`, `domo.Cue 3`, `domo.Abrir …` se ejecutaron y `quit` se
+  rechazó).
 
 ## 6. Empaquetado
 

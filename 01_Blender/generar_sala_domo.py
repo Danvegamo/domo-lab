@@ -933,7 +933,7 @@ def agregar_silla_operador(bm, M):
 
 def crear_zona_control_piezas(layout, mat_control):
     """Cabina de control contra el muro de atras (180 grados), detras del grupo de
-    butacas de atras. Cerrada a la vista del publico: una particion curva de 2,4 m
+    butacas de atras. Cerrada a la vista del publico: una particion curva de 1,3 m
     concentrica al muro y dos paneles RADIALES (perpendiculares a la curva del muro)
     que la unen con el. Adentro, el operador mira hacia el muro y las pantallas
     quedan entre el y el muro, de espaldas a la sala, asi el publico no ve que se
@@ -944,7 +944,7 @@ def crear_zona_control_piezas(layout, mat_control):
     ang_centro = math.radians(ANGULO_CENTRO_CONTROL_DEG)
     r_in, r_out = RADIO_INICIO_CONTROL, RADIO_DOMO - 0.1
     piezas = []
-    ALTURA_CABINA = 2.4
+    ALTURA_CABINA = 1.3   # medida del Planetario de Bogotá (foto de David, 29 sep): el operador ve la cúpula por encima
     GROSOR_CABINA = 0.08
 
     def registrar(obj, malla, **extra):

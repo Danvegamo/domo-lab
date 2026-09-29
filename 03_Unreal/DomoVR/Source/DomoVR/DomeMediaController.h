@@ -21,6 +21,8 @@ class UMediaSoundComponent;
 class UMediaTexture;
 class UStaticMeshComponent;
 class ASpoutDomeReceiver;
+class FDomeMenu;
+class FSocket;
 
 /** Como viene el video. Los numeros son los que lee el material (parametro Formato). */
 UENUM(BlueprintType)
@@ -148,6 +150,10 @@ struct FDomeCue
 	/** true: el video se repite. false: al terminar pasa al siguiente cue (si bAutoAvanzar). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
 	bool Loop = true;
+
+	/** El formato se adivina del video al abrirlo (cues agregados desde el menu). No se guarda. */
+	UPROPERTY(Transient)
+	bool bFormatoAuto = false;
 };
 
 UCLASS(ClassGroup = (Domo), config = Game)
@@ -251,6 +257,80 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Domo")
 	bool bNegro = false;
+
+	// --- Menu en pantalla ---------------------------------------------------------
+	// Panel de Slate (DomeMenu.h) para operar sin TouchDesigner: fuente, videos,
+	// imagen, luces, punto de vista, calidad y sala. F2 o M lo muestran y ocultan.
+
+	/** El menu arranca visible fuera del editor (el ejecutable). En el editor arranca
+	 *  oculto y se abre con F2. -DomoMenu=0|1 pisa las dos. */
+	UPROPERTY(Config, EditAnywhere, Category = "Domo|Menu")
+	bool bMenuAlArrancar = true;
+
+	/** Ultimo aviso (se ve en el menu). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Domo|Menu")
+	FString UltimoMensaje;
+
+	UFUNCTION(BlueprintCallable, Category = "Domo|Menu")
+	void MostrarMenu(bool bVer);
+
+	UFUNCTION(BlueprintCallable, Category = "Domo|Menu")
+	void AlternarMenu();
+
+	/** Dibuja el menu en un PNG. Para verificar el aspecto sin ventana. */
+	bool FotografiarMenu(const FString& Ruta, int32 Ancho, int32 Alto);
+
+	/** Valor actual de un parametro del cue (los mismos nombres de SetParam). */
+	UFUNCTION(BlueprintPure, Category = "Domo")
+	float GetParam(FName Nombre) const;
+
+	/** Repetir el cue actual. */
+	UFUNCTION(BlueprintCallable, Category = "Domo")
+	void SetLoop(bool bRepetir);
+
+	/** Agrega videos a la lista (rutas completas) y salta al primero. El formato se
+	 *  adivina del nombre del archivo o, si no, de las proporciones del video. */
+	UFUNCTION(BlueprintCallable, Category = "Domo")
+	int32 AgregarVideos(const TArray<FString>& Rutas);
+
+	/** Agrega los videos de la carpeta de la playlist que aun no estan. Devuelve cuantos. */
+	UFUNCTION(BlueprintCallable, Category = "Domo")
+	int32 EscanearCarpeta();
+
+	/** Escribe la playlist (con una copia .bak la primera vez). */
+	UFUNCTION(BlueprintCallable, Category = "Domo")
+	bool GuardarPlaylist();
+
+	/** Carpeta donde viven la playlist y los videos. */
+	UFUNCTION(BlueprintPure, Category = "Domo")
+	FString CarpetaVideos() const { return CarpetaPlaylist; }
+
+	/** Mueve al jugador (cm, grados). Lo usan el menu y domo.Camara. */
+	void IrAVista(const FVector& Ubicacion, const FRotator& Rotacion, const FString& Nombre);
+
+	// --- Control por UDP ----------------------------------------------------------
+	// TouchDesigner (UDP Out DAT), Resolume, QLab o un script mandan lineas de
+	// texto a este puerto: cada linea es un comando de consola domo.* (domo.Cue 2,
+	// domo.Luces 0, domo.Abrir C:/videos/a.mp4...). Solo se ejecutan los que
+	// empiezan con "domo.". Escucha en 127.0.0.1 salvo que se pida la red.
+
+	/** Puerto UDP de control. 0 = apagado. -DomoUdp=<puerto> lo pisa; -DomoUdpRed abre la red local. */
+	UPROPERTY(Config, EditAnywhere, Category = "Domo|Control")
+	int32 PuertoUdp = 7000;
+
+	/** Escuchar en toda la red local (0.0.0.0) en vez de solo en este equipo. */
+	UPROPERTY(Config, EditAnywhere, Category = "Domo|Control")
+	bool bUdpEnRed = false;
+
+	/** Una linea para el menu: en que puerto escucha (o que esta apagado). */
+	FString DescribirUdp() const;
+
+	/** Ejecuta una linea de control (la misma que llega por UDP). Devuelve false si no es un comando domo.*. */
+	bool EjecutarLineaDeControl(const FString& Linea);
+
+	/** Abre un video por ruta completa (lo agrega a la lista y lo pone). */
+	UFUNCTION(BlueprintCallable, Category = "Domo")
+	bool AbrirVideoPorRuta(const FString& Ruta);
 
 	// --- Luces de sala ------------------------------------------------------------
 	// Las luces de la sala (franja y focos del muro, luces de pasillo, anillo de la
@@ -404,6 +484,18 @@ private:
 	TArray<TWeakObjectPtr<AActor>> ActoresLuz;
 	void RecogerLuces();
 	void ConfigurarTeclado();
+	TSharedPtr<FDomeMenu> Menu;
+	FString CarpetaEnJson;
+	FString NotaEnJson;
+	bool bFormatoPendiente = false;
+	bool bCopiaHecha = false;
+	bool bMenuListo = false;
+	FSocket* SocketUdp = nullptr;
+	FString UdpDescripcion;
+	void AbrirUdp();
+	void CerrarUdp();
+	void LeerUdp();
+	void ActualizarFormatoAuto();
 	void Mensaje(const FString& Texto, float Segundos = 3.f) const;
 	void CorrerGuion(float DeltaSeconds);
 
@@ -421,5 +513,6 @@ private:
 	void TeclaReiniciar() { Reiniciar(); }
 	void TeclaFuente() { ToggleFuente(); }
 	void TeclaAyuda();
+	void TeclaMenu() { AlternarMenu(); }
 	void TeclaCue(int32 Indice) { GoToCue(Indice); }
 };

@@ -653,6 +653,45 @@ def _rot_vec(yaw_deg, x, y):
     return x * math.cos(t) - y * math.sin(t), x * math.sin(t) + y * math.cos(t)
 
 
+ETIQUETA_VISTA = "domo_vista"
+PREFIJO_VISTA = "vista:"
+
+
+def puntos_de_vista(actor_subsystem, manifiesto):
+    """Puntos de vista del menu del ejecutable (DomeMenu): TargetPoints con la
+    etiqueta domo_vista y el nombre en la etiqueta "vista:<nombre>". Salen del
+    manifiesto (ojo del espectador, silla del operador, pasillos), asi que se
+    mueven solos si Blender cambia la planta."""
+    vistas = []
+    ojo = manifiesto["ojo"]
+    vistas.append(("Espectador (butaca)", ojo["pos_m"], ojo["yaw_deg"], 45.0))
+    sillas = manifiesto["instancias"].get("SM_SillaOperador", {}).get("items", [])
+    if sillas:
+        s = sillas[0]
+        pos = [s["pos_m"][0], s["pos_m"][1], 1.25]
+        vistas.append(("Cabina: mirando la cupula", pos, s["yaw_deg"] + 180.0, 40.0))
+        vistas.append(("Cabina: mirando las pantallas", pos, s["yaw_deg"], -8.0))
+    vistas.append(("Tarima (centro)", [0.0, 0.0, 2.65], 0.0, 55.0))
+    for k, p in enumerate(manifiesto["pasillos"]):
+        ang = p["ang_deg"]
+        r = p["r_min_m"] + 1.5
+        pos = [r * math.cos(math.radians(ang)), r * math.sin(math.radians(ang)), 1.7]
+        vistas.append(("Pasillo {} hacia la salida".format(k + 1), pos, ang, 0.0))
+    n = 0
+    for nombre, pos_m, yaw_b, pitch in vistas:
+        loc = unreal.Vector(pos_m[0] * 100.0, -pos_m[1] * 100.0, pos_m[2] * 100.0)
+        a = actor_subsystem.spawn_actor_from_class(unreal.TargetPoint, loc,
+                                                   unreal.Rotator(roll=0.0, pitch=pitch, yaw=-yaw_b))
+        if a is None:
+            fallar("spawn_actor_from_class devolvio None para TargetPoint (vista).")
+        a.set_actor_label("Vista_{:02d}".format(n + 1))
+        a.tags = [unreal.Name(ETIQUETA_DETALLE), unreal.Name(ETIQUETA_VISTA), unreal.Name(PREFIJO_VISTA + nombre)]
+        a.set_folder_path(CARPETA_DETALLES)
+        n += 1
+    return n
+
+
+
 def detalles_180(actor_subsystem, mats, manifiesto):
     """Luces de pasillo, monitores de la consola y luces
     de muro, a partir de 02_Export/sala_domo.json (lo escribe
@@ -701,6 +740,7 @@ def detalles_180(actor_subsystem, mats, manifiesto):
             n += 1
     else:
         log("No hay Monitores_Actor en el nivel: se omiten las pantallas de la consola.")
+    n += puntos_de_vista(actor_subsystem, manifiesto)
     # luces de muro: un foco de luz real cada N focos de la franja emisiva
     lm = manifiesto.get("luces_muro")
     if lm:

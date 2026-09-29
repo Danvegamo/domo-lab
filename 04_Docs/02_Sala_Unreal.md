@@ -58,7 +58,7 @@ cilindro. Todo se genera desde las constantes de `01_Blender/generar_sala_domo.p
 | Butacas | 265 = 3 grupos de 73 + el de atrás de 46 | reclinadas 40° hacia atrás; espectador casi acostado. El total sale de la geometría (aforo publicado: 375); 4 pasillos de 1,3 m con ancho constante |
 | Filas por grupo | 5 (4 en el de atrás); los grupos del frente y laterales van de 4,2 a 9,0 m y el de atrás de 3,6 a 7,2 m | paso radial 1,2 m; paso entre butacas 0,6 m; se calculan, no se escriben |
 | Espacio hacia las salidas | de las últimas filas (a 10 m) al muro | cada pasillo llega libre a su salida |
-| Cabina de control | contra el muro de atrás, detrás del grupo de atrás | partición curva de 2,4 m concéntrica al muro y dos paneles radiales; el operador mira al muro y las pantallas quedan de espaldas a la sala |
+| Cabina de control | contra el muro de atrás, detrás del grupo de atrás | partición curva de 1,3 m (la altura real del Planetario: el operador ve la cúpula por encima) concéntrica al muro y dos paneles radiales; el operador mira al muro y las pantallas quedan de espaldas a la sala |
 | Puertas | 4, de 1,4 × 2,3 m | una al final de cada pasillo (salidas de emergencia), a 45°, 135°, 225° y 315° |
 | Luces de muro | focos en lo alto (a 2,75 m) que alumbran hacia el piso | se apagan con la señal, ver la sección 15 |
 | Listones de madera | ancho 7 cm, paso 14 cm | revestimiento vertical del muro, material `M_Madera` |

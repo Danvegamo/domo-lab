@@ -21,5 +21,13 @@ public class DomoVR : ModuleRules
 		// ADomeMediaController: reproductor de video de la cupula sin
 		// TouchDesigner (Media Framework, playlist en JSON, audio del video).
 		PrivateDependencyModuleNames.AddRange(new string[] { "MediaAssets", "AudioMixer", "Json" });
+
+		// DomeMenu: menu en pantalla en Slate (desplegables, deslizadores, botones)
+		// y dialogo de Windows para abrir videos (comdlg32).
+		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore", "ApplicationCore", "UMG", "RenderCore", "Sockets", "Networking" });
+		if (Target.Platform == UnrealTargetPlatform.Win64)
+		{
+			PublicSystemLibraries.Add("comdlg32.lib");
+		}
 	}
 }

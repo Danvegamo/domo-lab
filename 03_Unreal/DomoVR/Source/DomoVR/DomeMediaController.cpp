@@ -1,6 +1,7 @@
 #include "DomeMediaController.h"
 
 #include "SpoutDomeReceiver.h"
+#include "DomeMenu.h"
 
 #include "Components/InputComponent.h"
 #include "Components/LightComponent.h"
@@ -8,8 +9,14 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Common/UdpSocketBuilder.h"
 #include "Dom/JsonObject.h"
+#include "Interfaces/IPv4/IPv4Address.h"
+#include "Interfaces/IPv4/IPv4Endpoint.h"
+#include "Sockets.h"
+#include "SocketSubsystem.h"
 #include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "FileMediaSource.h"
@@ -28,6 +35,7 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
+#include "Serialization/JsonWriter.h"
 #include "Serialization/JsonSerializer.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDomoMedia, Log, All);
@@ -105,6 +113,52 @@ namespace
 		if (T == TEXT("169") || T == TEXT("16:9") || T == TEXT("plano") || T == TEXT("pantalla")) return EDomeFormato::Plano169;
 		bOk = false;
 		return EDomeFormato::Equirect360;
+	}
+
+	const TCHAR* FormatoATexto(EDomeFormato F)
+	{
+		switch (F)
+		{
+		case EDomeFormato::Domemaster: return TEXT("domemaster");
+		case EDomeFormato::VR180: return TEXT("vr180");
+		case EDomeFormato::VR180SBS: return TEXT("vr180sbs");
+		case EDomeFormato::Plano169: return TEXT("169");
+		default: return TEXT("360");
+		}
+	}
+
+	/** Formato por el nombre del archivo; false si el nombre no dice nada. */
+	bool FormatoPorNombre(const FString& Nombre, EDomeFormato& Out)
+	{
+		const FString N = Nombre.ToLower();
+		if (N.Contains(TEXT("vr180")))
+		{
+			Out = (N.Contains(TEXT("sbs")) || N.Contains(TEXT("lr"))) ? EDomeFormato::VR180SBS : EDomeFormato::VR180;
+			return true;
+		}
+		if (N.Contains(TEXT("domemaster")) || N.Contains(TEXT("fisheye")) || N.Contains(TEXT("dome")))
+		{
+			Out = EDomeFormato::Domemaster;
+			return true;
+		}
+		if (N.Contains(TEXT("360")) || N.Contains(TEXT("equirect")))
+		{
+			Out = EDomeFormato::Equirect360;
+			return true;
+		}
+		if (N.Contains(TEXT("16x9")) || N.Contains(TEXT("169")) || N.Contains(TEXT("1080p")) || N.Contains(TEXT("1920x1080")))
+		{
+			Out = EDomeFormato::Plano169;
+			return true;
+		}
+		return false;
+	}
+
+	bool EsVideo(const FString& Archivo)
+	{
+		const FString E = FPaths::GetExtension(Archivo).ToLower();
+		return E == TEXT("mp4") || E == TEXT("mov") || E == TEXT("mkv") || E == TEXT("avi") || E == TEXT("m4v")
+			|| E == TEXT("wmv") || E == TEXT("webm");
 	}
 }
 
@@ -212,6 +266,27 @@ void ADomeMediaController::BeginPlay()
 	Inicializar();
 	ConfigurarTeclado();
 
+	bool bVerMenu = GIsEditor ? false : bMenuAlArrancar;
+	int32 CmdMenu = 0;
+	if (FParse::Value(FCommandLine::Get(), TEXT("DomoMenu="), CmdMenu))
+	{
+		bVerMenu = CmdMenu != 0;
+	}
+	if (GEngine && GEngine->GameViewport && !IsRunningDedicatedServer())
+	{
+		Menu = MakeShared<FDomeMenu>(this);
+		if (Menu->Construir())
+		{
+			Menu->Mostrar(bVerMenu);
+		}
+		else
+		{
+			Menu.Reset();
+		}
+	}
+
+	AbrirUdp();
+
 	FString RutaGuion;
 	if (FParse::Value(FCommandLine::Get(), TEXT("DomoGuion="), RutaGuion))
 	{
@@ -268,6 +343,9 @@ bool ADomeMediaController::AplicarPreset(const FString& Nombre)
 
 void ADomeMediaController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	CerrarUdp();
+	Menu.Reset();
+	bMenuListo = false;
 	if (MediaPlayer)
 	{
 		MediaPlayer->OnEndReached.RemoveDynamic(this, &ADomeMediaController::AlTerminarVideo);
@@ -363,9 +441,12 @@ bool ADomeMediaController::CargarPlaylist(const FString& Ruta)
 		return false;
 	}
 
+	Raiz->TryGetStringField(TEXT("_nota"), NotaEnJson);
 	FString Carpeta;
+	CarpetaEnJson.Reset();
 	if (Raiz->TryGetStringField(TEXT("carpeta"), Carpeta) && !Carpeta.IsEmpty())
 	{
+		CarpetaEnJson = Carpeta;
 		CarpetaPlaylist = FPaths::IsRelative(Carpeta) ? FPaths::Combine(CarpetaPlaylist, Carpeta) : Carpeta;
 	}
 
@@ -485,6 +566,7 @@ void ADomeMediaController::AbrirCue(int32 Indice)
 	CueActual = Indice;
 	const FDomeCue& C = Cues[Indice];
 	AplicarParametros(C);
+	bFormatoPendiente = C.bFormatoAuto;
 
 	if (Fuente != EDomeFuente::Media || !MediaPlayer)
 	{
@@ -637,6 +719,14 @@ void ADomeMediaController::Tick(float DeltaSeconds)
 		{
 			ConfigurarTeclado();
 		}
+		if (Menu.IsValid() && !bMenuListo && GetWorld() && GetWorld()->GetFirstPlayerController())
+		{
+			// El jugador puede no existir aun en BeginPlay: se vuelve a aplicar el modo de entrada.
+			bMenuListo = true;
+			Menu->Mostrar(Menu->EstaVisible());
+		}
+		ActualizarFormatoAuto();
+		LeerUdp();
 		CorrerGuion(DeltaSeconds);
 	}
 }
@@ -951,6 +1041,405 @@ void ADomeMediaController::AlFallarApertura(FString Url)
 	bCueAbierto = false;
 }
 
+// --- Control por UDP ----------------------------------------------------------------
+
+void ADomeMediaController::AbrirUdp()
+{
+	int32 Puerto = PuertoUdp;
+	FParse::Value(FCommandLine::Get(), TEXT("DomoUdp="), Puerto);
+	const bool bRed = bUdpEnRed || FParse::Param(FCommandLine::Get(), TEXT("DomoUdpRed"));
+	if (Puerto <= 0)
+	{
+		UdpDescripcion = TEXT("Control por UDP apagado");
+		return;
+	}
+	const FIPv4Address Direccion = bRed ? FIPv4Address::Any : FIPv4Address(127, 0, 0, 1);
+	SocketUdp = FUdpSocketBuilder(TEXT("DomoControlUdp"))
+		.AsNonBlocking()
+		.AsReusable()
+		.BoundToEndpoint(FIPv4Endpoint(Direccion, static_cast<uint16>(Puerto)))
+		.WithReceiveBufferSize(65536)
+		.Build();
+	if (SocketUdp)
+	{
+		UdpDescripcion = FString::Printf(TEXT("Control por UDP en %s:%d (lineas domo.Cue 2, domo.Luces 0, domo.Abrir ruta...)"),
+			bRed ? TEXT("toda la red") : TEXT("127.0.0.1"), Puerto);
+	}
+	else
+	{
+		UdpDescripcion = FString::Printf(TEXT("No se pudo abrir el puerto UDP %d (esta en uso?)"), Puerto);
+	}
+	UE_LOG(LogDomoMedia, Display, TEXT("%s"), *UdpDescripcion);
+}
+
+void ADomeMediaController::CerrarUdp()
+{
+	if (SocketUdp)
+	{
+		SocketUdp->Close();
+		if (ISocketSubsystem* Subsistema = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM))
+		{
+			Subsistema->DestroySocket(SocketUdp);
+		}
+		SocketUdp = nullptr;
+	}
+}
+
+FString ADomeMediaController::DescribirUdp() const
+{
+	return UdpDescripcion;
+}
+
+void ADomeMediaController::LeerUdp()
+{
+	if (!SocketUdp)
+	{
+		return;
+	}
+	uint32 Tamano = 0;
+	int32 Limite = 32;	// paquetes por cuadro
+	while (Limite-- > 0 && SocketUdp->HasPendingData(Tamano))
+	{
+		TArray<uint8> Bytes;
+		Bytes.SetNumZeroed(static_cast<int32>(FMath::Min<uint32>(Tamano, 65507u)) + 1);
+		int32 Leidos = 0;
+		if (!SocketUdp->Recv(Bytes.GetData(), Bytes.Num() - 1, Leidos) || Leidos <= 0)
+		{
+			break;
+		}
+		Bytes[Leidos] = 0;
+		const FString Texto = FString(UTF8_TO_TCHAR(reinterpret_cast<const char*>(Bytes.GetData())));
+		TArray<FString> Lineas;
+		Texto.ParseIntoArrayLines(Lineas);
+		for (const FString& Linea : Lineas)
+		{
+			EjecutarLineaDeControl(Linea);
+		}
+	}
+}
+
+bool ADomeMediaController::EjecutarLineaDeControl(const FString& LineaCruda)
+{
+	const FString Linea = LineaCruda.TrimStartAndEnd();
+	if (!Linea.StartsWith(TEXT("domo."), ESearchCase::IgnoreCase))
+	{
+		UE_LOG(LogDomoMedia, Warning, TEXT("Control: se ignora '%s' (solo comandos domo.*)"), *Linea);
+		return false;
+	}
+	UE_LOG(LogDomoMedia, Display, TEXT("Control> %s"), *Linea);
+	APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	if (PC)
+	{
+		PC->ConsoleCommand(Linea, true);
+	}
+	else if (GEngine)
+	{
+		GEngine->Exec(GetWorld(), *Linea);
+	}
+	return true;
+}
+
+bool ADomeMediaController::AbrirVideoPorRuta(const FString& Ruta)
+{
+	return AgregarVideos({ Ruta }) > 0 || Cues.Num() > 0;
+}
+
+// --- Menu y lista de videos ---------------------------------------------------------
+
+void ADomeMediaController::MostrarMenu(bool bVer)
+{
+	if (Menu.IsValid())
+	{
+		Menu->Mostrar(bVer);
+	}
+}
+
+void ADomeMediaController::AlternarMenu()
+{
+	if (Menu.IsValid())
+	{
+		Menu->Alternar();
+	}
+}
+
+bool ADomeMediaController::FotografiarMenu(const FString& Ruta, int32 Ancho, int32 Alto)
+{
+	return Menu.IsValid() && Menu->Fotografiar(Ruta, Ancho, Alto);
+}
+
+float ADomeMediaController::GetParam(FName Nombre) const
+{
+	if (Nombre == DomoParam::Brillo)
+	{
+		return Brillo;
+	}
+	if (Nombre == DomoParam::FovSala)
+	{
+		return FovSala;
+	}
+	if (Cues.IsValidIndex(CueActual))
+	{
+		FDomeCue& C = const_cast<FDomeCue&>(Cues[CueActual]);
+		if (const float* Campo = CampoDelCue(C, Nombre))
+		{
+			return *Campo;
+		}
+		if (Nombre == DomoParam::Formato)
+		{
+			return static_cast<float>(static_cast<uint8>(C.Formato));
+		}
+		if (Nombre == DomoParam::PantallaCurva)
+		{
+			return C.Pantalla.bCurva ? 1.f : 0.f;
+		}
+	}
+	return 0.f;
+}
+
+void ADomeMediaController::SetLoop(bool bRepetir)
+{
+	if (Cues.IsValidIndex(CueActual))
+	{
+		Cues[CueActual].Loop = bRepetir;
+	}
+	if (MediaPlayer)
+	{
+		MediaPlayer->SetLooping(bRepetir);
+	}
+}
+
+int32 ADomeMediaController::AgregarVideos(const TArray<FString>& Rutas)
+{
+	const FString Base = FPaths::ConvertRelativePathToFull(CarpetaPlaylist);
+	auto RutaDelCue = [&](const FDomeCue& C)
+	{
+		FString R = FPaths::IsRelative(C.Archivo) ? FPaths::Combine(Base, C.Archivo) : C.Archivo;
+		R = FPaths::ConvertRelativePathToFull(R);
+		FPaths::NormalizeFilename(R);
+		return R;
+	};
+
+	int32 Primero = INDEX_NONE;
+	int32 Nuevos = 0;
+	for (const FString& Ruta : Rutas)
+	{
+		FString Completa = FPaths::ConvertRelativePathToFull(Ruta);
+		FPaths::NormalizeFilename(Completa);
+		if (!FPaths::FileExists(Completa))
+		{
+			continue;
+		}
+		int32 Existente = Cues.IndexOfByPredicate([&](const FDomeCue& C) { return RutaDelCue(C).Equals(Completa, ESearchCase::IgnoreCase); });
+		if (Existente == INDEX_NONE)
+		{
+			FDomeCue C;
+			C.Nombre = FPaths::GetBaseFilename(Completa);
+			FString Rel = Completa;
+			C.Archivo = (FPaths::MakePathRelativeTo(Rel, *(Base / TEXT(""))) && !Rel.StartsWith(TEXT(".."))) ? Rel : Completa;
+			EDomeFormato F = EDomeFormato::Plano169;
+			if (FormatoPorNombre(C.Nombre, F))
+			{
+				C.Formato = F;
+			}
+			else
+			{
+				C.Formato = EDomeFormato::Plano169;
+				C.bFormatoAuto = true;
+			}
+			Existente = Cues.Add(C);
+			++Nuevos;
+		}
+		if (Primero == INDEX_NONE)
+		{
+			Primero = Existente;
+		}
+	}
+	if (Primero == INDEX_NONE)
+	{
+		Mensaje(TEXT("No se agrego ningun video"));
+		return 0;
+	}
+	if (Fuente != EDomeFuente::Media)
+	{
+		CueActual = Primero;
+		SetFuente(EDomeFuente::Media);
+	}
+	else
+	{
+		GoToCue(Primero);
+	}
+	if (Menu.IsValid())
+	{
+		Menu->RefrescarListas();
+	}
+	Mensaje(FString::Printf(TEXT("%d video(s) agregado(s). Guardar lista los deja en playlist.json"), Nuevos));
+	return Nuevos;
+}
+
+int32 ADomeMediaController::EscanearCarpeta()
+{
+	const FString Base = FPaths::ConvertRelativePathToFull(CarpetaPlaylist);
+	TArray<FString> Archivos;
+	IFileManager::Get().FindFiles(Archivos, *(Base / TEXT("*.*")), true, false);
+	TArray<FString> Rutas;
+	for (const FString& A : Archivos)
+	{
+		if (EsVideo(A))
+		{
+			Rutas.Add(FPaths::Combine(Base, A));
+		}
+	}
+	Rutas.Sort();
+	// Solo lo que aun no esta en la lista: AgregarVideos saltaria al primero aunque ya existiera.
+	TArray<FString> Faltan;
+	for (const FString& R : Rutas)
+	{
+		FString Completa = FPaths::ConvertRelativePathToFull(R);
+		FPaths::NormalizeFilename(Completa);
+		const bool bYa = Cues.ContainsByPredicate([&](const FDomeCue& C)
+		{
+			FString X = FPaths::IsRelative(C.Archivo) ? FPaths::Combine(Base, C.Archivo) : C.Archivo;
+			X = FPaths::ConvertRelativePathToFull(X);
+			FPaths::NormalizeFilename(X);
+			return X.Equals(Completa, ESearchCase::IgnoreCase);
+		});
+		if (!bYa)
+		{
+			Faltan.Add(R);
+		}
+	}
+	if (Faltan.Num() == 0)
+	{
+		Mensaje(TEXT("La carpeta no tiene videos nuevos"));
+		return 0;
+	}
+	return AgregarVideos(Faltan);
+}
+
+bool ADomeMediaController::GuardarPlaylist()
+{
+	const FString Ruta = ResolverRutaPlaylist();
+	if (!bCopiaHecha && FPaths::FileExists(Ruta))
+	{
+		IFileManager::Get().Copy(*(Ruta + TEXT(".bak")), *Ruta);
+		bCopiaHecha = true;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Lista;
+	for (const FDomeCue& C : Cues)
+	{
+		const TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("nombre"), C.Nombre);
+		O->SetStringField(TEXT("archivo"), C.Archivo);
+		O->SetStringField(TEXT("formato"), FormatoATexto(C.Formato));
+		if (C.Yaw != 0.f) { O->SetNumberField(TEXT("yaw"), C.Yaw); }
+		if (C.Pitch != 0.f) { O->SetNumberField(TEXT("pitch"), C.Pitch); }
+		if (C.Roll != 0.f) { O->SetNumberField(TEXT("roll"), C.Roll); }
+		if (C.Horizonte != 0.f) { O->SetNumberField(TEXT("horizonte"), C.Horizonte); }
+		if (C.Curva != 1.f) { O->SetNumberField(TEXT("curva"), C.Curva); }
+		if (C.FovContenido != 0.f) { O->SetNumberField(TEXT("fovContenido"), C.FovContenido); }
+		if (C.Volumen != 1.f) { O->SetNumberField(TEXT("volumen"), C.Volumen); }
+		O->SetBoolField(TEXT("loop"), C.Loop);
+		if (C.Mapping.CentroX != 0.f || C.Mapping.CentroY != 0.f || C.Mapping.Escala != 1.f || C.Mapping.Rotar != 0.f)
+		{
+			const TSharedRef<FJsonObject> M = MakeShared<FJsonObject>();
+			M->SetNumberField(TEXT("centroX"), C.Mapping.CentroX);
+			M->SetNumberField(TEXT("centroY"), C.Mapping.CentroY);
+			M->SetNumberField(TEXT("escala"), C.Mapping.Escala);
+			M->SetNumberField(TEXT("rotar"), C.Mapping.Rotar);
+			O->SetObjectField(TEXT("mapping"), M);
+		}
+		if (C.Formato == EDomeFormato::Plano169)
+		{
+			const TSharedRef<FJsonObject> P = MakeShared<FJsonObject>();
+			P->SetNumberField(TEXT("azimut"), C.Pantalla.Azimut);
+			P->SetNumberField(TEXT("elevacion"), C.Pantalla.Elevacion);
+			P->SetNumberField(TEXT("ancho"), C.Pantalla.Ancho);
+			P->SetNumberField(TEXT("alto"), C.Pantalla.Alto);
+			P->SetBoolField(TEXT("curva"), C.Pantalla.bCurva);
+			P->SetNumberField(TEXT("borde"), C.Pantalla.Borde);
+			O->SetObjectField(TEXT("pantalla"), P);
+		}
+		Lista.Add(MakeShared<FJsonValueObject>(O));
+	}
+
+	const TSharedRef<FJsonObject> Raiz = MakeShared<FJsonObject>();
+	if (!NotaEnJson.IsEmpty())
+	{
+		Raiz->SetStringField(TEXT("_nota"), NotaEnJson);
+	}
+	if (!CarpetaEnJson.IsEmpty())
+	{
+		Raiz->SetStringField(TEXT("carpeta"), CarpetaEnJson);
+	}
+	Raiz->SetArrayField(TEXT("cues"), Lista);
+
+	FString Texto;
+	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> Escritor =
+		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&Texto);
+	if (!FJsonSerializer::Serialize(Raiz, Escritor))
+	{
+		Mensaje(TEXT("No se pudo armar el JSON de la playlist"), 6.f);
+		return false;
+	}
+	Escritor->Close();
+	const bool bOk = FFileHelper::SaveStringToFile(Texto, *Ruta, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	Mensaje(bOk ? FString::Printf(TEXT("Lista guardada: %s"), *Ruta) : FString::Printf(TEXT("No se pudo escribir %s"), *Ruta), 6.f);
+	return bOk;
+}
+
+void ADomeMediaController::ActualizarFormatoAuto()
+{
+	if (!bFormatoPendiente || !MediaPlayer || !Cues.IsValidIndex(CueActual) || !Cues[CueActual].bFormatoAuto)
+	{
+		return;
+	}
+	if (!MediaPlayer->IsReady())
+	{
+		return;
+	}
+	const FIntPoint D = MediaPlayer->GetVideoTrackDimensions(INDEX_NONE, INDEX_NONE);
+	if (D.X <= 0 || D.Y <= 0)
+	{
+		return;
+	}
+	bFormatoPendiente = false;
+	FDomeCue& C = Cues[CueActual];
+	C.bFormatoAuto = false;
+	const float Razon = static_cast<float>(D.X) / static_cast<float>(D.Y);
+	if (FMath::Abs(Razon - 1.f) < 0.1f)
+	{
+		C.Formato = EDomeFormato::Domemaster;
+	}
+	else if (Razon > 1.9f && Razon < 2.1f)
+	{
+		C.Formato = EDomeFormato::Equirect360;
+	}
+	else
+	{
+		C.Formato = EDomeFormato::Plano169;
+	}
+	AplicarParametros(C);
+	Mensaje(FString::Printf(TEXT("%s: %dx%d, formato %s (se cambia en Imagen en la cupula)"),
+		*C.Nombre, D.X, D.Y, FormatoATexto(C.Formato)));
+}
+
+void ADomeMediaController::IrAVista(const FVector& Ubicacion, const FRotator& Rotacion, const FString& Nombre)
+{
+	APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	if (!PC)
+	{
+		return;
+	}
+	if (APawn* P = PC->GetPawn())
+	{
+		P->SetActorLocation(Ubicacion, false, nullptr, ETeleportType::TeleportPhysics);
+		P->SetActorRotation(Rotacion);
+	}
+	PC->SetControlRotation(Rotacion);
+	Mensaje(FString::Printf(TEXT("Vista: %s"), *Nombre));
+}
+
 // --- Teclado, mensajes y guion ------------------------------------------------
 
 void ADomeMediaController::ConfigurarTeclado()
@@ -980,6 +1469,8 @@ void ADomeMediaController::ConfigurarTeclado()
 	InputComponent->BindKey(EKeys::Home, IE_Pressed, this, &ADomeMediaController::TeclaReiniciar);
 	InputComponent->BindKey(EKeys::S, IE_Pressed, this, &ADomeMediaController::TeclaFuente);
 	InputComponent->BindKey(EKeys::F1, IE_Pressed, this, &ADomeMediaController::TeclaAyuda);
+	InputComponent->BindKey(EKeys::F2, IE_Pressed, this, &ADomeMediaController::TeclaMenu);
+	InputComponent->BindKey(EKeys::M, IE_Pressed, this, &ADomeMediaController::TeclaMenu);
 
 	const FKey Numeros[] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five,
 		EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine };
@@ -993,13 +1484,14 @@ void ADomeMediaController::ConfigurarTeclado()
 
 void ADomeMediaController::TeclaAyuda()
 {
-	Mensaje(TEXT("Flechas / RePag AvPag: cue   1-9: ir al cue   B o punto: negro   Espacio: pausa   Inicio: reiniciar   S: Spout/Media"), 8.f);
+	Mensaje(TEXT("Flechas / RePag AvPag: cue   1-9: ir al cue   B o punto: negro   Espacio: pausa   Inicio: reiniciar   S: Spout/Media   F2 o M: menu"), 8.f);
 	Mensaje(DescribirEstado(), 8.f);
 }
 
 void ADomeMediaController::Mensaje(const FString& Texto, float Segundos) const
 {
 	UE_LOG(LogDomoMedia, Display, TEXT("%s"), *Texto);
+	const_cast<ADomeMediaController*>(this)->UltimoMensaje = Texto;
 	if (GEngine && EsMundoDeJuego())
 	{
 		GEngine->AddOnScreenDebugMessage(-1, Segundos, FColor(120, 220, 255), Texto);
@@ -1132,6 +1624,52 @@ namespace
 			{
 				if (A.Num() == 0 || A[0].Equals(TEXT("auto"), ESearchCase::IgnoreCase)) { C.LucesAutomaticas(true); }
 				else { C.SetLuces(FCString::Atoi(*A[0]) != 0); }
+			});
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdMenu(TEXT("domo.Menu"), TEXT("domo.Menu [0|1]: muestra u oculta el menu en pantalla (sin argumento, alterna)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& A, UWorld* W)
+		{
+			ConControlador(W, [&](ADomeMediaController& C)
+			{
+				if (A.Num() > 0) { C.MostrarMenu(FCString::Atoi(*A[0]) != 0); }
+				else { C.AlternarMenu(); }
+			});
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdAbrir(TEXT("domo.Abrir"), TEXT("domo.Abrir RutaCompleta: agrega el video a la lista y lo pone en la cupula."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& A, UWorld* W)
+		{
+			if (A.Num() == 0) { return; }
+			// Las rutas con espacios llegan partidas por la consola: se vuelven a unir.
+			const FString Ruta = FString::Join(A, TEXT(" "));
+			ConControlador(W, [&](ADomeMediaController& C) { C.AbrirVideoPorRuta(Ruta.TrimQuotes()); });
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdSender(TEXT("domo.Sender"), TEXT("domo.Sender Nombre: sender de Spout a recibir."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& A, UWorld* W)
+		{
+			if (A.Num() == 0) { return; }
+			ConControlador(W, [&](ADomeMediaController& C)
+			{
+				if (C.SpoutReceiver) { C.SpoutReceiver->SpoutSenderName = FName(*FString::Join(A, TEXT(" "))); }
+			});
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdGuardar(TEXT("domo.Guardar"), TEXT("Escribe la playlist con los ajustes actuales."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* W)
+		{
+			ConControlador(W, [](ADomeMediaController& C) { C.GuardarPlaylist(); });
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdMenuFoto(TEXT("domo.MenuFoto"), TEXT("domo.MenuFoto Ruta.png [Ancho Alto]: dibuja el menu en un PNG (verificacion)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& A, UWorld* W)
+		{
+			ConControlador(W, [&](ADomeMediaController& C)
+			{
+				if (A.Num() == 0) { return; }
+				const bool bOk = C.FotografiarMenu(A[0], A.Num() > 1 ? FCString::Atoi(*A[1]) : 500, A.Num() > 2 ? FCString::Atoi(*A[2]) : 1000);
+				UE_LOG(LogDomoMedia, Display, TEXT("MenuFoto %s: %s"), *A[0], bOk ? TEXT("ok") : TEXT("fallo"));
 			});
 		}));
 
