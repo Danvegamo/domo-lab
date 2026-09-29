@@ -1,7 +1,7 @@
 # La sala de domo en Unreal Engine 5.8
 
 Este documento describe el proyecto `03_Unreal/DomoVR`: una sala de planetario
-(cúpula, muro cilíndrico, 241 butacas) que se recorre en realidad virtual y cuya
+(cúpula, muro cilíndrico, 265 butacas) que se recorre en realidad virtual y cuya
 cúpula muestra en vivo lo que TouchDesigner envía por Spout. Aquí está la
 geometría, el contrato de unidades, cómo regenerar todo desde cero, los
 materiales, la iluminación, el post proceso y la ruta de VR. El puente con
@@ -53,11 +53,12 @@ cilindro. Todo se genera desde las constantes de `01_Blender/generar_sala_domo.p
 | Radio del domo y del muro | 11,5 m | escala del Planetario de Bogotá |
 | Altura del ecuador de la cúpula | 3 m | el muro cilíndrico va del piso a esa altura |
 | Teselado de la cúpula | 128 × 64 | segmentos de azimut × elevación (media esfera) |
-| Tarima central | 2,5 m de diámetro × 1 m de alto | en el origen; el PlayerStart no puede caer ahí (medida contra el Planetario de Bogotá) |
+| Tarima central | 3 m de diámetro × 1 m de alto | en el origen; el PlayerStart no puede caer ahí |
 | Sector de control | 7 m de arco sobre el muro, desde 6,5 m de radio | lado −X, sin butacas; consola y marca en el piso |
-| Butacas | 241 = 3 grupos de 65 + el de atrás de 46 | reclinadas 40° hacia atrás; espectador casi acostado. El total sale de la geometría (aforo publicado: 375); 4 pasillos de 1,3 m con ancho constante |
-| Filas por grupo | 5 (4 en el de atrás), radios de 3,6 a 8,4 m | paso radial 1,2 m; paso entre butacas 0,6 m; primera fila a 2,35 m de la tarima; se calculan, no se escriben |
-| Anillo de atrás | de 9,4 m al muro | espacio libre hacia cada salida; la consola va detrás del grupo de atrás |
+| Butacas | 265 = 3 grupos de 73 + el de atrás de 46 | reclinadas 40° hacia atrás; espectador casi acostado. El total sale de la geometría (aforo publicado: 375); 4 pasillos de 1,3 m con ancho constante |
+| Filas por grupo | 5 (4 en el de atrás); los grupos del frente y laterales van de 4,2 a 9,0 m y el de atrás de 3,6 a 7,2 m | paso radial 1,2 m; paso entre butacas 0,6 m; se calculan, no se escriben |
+| Espacio hacia las salidas | de las últimas filas (a 10 m) al muro | cada pasillo llega libre a su salida |
+| Cabina de control | contra el muro de atrás, detrás del grupo de atrás | partición curva de 2,4 m concéntrica al muro y dos paneles radiales; el operador mira al muro y las pantallas quedan de espaldas a la sala |
 | Puertas | 4, de 1,4 × 2,3 m | una al final de cada pasillo (salidas de emergencia), a 45°, 135°, 225° y 315° |
 | Luces de muro | focos en lo alto (a 2,75 m) que alumbran hacia el piso | se apagan con la señal, ver la sección 15 |
 | Listones de madera | ancho 7 cm, paso 14 cm | revestimiento vertical del muro, material `M_Madera` |
@@ -72,9 +73,9 @@ Mallas que trae el FBX y material que recibe cada una:
 | `SM_Tarima` | `MI_Tarima` | tablas pintadas de negro con rayones |
 | `SM_Listones` | `MI_Madera` | nogal barnizado, veta vertical |
 | `SM_LucesMuro` | `MI_LuzMuro` | franja emisiva ámbar en lo alto del muro |
-| `SM_Butaca` | `MI_Butaca` | **una** butaca (sillón acolchado con orejas, ~930 triángulos); se coloca 241 veces como actores sueltos |
+| `SM_Butaca` | `MI_Butaca` | **una** butaca (sillón acolchado con orejas, ~930 triángulos); se coloca 265 veces como actores sueltos |
 | `SM_Puerta` | `MI_Puerta` | **una** puerta; se coloca 4 veces |
-| `SM_Consola`, `SM_Monitores`, `SM_Rack`, `SM_Antepecho`, `SM_ControlPiso`, `SM_SillaOperador` | `MI_Control` | el espacio de control, cada pieza con su pivote: se mueve, gira o borra sola |
+| `SM_Consola`, `SM_Monitores`, `SM_Rack`, `SM_Cabina`, `SM_ControlPiso`, `SM_SillaOperador` | `MI_Control` | la cabina de control, cada pieza con su pivote: se mueve, gira o borra sola |
 
 Todas las `MI_*` son instancias de un solo material triplanar, `M_SalaPBR`
 (sección 11). En total son unos 43 000 triángulos. Desde el 18 de septiembre
@@ -501,12 +502,12 @@ horneado sino como piezas: `01_Blender/generar_sala_domo.py` escribe
   `SM_Muro`, `SM_Listones`, `SM_LucesMuro`, `SM_Piso`, `SM_Tarima`).
 - `02_Export/sala_domo_piezas.fbx`: las piezas con **pivote propio** (una
   `SM_Butaca`, una `SM_Puerta`, `SM_SillaOperador` y la consola en partes:
-  `SM_Consola`, `SM_Monitores`, `SM_Rack`, `SM_Antepecho`, `SM_ControlPiso`).
+  `SM_Consola`, `SM_Monitores`, `SM_Rack`, `SM_Cabina`, `SM_ControlPiso`).
   Sale de Blender en centímetros y con los ejes de Blender (Z arriba, Y
   adelante), porque una malla local no pasa por la conversión de ejes de la
   escena: sin eso llegaba de 1 cm y tumbada de lado.
 - `02_Export/sala_domo.json`: el manifiesto. Dice dónde va cada pieza y cada
-  instancia (241 butacas, 4 puertas, 2 sillas de operador), los pasillos, las
+  instancia (265 butacas, 4 puertas, 2 sillas de operador), los pasillos, las
   luces de muro y el ojo del espectador, más un `layout_id` (huella del
   reparto). Posiciones en metros y giro en grados en el marco de Blender; Unreal
   lleva la misma x, la y invertida y el giro invertido.
@@ -524,7 +525,7 @@ vaciarlo** (`DOMO_MODO=actualizar`, el modo por defecto; `importar_sala.ps1
 | Actores del modelo viejo (butacas y consola horneadas, puertas viejas) | los retira, con sus assets |
 | `PostProcessVolume`, `SkyLight`, `PlayerStart` | solo los crea si no hay |
 | `SpoutDomeReceiver`, `DomeMediaController` y todo lo que el script no creó | no los toca nunca |
-| Detalles (`domo_detalle`: luces de pasillo, anillo de la tarima, pantallas de los monitores, señales de salida, luces de muro) | se rehacen; las pantallas quedan ancladas a `Monitores_Actor`, así que siguen a la consola si la mueves |
+| Detalles (`domo_detalle`: luces de pasillo, pantallas de los monitores, señales de salida, luces de muro) | se rehacen; las pantallas quedan ancladas a `Monitores_Actor`, así que siguen a la consola si la mueves |
 
 Cada actor generado lleva la etiqueta `domo_generado` y vive en una carpeta del
 Outliner (`Sala/Butacas/Cuna1`, `Sala/Control`, `Sala/Puertas`...), así que se
@@ -538,8 +539,7 @@ sobre el mismo proyecto se pelean): ciérralo, o corre el script desde dentro.
 
 ### Luces de la sala: se apagan con la señal
 
-Las luces de la sala (focos y franja en lo alto del muro, luces de pasillo,
-anillo de la tarima) son los actores con la etiqueta `domo_luz`. En una sala
+Las luces de la sala (focos y franja en lo alto del muro y luces de pasillo) son los actores con la etiqueta `domo_luz`. En una sala
 real solo están encendidas cuando no hay proyección, así que
 `ADomeMediaController` las sigue a la señal (`bLucesAutomaticas`, encendido por
 defecto): se apagan con un fundido de 1,5 s en cuanto el Spout entrega cuadros o

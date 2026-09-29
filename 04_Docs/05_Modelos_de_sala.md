@@ -12,7 +12,7 @@ en el `.ps1` de Unreal. La geometría de base del planetario está en
 
 | Modelo | Tipo de sala | Pantalla | Público | Referencia |
 |---|---|---|---|---|
-| **180** | planetario clásico | media esfera horizontal de 23 m | 241 butacas muy reclinadas en 4 grupos concéntricos separados por 4 pasillos, mirando al cénit | Planetario de Bogotá |
+| **180** | planetario clásico | media esfera horizontal de 23 m | 265 butacas muy reclinadas en 4 grupos concéntricos separados por 4 pasillos, mirando al cénit | Planetario de Bogotá |
 | **45** | cine domo inclinado | media esfera de 22 m inclinada 27° hacia el frente | 314 butacas reclinadas en gradería tipo estadio, mirando al frente | Cine Domo de Maloka (Bogotá), formato IMAX Dome |
 | **90** | domo frontal de pie | media esfera de 20 m inclinada 45° hacia el frente | de pie, en 5 plataformas escalonadas con barandas, mirando al frente | domos de museo y de parque temático |
 

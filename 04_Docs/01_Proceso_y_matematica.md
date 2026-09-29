@@ -47,7 +47,7 @@ patrón de prueba ──► se mira en la cúpula real y en la VR ──► Yaw,
 1. **Sala real → modelo.** Las cotas de la sala entran como constantes de
    `01_Blender/generar_sala_domo.py`: radio de 11,5 m (23 m de diámetro),
    ecuador de la cúpula a 3 m, tarima central, sector de control de 7 m de
-   arco contra el muro, 241 butacas en 4 grupos con 4 pasillos (la consola queda
+   arco contra el muro, 265 butacas en 4 grupos con 4 pasillos (la consola queda
    detrás del grupo de atrás), 4 puertas. El script corre en headless, borra la
    escena y la reconstruye entera y exporta dos FBX (la estructura horneada y las
    piezas sueltas con su pivote), un manifiesto JSON con la posición de cada

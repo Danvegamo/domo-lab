@@ -654,7 +654,7 @@ def _rot_vec(yaw_deg, x, y):
 
 
 def detalles_180(actor_subsystem, mats, manifiesto):
-    """Luces de pasillo, anillo de la tarima, monitores de la consola y luces
+    """Luces de pasillo, monitores de la consola y luces
     de muro, a partir de 02_Export/sala_domo.json (lo escribe
     01_Blender/generar_sala_domo.py). Manifiesto en el marco de Blender: Unreal
     lleva la misma x y la y invertida. Los monitores se anclan al actor
@@ -677,19 +677,6 @@ def detalles_180(actor_subsystem, mats, manifiesto):
             r += 1.2
             i += 1
             n += 1
-    # anillo en el borde superior de la tarima
-    tar = manifiesto["sala"]["tarima"]
-    segs = 72
-    r_t = tar["radio_m"] + 0.008
-    largo = 2 * math.pi * r_t / segs * 0.8
-    z_anillo = tar["alto_m"] * 100.0 - 3.0
-    for i in range(segs):
-        a = 2 * math.pi * (i + 0.5) / segs
-        x, y = r_t * math.cos(a), r_t * math.sin(a)
-        _pieza(actor_subsystem, cubo, mats["MI_LedTarima"], unreal.Vector(x * 100, y * 100, z_anillo),
-               (0.012, largo, 0.018), unreal.Rotator(0.0, 0.0, math.degrees(a)),
-               "LedTarima_{:02d}".format(i), sombra=False, luz=True)
-    n += segs
     # monitores: una pantalla emisiva por entrada, anclada a Monitores_Actor
     padre = None
     for actor in actor_subsystem.get_all_level_actors():
@@ -704,8 +691,11 @@ def detalles_180(actor_subsystem, mats, manifiesto):
             lx, ly, lz = m["local_m"]
             dx, dy = _rot_vec(yaw, lx * 100.0, -ly * 100.0)
             pos = unreal.Vector(loc.x + dx, loc.y + dy, loc.z + lz * 100.0)
+            # "mira": hacia donde da la cara de la pantalla en el marco de la consola
+            # (menos_x = hacia el operador, de espaldas al muro y a la sala).
+            yaw_cara = yaw + (180.0 if m.get("mira") == "menos_x" else 0.0)
             a = _pieza(actor_subsystem, plano, mats["MI_Monitor"], pos, (m["ancho_m"], m["alto_m"], 1.0),
-                       _rot_plano(yaw), "Monitor_{}".format(j + 1), sombra=False)
+                       _rot_plano(yaw_cara), "Monitor_{}".format(j + 1), sombra=False)
             a.attach_to_actor(padre, "", unreal.AttachmentRule.KEEP_WORLD, unreal.AttachmentRule.KEEP_WORLD,
                               unreal.AttachmentRule.KEEP_WORLD, False)
             n += 1

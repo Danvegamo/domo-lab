@@ -185,13 +185,13 @@ HORNEAR_TEXTURAS = "--hornear" in _argumentos_propios()
 # Tarima central. 2,5 m de diametro confirmados por David contra fotos reales
 # del Planetario de Bogota (28 sep 2026); antes eran 3 m, un supuesto sin
 # verificar.
-RADIO_TARIMA = 1.25        # metros (2,5 m de diametro)
+RADIO_TARIMA = 1.50        # metros (3 m de diametro: 0,5 m mas que antes, pedido de David 29 sep)
 ALTURA_TARIMA = 1.0        # metros
 
 # Sector de control (dentro de la sala, contra el muro, lado -X). Ver
 # supuestos documentados arriba del archivo.
 ANCHO_CONTROL = 7.0        # metros de ARCO sobre el muro (no radial)
-RADIO_INICIO_CONTROL = 8.9 # metros: el antepecho del control, detras de la ultima fila del grupo de atras
+RADIO_INICIO_CONTROL = 8.9 # metros: la particion curva de la cabina, detras de la ultima fila del grupo de atras
 LADO_CONTROL = "IZQUIERDA"          # documental: lado -X de la sala
 ANGULO_CENTRO_CONTROL_DEG = 180.0   # -X = "izquierda" en planta, +X al frente
 
@@ -216,9 +216,10 @@ TOTAL_BUTACAS = 0          # se calcula (calcular_instancias_butacas)
 # por fila NO se escribe a mano: se calcula en calcular_filas() a partir de
 # estos parametros y del angulo util real de la cuna (que depende del
 # sector de control).
-RADIO_INTERIOR_BUTACAS = 3.6     # metros, radio de la primera fila (2,35 m libres alrededor de la tarima)
-RADIO_MAX_FILA = 8.5             # ultima fila de los grupos laterales y del frente
-RADIO_MAX_FILA_ATRAS = 7.3       # el grupo de atras termina antes: la consola va detras
+RADIO_INTERIOR_BUTACAS = 4.2     # primera fila de los grupos del frente y laterales (mas atras que antes)
+RADIO_INTERIOR_ATRAS = 3.6       # el grupo de atras (el de la consola) no se movio
+RADIO_MAX_FILA = 9.6             # los grupos laterales llegan mas cerca del muro
+RADIO_MAX_FILA_ATRAS = 7.3       # el grupo de atras termina antes: la cabina va detras
 ANCHO_PASILLO = 1.30             # metros, ancho constante de cada pasillo radial
 PASO_BUTACA = 0.60                # metros, paso real entre butacas de una fila (no se estira)
 PASO_FILA_RADIAL = 1.20           # metros: el respaldo reclinado invade hacia atras, hace falta este paso
@@ -710,14 +711,14 @@ def crear_tarima():
 # BUTACAS
 # ---------------------------------------------------------------------------
 
-def calcular_filas(radio_max, ancho_modulo_rad):
+def calcular_filas(radio_max, ancho_modulo_rad, radio_ini=None):
     """Filas concentricas de un grupo: desde RADIO_INTERIOR_BUTACAS de a
     PASO_FILA_RADIAL hasta radio_max. En cada radio se descuentan los dos
     pasillos con su ancho fijo en metros (ANCHO_PASILLO), asi que el angulo util
     es mayor lejos del centro y el pasillo se ve de bordes paralelos. Los
     asientos por fila salen de dividir el arco entre PASO_BUTACA."""
     filas = []
-    radio = RADIO_INTERIOR_BUTACAS
+    radio = RADIO_INTERIOR_BUTACAS if radio_ini is None else radio_ini
     while radio <= radio_max + 1e-6:
         media_apertura = math.asin(min(1.0, (ANCHO_PASILLO / 2.0) / radio))
         ang_util = ancho_modulo_rad - 2.0 * media_apertura
@@ -865,7 +866,8 @@ def calcular_instancias_butacas(layout):
     for m in range(NUM_MODULOS):
         centro_deg = layout["centros_cunas_deg"][m]
         atras = es_grupo_de_atras(centro_deg)
-        filas = calcular_filas(RADIO_MAX_FILA_ATRAS if atras else RADIO_MAX_FILA, ancho_rad)
+        filas = calcular_filas(RADIO_MAX_FILA_ATRAS if atras else RADIO_MAX_FILA, ancho_rad,
+                               RADIO_INTERIOR_ATRAS if atras else RADIO_INTERIOR_BUTACAS)
         if filas_frente is None and not atras:
             filas_frente = filas
         detalle = ", ".join("{:.1f} m: {}".format(f["radio"], f["n"]) for f in filas)
@@ -930,14 +932,20 @@ def agregar_silla_operador(bm, M):
 
 
 def crear_zona_control_piezas(layout, mat_control):
-    """Devuelve una lista de dicts {obj, malla, material, carpeta, ...} con las
-    piezas sueltas del control. Marco local de la consola: +X mira al centro de
-    la sala (hacia el publico); el operador se sienta atras (-X)."""
+    """Cabina de control contra el muro de atras (180 grados), detras del grupo de
+    butacas de atras. Cerrada a la vista del publico: una particion curva de 2,4 m
+    concentrica al muro y dos paneles RADIALES (perpendiculares a la curva del muro)
+    que la unen con el. Adentro, el operador mira hacia el muro y las pantallas
+    quedan entre el y el muro, de espaldas a la sala, asi el publico no ve que se
+    controla. Marco local de la consola: +X apunta al muro; el operador se sienta
+    en -X. Devuelve una lista de dicts {obj, malla, material, carpeta, ...}."""
     ang_ini = math.radians(layout["angulo_control_ini_deg"])
     ang_fin = ang_ini + math.radians(layout["angulo_control_deg"])
     ang_centro = math.radians(ANGULO_CENTRO_CONTROL_DEG)
-    r_in, r_out = RADIO_INICIO_CONTROL, RADIO_DOMO - 0.4
+    r_in, r_out = RADIO_INICIO_CONTROL, RADIO_DOMO - 0.1
     piezas = []
+    ALTURA_CABINA = 2.4
+    GROSOR_CABINA = 0.08
 
     def registrar(obj, malla, **extra):
         d = {"obj": obj, "malla": malla, "material": "M_Control", "carpeta": "Control"}
@@ -945,7 +953,7 @@ def crear_zona_control_piezas(layout, mat_control):
         piezas.append(d)
         return d
 
-    # Marca de piso del sector, sobre el arco.
+    # Marca de piso de la cabina, sobre el arco.
     bm = bmesh.new()
     n_sub = 16
     anillo_in, anillo_out = [], []
@@ -965,58 +973,67 @@ def crear_zona_control_piezas(layout, mat_control):
               @ Matrix.Rotation(ang_centro + math.pi, 4, 'Z'))
     registrar(objeto_desde_mundo(bm, "SM_ControlPiso", M_piso, mat_control), "SM_ControlPiso")
 
-    radio_consola = RADIO_DOMO - 1.6
+    # Escritorio contra el muro; +X local mira al muro.
+    radio_consola = RADIO_DOMO - 1.3
     centro_consola = Vector((radio_consola * math.cos(ang_centro), radio_consola * math.sin(ang_centro), 0.0))
-    M_cons = Matrix.Translation(centro_consola) @ Matrix.Rotation(ang_centro + math.pi, 4, 'Z')
-    ancho_mueble = ANCHO_CONTROL * 0.7
+    M_cons = Matrix.Translation(centro_consola) @ Matrix.Rotation(ang_centro, 4, 'Z')
+    ancho_mueble = 4.2
 
-    # Mesa: tablero y tres modulos de cajones (ya en el marco local de la consola).
     bm = bmesh.new()
     _caja_biselada(bm, (0.80, ancho_mueble, 0.05), Matrix.Translation((0.0, 0.0, 0.75)), 0.012, 1)
     for k in range(3):
         y = (k - 1) * ancho_mueble * 0.32
-        _caja_biselada(bm, (0.60, ancho_mueble * 0.30, 0.72), Matrix.Translation((-0.10, y, 0.0)), 0.015, 1)
+        _caja_biselada(bm, (0.60, ancho_mueble * 0.30, 0.72), Matrix.Translation((0.10, y, 0.0)), 0.015, 1)
     registrar(objeto_local(bm, "SM_Consola", M_cons.copy(), mat_control), "SM_Consola")
 
-    # Monitores: tres pantallas con marco delgado y pie. Las pantallas
-    # emisivas las pone Unreal, una por cada entrada de "monitores".
+    # Monitores entre el operador y el muro: la pantalla mira al operador (-X local)
+    # y el respaldo al muro; desde la sala no se ve ninguna pantalla.
     bm = bmesh.new()
     monitores = []
     for y in (-1.3, 0.0, 1.3):
         _caja_biselada(bm, (0.05, 1.15, 0.66),
-                       Matrix.Translation((-0.30, y, 0.83)) @ Matrix.Rotation(math.radians(-6), 4, 'Y'), 0.01, 1)
-        _caja_biselada(bm, (0.14, 0.14, 0.05), Matrix.Translation((-0.32, y, 0.78)), 0.01, 1)
-        monitores.append({"local_m": [-0.268, y, 1.16], "ancho_m": 1.09, "alto_m": 0.60})
+                       Matrix.Translation((0.30, y, 0.83)) @ Matrix.Rotation(math.radians(6), 4, 'Y'), 0.01, 1)
+        _caja_biselada(bm, (0.14, 0.14, 0.05), Matrix.Translation((0.32, y, 0.78)), 0.01, 1)
+        monitores.append({"local_m": [0.268, y, 1.16], "ancho_m": 1.09, "alto_m": 0.60, "mira": "menos_x"})
     registrar(objeto_local(bm, "SM_Monitores", M_cons.copy(), mat_control), "SM_Monitores", monitores=monitores)
 
-    # Rack de equipos contra el muro, detras del operador.
+    # Rack junto a un lateral de la cabina, contra el muro.
     bm = bmesh.new()
-    _caja_biselada(bm, (0.60, ancho_mueble * 0.5, 1.90), Matrix.Identity(4), 0.02, 1)
-    registrar(objeto_local(bm, "SM_Rack", M_cons @ Matrix.Translation((-1.15, 0.0, 0.0)), mat_control), "SM_Rack")
+    _caja_biselada(bm, (0.60, 1.0, 1.90), Matrix.Identity(4), 0.02, 1)
+    registrar(objeto_local(bm, "SM_Rack", M_cons @ Matrix.Translation((0.25, 2.55, 0.0)), mat_control), "SM_Rack")
 
-    # Antepecho curvo de 1 m que separa el control de las butacas.
+    # Cabina: particion curva (concentrica al muro) y dos paneles radiales.
     bm = bmesh.new()
     n_ant = 14
     for i in range(n_ant):
         t0 = ang_ini + (ang_fin - ang_ini) * i / n_ant
         t1 = ang_ini + (ang_fin - ang_ini) * (i + 1) / n_ant
         tm = (t0 + t1) / 2.0
-        largo = 2.0 * r_in * math.sin((t1 - t0) / 2.0)
+        largo = 2.0 * r_in * math.sin((t1 - t0) / 2.0) + 0.02
         centro = Vector((r_in * math.cos(tm), r_in * math.sin(tm), 0.0))
         m = Matrix.Translation(centro) @ Matrix.Rotation(tm, 4, 'Z')
-        agregar_caja(bm, (0.08, largo, 1.0), (0.0, 0.0, 0.0), 0.0, m)
-    M_ant = (Matrix.Translation((r_in * math.cos(ang_centro), r_in * math.sin(ang_centro), 0.0))
+        agregar_caja(bm, (GROSOR_CABINA, largo, ALTURA_CABINA), (0.0, 0.0, 0.0), 0.0, m)
+    # Paneles radiales (perpendiculares al muro). El del lado del angulo menor llega
+    # entero; el otro deja una puerta de 1 m junto a la particion.
+    for lado, t, r_ini in (("A", ang_ini, r_in), ("B", ang_fin, r_in + 1.1)):
+        largo = r_out - r_ini
+        rc = r_ini + largo / 2.0
+        centro = Vector((rc * math.cos(t), rc * math.sin(t), 0.0))
+        m = Matrix.Translation(centro) @ Matrix.Rotation(t + math.pi / 2.0, 4, 'Z')
+        agregar_caja(bm, (GROSOR_CABINA, largo, ALTURA_CABINA), (0.0, 0.0, 0.0), 0.0, m)
+    M_cab = (Matrix.Translation((r_in * math.cos(ang_centro), r_in * math.sin(ang_centro), 0.0))
              @ Matrix.Rotation(ang_centro + math.pi, 4, 'Z'))
-    registrar(objeto_desde_mundo(bm, "SM_Antepecho", M_ant, mat_control), "SM_Antepecho")
+    registrar(objeto_desde_mundo(bm, "SM_Cabina", M_cab, mat_control), "SM_Cabina")
 
-    # Silla de operador: maestra en el origen (oculta en previews) + dos instancias.
+    # Silla de operador: maestra en el origen (oculta en previews) + dos instancias
+    # entre la particion y el escritorio, mirando al muro (+X local).
     bm = bmesh.new()
     agregar_silla_operador(bm, Matrix.Identity(4))
     silla = nuevo_objeto_desde_bmesh(bm, "SM_SillaOperador")
     silla.data.materials.append(mat_control)
     items = []
     for etiqueta, y in (("A", -1.0), ("B", 1.0)):
-        M_s = M_cons @ Matrix.Translation((-0.60, y, 0.0))
+        M_s = M_cons @ Matrix.Translation((-0.85, y, 0.0))
         pos, yaw = matriz_a_pos_yaw(M_s)
         items.append({"nombre": "SillaOperador_" + etiqueta, "pos_m": pos, "yaw_deg": yaw})
         o = bpy.data.objects.new("SillaOperador_" + etiqueta, silla.data)
