@@ -22,6 +22,10 @@ public class DomoVR : ModuleRules
 		// TouchDesigner (Media Framework, playlist en JSON, audio del video).
 		PrivateDependencyModuleNames.AddRange(new string[] { "MediaAssets", "AudioMixer", "Json" });
 
+		// ADomeEmisorNDI y AAbismoEscena (el sentido inverso: Unreal genera el domo y lo manda por NDI):
+		// captura cubica, NDIMedia (el plugin de Epic, con su Processing.NDI.Lib.x64.dll) y el lecho procedural.
+		PrivateDependencyModuleNames.AddRange(new string[] { "MediaIOCore", "NDIMedia", "ProceduralMeshComponent", "ImageCore" });
+
 		// DomeMenu: menu en pantalla en Slate (desplegables, deslizadores, botones)
 		// y dialogo de Windows para abrir videos (comdlg32).
 		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore", "ApplicationCore", "UMG", "RenderCore", "Sockets", "Networking", "RHI", "HeadMountedDisplay" });

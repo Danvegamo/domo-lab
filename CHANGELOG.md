@@ -4,6 +4,26 @@ Bitácora de cambios de domo-lab, de lo más reciente a lo más antiguo. Cada en
 dice qué cambió y por qué; el detalle técnico y las mediciones están en
 [04_Docs](04_Docs/). El estado futuro está en la [hoja de ruta](README.md#hoja-de-ruta).
 
+## 29 de septiembre de 2026 · El abismo: Unreal genera el domo y lo manda por NDI
+
+- **El sentido inverso del proyecto.** Un nivel nuevo, `/Game/Maps/Abismo`, renderiza un fondo marino profundo con partículas y
+  brillo, criaturas que cruzan la Colombia actual con el Cretácico de Villa de Leyva y basura plástica del Antropoceno, con
+  un diálogo entre ellas y una cámara que recorre el espacio. Sale como **domemaster de 2048** por **NDI** (`Unreal_Abismo`).
+  Medido: 29,8 fps recibidos durante 60 s en el programa empaquetado y 100 s en el editor, en la RTX 3090.
+- **Piezas:** `ADomeEmisorNDI` (cámara, captura cúbica, conversión a domemaster y NDI con el plugin `NDIMedia` del motor),
+  `AAbismoEscena` (lecho procedural, niebla, luz, nieve marina) y `AAbismoFauna` (13 especies instanciadas que nadan con un
+  shader, sin esqueleto, y el diálogo de 75 s con la basura). Materiales y nivel con `03_Unreal/crear_abismo.ps1`.
+- **Criaturas:** `01_Blender/generar_criaturas.py` genera 13 mallas procedurales (cinco animales que cruzan Colombia y el
+  Cretácico, una belemnita con alas de Morpho, cuatro desechos plásticos y tres piezas de decorado) en
+  `02_Export/criaturas/`, con el patrón y el peso de movimiento en el color por vértice.
+- **`03_Unreal/herramientas/ndi_recibir.py`:** receptor NDI de una sola tarea (usa la DLL del motor) para comprobar la fuente y
+  su cadencia sin TouchDesigner.
+- **Trampas resueltas:** el motor se caía a los ~50 s por acumulación de listas de comandos D3D12 (se limita a 30 fps);
+  el domemaster salía negro por la exposición manual; las mallas no se cocinaban al no estar referenciadas.
+  Todo en [09_Abismo_Unreal_a_NDI.md](04_Docs/09_Abismo_Unreal_a_NDI.md).
+- Sin verificar: recibirlo dentro de TouchDesigner (falta el módulo `IN_UE`), el audio por NDI y AMD e Intel.
+- Documentos: `08_Criaturas_abismo.md` y `09_Abismo_Unreal_a_NDI.md`; ambos suman a `docs/index.html`.
+
 ## 29 de septiembre de 2026 · Regenerar TouchDesigner sin perder la disposición
 
 - **La disposición de la red ya no se pierde al regenerar por MCP.** `build_domo.py` (versión 1.5) guarda la posición,

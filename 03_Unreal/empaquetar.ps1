@@ -46,7 +46,7 @@ if (-not (Test-Path (Join-Path $MoviesProyecto "playlist.json"))) {
 }
 New-Item -ItemType Directory -Path $CarpetaLogs -Force | Out-Null
 
-$Mapas = "/Game/Maps/DomoVR+/Game/Maps/DomoVR_45+/Game/Maps/DomoVR_90"
+$Mapas = "/Game/Maps/DomoVR+/Game/Maps/DomoVR_45+/Game/Maps/DomoVR_90+/Game/Maps/Abismo"
 $Argumentos = @(
     "BuildCookRun", "-project=`"$Proyecto`"", "-noP4", "-utf8output", "-unattended",
     "-platform=Win64", "-clientconfig=Development", "-target=DomoVR",

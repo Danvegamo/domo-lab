@@ -1,0 +1,282 @@
+[
+  {
+    "id": "kronos_jaguar",
+    "fbx": "kronos_jaguar.fbx",
+    "triangulos": 7838,
+    "caja_m": [
+      7.0,
+      3.1,
+      1.1465
+    ],
+    "caja_cm": [
+      700.0,
+      310.0,
+      114.65
+    ],
+    "islas_uv": [
+      "cuerpo",
+      "mandibula",
+      "dientes",
+      "ojos",
+      "aletas"
+    ],
+    "material_fbx": "M_Criatura"
+  },
+  {
+    "id": "amonita_rana",
+    "fbx": "amonita_rana.fbx",
+    "triangulos": 5228,
+    "caja_m": [
+      1.2,
+      0.3016,
+      0.8127
+    ],
+    "caja_cm": [
+      120.0,
+      30.16,
+      81.27
+    ],
+    "islas_uv": [
+      "concha",
+      "cuerpo",
+      "ojos",
+      "tentaculos"
+    ],
+    "material_fbx": "M_Criatura"
+  },
+  {
+    "id": "calla_manati",
+    "fbx": "calla_manati.fbx",
+    "triangulos": 5334,
+    "caja_m": [
+      5.0,
+      3.0404,
+      1.4209
+    ],
+    "caja_cm": [
+      500.0,
+      304.04,
+      142.09
+    ],
+    "islas_uv": [
+      "cuerpo",
+      "cuello",
+      "cabeza",
+      "ojos",
+      "bigotes",
+      "aletas"
+    ],
+    "material_fbx": "M_Criatura"
+  },
+  {
+    "id": "desma_orquidea",
+    "fbx": "desma_orquidea.fbx",
+    "triangulos": 9042,
+    "caja_m": [
+      3.0,
+      3.1942,
+      0.8248
+    ],
+    "caja_cm": [
+      300.0,
+      319.42,
+      82.48
+    ],
+    "islas_uv": [
+      "caparazon",
+      "cabeza",
+      "ojos",
+      "cola",
+      "aletas",
+      "orquideas",
+      "corales"
+    ],
+    "material_fbx": "M_Criatura"
+  },
+  {
+    "id": "kyhy_inia",
+    "fbx": "kyhy_inia.fbx",
+    "triangulos": 5388,
+    "caja_m": [
+      3.5,
+      1.4665,
+      1.2578
+    ],
+    "caja_cm": [
+      350.0,
+      146.65,
+      125.78
+    ],
+    "islas_uv": [
+      "cuerpo",
+      "mandibula",
+      "dientes",
+      "ojos",
+      "aletas"
+    ],
+    "material_fbx": "M_Criatura"
+  },
+  {
+    "id": "belemnita_morpho",
+    "fbx": "belemnita_morpho.fbx",
+    "triangulos": 364,
+    "caja_m": [
+      0.4,
+      0.4315,
+      0.1074
+    ],
+    "caja_cm": [
+      40.0,
+      43.15,
+      10.74
+    ],
+    "islas_uv": [
+      "cuerpo",
+      "alas",
+      "aletas",
+      "brazos"
+    ],
+    "material_fbx": "M_Criatura"
+  },
+  {
+    "id": "bolsa_plastica",
+    "fbx": "bolsa_plastica.fbx",
+    "triangulos": 1108,
+    "caja_m": [
+      0.6,
+      0.4054,
+      0.2536
+    ],
+    "caja_cm": [
+      60.0,
+      40.54,
+      25.36
+    ],
+    "islas_uv": [
+      "campana",
+      "cintas"
+    ],
+    "material_fbx": "M_Plastico"
+  },
+  {
+    "id": "botella_pet",
+    "fbx": "botella_pet.fbx",
+    "triangulos": 1078,
+    "caja_m": [
+      0.3,
+      0.0708,
+      0.0708
+    ],
+    "caja_cm": [
+      30.0,
+      7.08,
+      7.08
+    ],
+    "islas_uv": [
+      "botella",
+      "tapa",
+      "etiqueta"
+    ],
+    "material_fbx": "M_Plastico"
+  },
+  {
+    "id": "red_fantasma",
+    "fbx": "red_fantasma.fbx",
+    "triangulos": 1098,
+    "caja_m": [
+      2.0,
+      1.2584,
+      0.32
+    ],
+    "caja_cm": [
+      200.0,
+      125.84,
+      32.0
+    ],
+    "islas_uv": [
+      "malla",
+      "cuerda",
+      "boyas"
+    ],
+    "material_fbx": "M_Plastico"
+  },
+  {
+    "id": "anillo_lata",
+    "fbx": "anillo_lata.fbx",
+    "triangulos": 1092,
+    "caja_m": [
+      0.15,
+      0.0989,
+      0.0059
+    ],
+    "caja_cm": [
+      15.0,
+      9.89,
+      0.59
+    ],
+    "islas_uv": [
+      "anillos",
+      "uniones"
+    ],
+    "material_fbx": "M_Plastico"
+  },
+  {
+    "id": "roca_lecho",
+    "fbx": "roca_lecho.fbx",
+    "triangulos": 816,
+    "caja_m": [
+      1.0,
+      0.7371,
+      0.496
+    ],
+    "caja_cm": [
+      100.0,
+      73.71,
+      49.6
+    ],
+    "islas_uv": [
+      "roca"
+    ],
+    "material_fbx": "M_Decorado"
+  },
+  {
+    "id": "coral_abanico",
+    "fbx": "coral_abanico.fbx",
+    "triangulos": 1854,
+    "caja_m": [
+      0.8,
+      0.0705,
+      0.6849
+    ],
+    "caja_cm": [
+      80.0,
+      7.05,
+      68.49
+    ],
+    "islas_uv": [
+      "tronco",
+      "ramas"
+    ],
+    "material_fbx": "M_Criatura"
+  },
+  {
+    "id": "kelp_tira",
+    "fbx": "kelp_tira.fbx",
+    "triangulos": 766,
+    "caja_m": [
+      3.0,
+      0.2142,
+      0.1518
+    ],
+    "caja_cm": [
+      300.0,
+      21.42,
+      15.18
+    ],
+    "islas_uv": [
+      "lamina",
+      "raiz"
+    ],
+    "material_fbx": "M_Criatura"
+  }
+]

@@ -255,6 +255,25 @@ o domemaster para o projetor e o equirretangular para a sala virtual.
 
 </details>
 
+## O abismo: o Unreal como fonte
+
+O sentido inverso: em vez de receber vídeo, o Unreal **gera o domo** e o envia por **NDI**. Uma cena em tempo real (fundo
+marinho com partículas e brilho, criaturas que cruzam a Colômbia de hoje com o mar do Cretáceo de Villa de Leyva, e lixo
+plástico com o qual dialogam) é renderizada como domemaster por uma câmera que percorre o espaço. Medido: 2048 × 2048 a 30 fps
+estáveis por NDI na RTX 3090, no editor e no executável empacotado. Falta recebê-lo dentro do TouchDesigner.
+
+<div align="center">
+
+<img src="05_Preview/renders/abismo_domemaster_dialogo.jpg" alt="O domemaster do abismo: criaturas bioluminescentes, lixo plástico e o leito marinho na borda." width="46%">
+<img src="05_Preview/renders/abismo_domemaster_tortuga.jpg" alt="Uma tartaruga marinha com orquídeas cruza diante da câmera." width="46%">
+
+<sub>O domemaster que sai do Unreal por NDI: o diálogo com o lixo, e uma tartaruga que cruza diante da câmera.</sub>
+
+</div>
+
+Detalhes, parâmetros e armadilhas em [09_Abismo_Unreal_a_NDI.md](04_Docs/09_Abismo_Unreal_a_NDI.md) (em espanhol); as criaturas em
+[08_Criaturas_abismo.md](04_Docs/08_Criaturas_abismo.md) (em espanhol).
+
 ## Placas de vídeo
 
 O executável usa DirectX 12 e não depende do fabricante. **Só foi testado em NVIDIA**; para AMD e Intel estão escritas
@@ -320,6 +339,7 @@ timeline
 | Agora | Depois | Mais adiante |
 |---|---|---|
 | **Fechar a cadeia ao vivo** | **Mais controle do show** | **Mais alcance** |
+| Receber o abismo dentro do TouchDesigner (módulo `IN_UE`) e devolver um Spout In ao `VIDEO_DOME` sem erros | Áudio do abismo por NDI e controle por UDP | O abismo como textura da cúpula da sala virtual |
 | Testar o painel UDP do TouchDesigner contra o executável aberto | Transição entre cues e um segundo reprodutor para misturar dois vídeos | Mais salas da Colômbia, com medidas no local |
 | Levar as correções do shader de telas para o `estudio_pantallas.html` | Remote Control no build (`-RCWebControlEnable`) como segundo caminho de controle | Uma sala montada a partir de uma ficha do `domos_colombia.json`, sem editar código |
 | Testar o executável em óculos VR (SteamVR, Virtual Desktop) | Costura suavizada do 360 dentro do material da cúpula | Codec HAP para quando o disco for mais barato que a GPU |
@@ -335,6 +355,7 @@ timeline
 - [x] Paredes pretas, piso menos reflexivo, perfis de renderização e ajustes salvos.
 - [x] TouchDesigner: montagens corrigidas, `IN_FX`, `IN_3D`, master e painel UDP.
 - [x] Pesquisa sobre AMD e Intel.
+- [x] **O abismo:** o Unreal gera um domo em tempo real e o envia por NDI (cena, criaturas e diálogo com o lixo).
 - [x] README em espanhol, inglês e português.
 
 As propostas são abertas como *issue* ou *pull request*; veja [Contribuir](#contribuir).
@@ -349,6 +370,8 @@ As propostas são abertas como *issue* ou *pull request*; veja [Contribuir](#con
 | conectar o TouchDesigner ao Unreal (Spout) | [03_Puente_Spout.md](04_Docs/03_Puente_Spout.md) |
 | usar o executável sem TouchDesigner e empacotá-lo | [06_Unreal_standalone.md](04_Docs/06_Unreal_standalone.md) |
 | usá-lo com uma placa AMD ou Intel | [07_GPUs_AMD_e_Intel.md](04_Docs/07_GPUs_AMD_e_Intel.md) |
+| fazer o Unreal gerar o domo e enviá-lo por NDI (o abismo) | [09_Abismo_Unreal_a_NDI.md](04_Docs/09_Abismo_Unreal_a_NDI.md) |
+| as criaturas e o lixo plástico do abismo | [08_Criaturas_abismo.md](04_Docs/08_Criaturas_abismo.md) |
 | os outros modelos de sala (45 e 90) | [05_Modelos_de_sala.md](04_Docs/05_Modelos_de_sala.md) |
 | as cúpulas da Colômbia e como corrigir seus dados | [06_Modelos/Domos_de_Colombia.md](06_Modelos/Domos_de_Colombia.md) |
 | testar montagens de telas no navegador | [estudio_pantallas.html](00_TouchDesigner/video_dome/web/estudio_pantallas.html) |

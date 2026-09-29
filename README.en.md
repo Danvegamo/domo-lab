@@ -254,6 +254,26 @@ come the domemaster for the projector and the equirectangular for the virtual ro
 
 </details>
 
+## The abyss: Unreal as the source
+
+The reverse direction: instead of receiving video, Unreal **generates the dome** and sends it over **NDI**. A real-time scene
+(a deep seabed with particles and glow, creatures that cross today's Colombia with the Cretaceous sea of Villa de Leyva, and
+plastic waste they talk to) is rendered as a domemaster by a camera that travels through the space. Measured: 2048 × 2048 at a
+steady 30 fps over NDI on the RTX 3090, in the editor and in the packaged player. Receiving it inside TouchDesigner is still
+to do.
+
+<div align="center">
+
+<img src="05_Preview/renders/abismo_domemaster_dialogo.jpg" alt="The abyss domemaster: bioluminescent creatures, plastic waste and the seabed at the edge." width="46%">
+<img src="05_Preview/renders/abismo_domemaster_tortuga.jpg" alt="A sea turtle with orchids swims across the camera." width="46%">
+
+<sub>The domemaster that leaves Unreal over NDI: the dialogue with the waste, and a turtle crossing in front of the camera.</sub>
+
+</div>
+
+Details, parameters and pitfalls in [09_Abismo_Unreal_a_NDI.md](04_Docs/09_Abismo_Unreal_a_NDI.md) (Spanish); the creatures in
+[08_Criaturas_abismo.md](04_Docs/08_Criaturas_abismo.md) (Spanish).
+
 ## Graphics cards
 
 The player uses DirectX 12 and does not depend on the vendor. **It has only been tested on NVIDIA**; for AMD and
@@ -320,6 +340,7 @@ timeline
 | Now | Next | Later |
 |---|---|---|
 | **Close the live chain** | **More show control** | **More reach** |
+| Receive the abyss inside TouchDesigner (an `IN_UE` module) and give `VIDEO_DOME` a Spout In again without errors | Abyss audio over NDI and UDP control | The abyss as the dome texture of the virtual room |
 | Test TouchDesigner's UDP panel against the running player | Cross-fade between cues and a second player to mix two videos | More Colombian rooms, measured on site |
 | Port the screen-shader fixes to `estudio_pantallas.html` | Remote Control in the build (`-RCWebControlEnable`) as a second way to control it | A room built from a `domos_colombia.json` entry, without editing code |
 | Test the player in a headset (SteamVR, Virtual Desktop) | Feathered 360 seam inside the dome material | HAP codec for when disk is cheaper than GPU |
@@ -335,6 +356,7 @@ timeline
 - [x] Black walls, a less reflective floor, render profiles and saved settings.
 - [x] TouchDesigner: fixed layouts, `IN_FX`, `IN_3D`, master and UDP panel.
 - [x] AMD and Intel research.
+- [x] **The abyss:** Unreal generates a real-time dome and sends it over NDI (scene, creatures and a dialogue with the waste).
 - [x] README in Spanish, English and Portuguese.
 
 Proposals are opened as an *issue* or a *pull request*; see [Contributing](#contributing).
@@ -349,6 +371,8 @@ Proposals are opened as an *issue* or a *pull request*; see [Contributing](#cont
 | connect TouchDesigner to Unreal (Spout) | [03_Puente_Spout.md](04_Docs/03_Puente_Spout.md) |
 | use the player without TouchDesigner and package it | [06_Unreal_standalone.md](04_Docs/06_Unreal_standalone.md) |
 | use it with an AMD or Intel card | [07_GPUs_AMD_e_Intel.md](04_Docs/07_GPUs_AMD_e_Intel.md) |
+| have Unreal generate the dome and send it over NDI (the abyss) | [09_Abismo_Unreal_a_NDI.md](04_Docs/09_Abismo_Unreal_a_NDI.md) |
+| the creatures and plastic waste of the abyss | [08_Criaturas_abismo.md](04_Docs/08_Criaturas_abismo.md) |
 | the other room models (45 and 90) | [05_Modelos_de_sala.md](04_Docs/05_Modelos_de_sala.md) |
 | Colombia's domes and how to fix their data | [06_Modelos/Domos_de_Colombia.md](06_Modelos/Domos_de_Colombia.md) |
 | try screen layouts in the browser | [estudio_pantallas.html](00_TouchDesigner/video_dome/web/estudio_pantallas.html) |
