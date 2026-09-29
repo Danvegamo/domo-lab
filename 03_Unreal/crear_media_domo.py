@@ -86,13 +86,26 @@ PARAMETROS = [
     ("CentroY", 0.0),
     ("Escala", 1.0),
     ("Rotar", 0.0),
-    ("PantallaAzimut", 0.0),
-    ("PantallaElevacion", 30.0),
-    ("PantallaAncho", 100.0),
-    ("PantallaAlto", 56.0),
-    ("PantallaCurva", 0.0),
-    ("PantallaBorde", 0.02),
+    ("PView", None),
 ]
+
+# Hasta tres filas de pantallas (formato Plano169), como la tabla `screens` de
+# TouchDesigner (video_dome/dome_map.frag). Seis vectores por fila, con las mismas
+# columnas que los arrays uPos, uSize, uCrop, uOpt, uRep y uAnm del shader:
+#   PPos  = yaw, elevacion, roll, forma (0 plana, 1 curva, 2 banda, 3 tunel, 4 cilindro)
+#   PSize = ancho, alto, espejo (0 no, 1 horiz, 2 vert, 3 ambos), opacidad
+#   PCrop = recorte x, y, ancho, alto
+#   POpt  = encendida, borde suave, repeticiones adentro, solape entre copias (grados)
+#   PRep  = copias en anillo, arco (grados), espejo alterno, corrimiento del recorte
+#   PAnm  = recorrido, giro, bordes (0 todos, 1 costados, 2 arriba y abajo), reservado
+# PView = cuantas filas, giro global (grados), recorrido acumulado, giro acumulado (grados).
+# Los vectores llegan al nodo Custom como float4 (RGB mas alfa por un Append).
+MAX_FILAS = 3
+VECTORES = ["PView"] + ["P{}{}".format(k, i) for i in range(MAX_FILAS) for k in ("Pos", "Size", "Crop", "Opt", "Rep", "Anm")]
+VECTOR_DEFECTO = {
+    "Pos": (0.0, 45.0, 0.0, 0.0), "Size": (70.0, 39.0, 0.0, 1.0), "Crop": (0.0, 0.0, 1.0, 1.0),
+    "Opt": (1.0, 0.04, 1.0, 0.0), "Rep": (1.0, 360.0, 0.0, 0.0), "Anm": (0.0, 0.0, 0.0, 0.0),
+}
 
 # HLSL del nodo Custom. Entradas: UV (TexCoord 0 de la cupula), Tex (la
 # MediaTexture) y los PARAMETROS. Sale el color RGB ya leido del video.
@@ -190,36 +203,164 @@ else if (f == 2 || f == 3)
 }
 else if (f == 4)
 {
-    // pantalla plana sobre la cupula (pantalla169.frag)
-    float paz = radians(PantallaAzimut), pel = radians(PantallaElevacion);
-    float3 C = float3(cos(pel) * sin(paz), sin(pel), cos(pel) * cos(paz));
-    float3 R = normalize(cross(float3(0.0, 1.0, 0.0), C));
-    float3 U = cross(C, R);
-    float hh = radians(max(PantallaAncho, 1.0)) * 0.5;
-    float hv = radians(max(PantallaAlto, 1.0)) * 0.5;
-    float t = dot(dd, C);
-    float x, y;
-    bool ok;
-    if (PantallaCurva < 0.5)
+    // Pantallas sobre la cupula: port de dome_map.frag (TouchDesigner). Hasta tres
+    // filas; cada una puede repetirse en anillo y sus copias se cosen. Las formas:
+    // 0 plana, 1 curva, 2 banda, 3 tunel, 4 cilindro. Base de dome_map.frag:
+    // x derecha, y frente, z cenit (aqui dd es x derecha, y cenit, z frente).
+    const float EL_MAX = 1.5551;
+    float3 Pd = float3(dd.x, dd.z, dd.y);
+    float giroG = radians(PView.y);
+    int count = clamp((int)round(PView.x), 0, 3);
+    float4 aPos[3] = { PPos0, PPos1, PPos2 };
+    float4 aSize[3] = { PSize0, PSize1, PSize2 };
+    float4 aCrop[3] = { PCrop0, PCrop1, PCrop2 };
+    float4 aOpt[3] = { POpt0, POpt1, POpt2 };
+    float4 aRep[3] = { PRep0, PRep1, PRep2 };
+    float4 aAnm[3] = { PAnm0, PAnm1, PAnm2 };
+    float3 acc = float3(0.0, 0.0, 0.0);
+
+    [loop] for (int i = 0; i < 3; ++i)
     {
-        ok = t > 0.001;
-        float tt = max(t, 0.001);
-        x = dot(dd, R) / tt / tan(hh);
-        y = dot(dd, U) / tt / tan(hv);
+        if (i >= count) break;
+        if (aOpt[i].x < 0.5) continue;
+
+        int modo = (int)round(aPos[i].w);
+        float hf = radians(max(aSize[i].x, 0.1));
+        float vf = radians(max(aSize[i].y, 0.1));
+        float travel = PView.z * aAnm[i].x;
+        float yaw0 = radians(aPos[i].x + PView.w * aAnm[i].y) + giroG;
+        int bordes = (int)round(aAnm[i].z);
+        int copias = clamp((int)round(aRep[i].x), 1, 12);
+        float span = radians(aRep[i].y <= 0.0 ? 360.0 : aRep[i].y);
+        bool alterna = aRep[i].z > 0.5;
+        float pasoCrop = aRep[i].w;
+        float solape = radians(max(aOpt[i].w, 0.0));
+        float hfc = (copias > 1) ? hf + solape : hf;
+        float fth = (copias > 1 && solape > 0.0) ? solape / hfc : max(aOpt[i].y, 0.0001);
+        float tile = aOpt[i].z;
+        float pitch = radians(aPos[i].y);
+        float roll = radians(aPos[i].z);
+        float3 suma = float3(0.0, 0.0, 0.0);
+        float peso = 0.0;
+
+        [loop] for (int k = 0; k < 12; ++k)
+        {
+            if (k >= copias) break;
+
+            float cy = 0.0;
+            if (copias > 1)
+            {
+                bool completa = span >= radians(359.0);
+                float paso = completa ? span / (float)copias : span / (float)(copias - 1);
+                cy = completa ? (float)k * paso : ((float)k - ((float)copias - 1.0) * 0.5) * paso;
+            }
+            float yaw = yaw0 + cy;
+            float2 uvp = float2(0.0, 0.0);
+            bool ok = false;
+
+            // do { } while (false): permite salir con break de cada forma sin funciones
+            do
+            {
+                if (modo == 2)
+                {
+                    // banda
+                    float az = atan2(Pd.x, Pd.y);
+                    float elv = asin(clamp(Pd.z, -1.0, 1.0));
+                    float da = az - yaw;
+                    da = atan2(sin(da), cos(da));
+                    uvp = float2(0.5 + da / hfc, 0.5 + (elv - pitch) / vf);
+                    if (tile > 1.0) uvp.x = frac(uvp.x * tile);
+                    uvp.y = uvp.y - travel;
+                    ok = (uvp.x >= 0.0 && uvp.x <= 1.0 && uvp.y >= 0.0 && uvp.y <= 1.0);
+                    break;
+                }
+                if (modo == 4)
+                {
+                    // cilindro
+                    float az = atan2(Pd.x, Pd.y);
+                    float elv = asin(clamp(Pd.z, -1.0, 1.0));
+                    if (elv <= 0.0005) break;
+                    float da = atan2(sin(az - yaw), cos(az - yaw));
+                    if (abs(da) > hfc * 0.5) break;
+                    float h = tan(min(elv, EL_MAX));
+                    float h0 = tan(clamp(pitch, 0.0, EL_MAX));
+                    float h1 = tan(clamp(pitch + vf, 0.001, EL_MAX));
+                    if (h1 <= h0) break;
+                    uvp = float2(0.5 + da / hfc, (h - h0) / (h1 - h0));
+                    if (tile > 1.0) uvp.x = frac(uvp.x * tile);
+                    uvp.y = uvp.y - travel;
+                    ok = (uvp.x >= 0.0 && uvp.x <= 1.0 && uvp.y >= 0.0 && uvp.y <= 1.0);
+                    break;
+                }
+
+                float3 Cc = float3(sin(yaw) * cos(pitch), cos(yaw) * cos(pitch), sin(pitch));
+                float3 Rv = float3(cos(yaw), -sin(yaw), 0.0);
+                float3 Uv = float3(-sin(yaw) * sin(pitch), -cos(yaw) * sin(pitch), cos(pitch));
+                if (abs(roll) > 1e-6)
+                {
+                    float3 r2 = Rv * cos(roll) + Uv * sin(roll);
+                    Uv = Uv * cos(roll) - Rv * sin(roll);
+                    Rv = r2;
+                }
+                float px = dot(Pd, Rv);
+                float py = dot(Pd, Uv);
+                float pz = dot(Pd, Cc);
+                if (pz <= 0.001) break;
+
+                if (modo == 3)
+                {
+                    // tunel: polar alrededor del centro de la pantalla
+                    float2 q = float2(atan2(px, pz) / (hfc * 0.5), asin(clamp(py, -1.0, 1.0)) / (vf * 0.5));
+                    float rad = length(q);
+                    if (rad > 1.0) break;
+                    float ang = atan2(q.y, q.x) / (2.0 * K_PI) + 0.5;
+                    float repT = max(tile, 1.0);
+                    uvp = float2(ang, frac((1.0 - rad) * repT - travel));
+                    ok = true;
+                    break;
+                }
+                if (modo == 0)
+                {
+                    uvp = float2(0.5 + (px / pz) / (2.0 * tan(hfc * 0.5)), 0.5 + (py / pz) / (2.0 * tan(vf * 0.5)));
+                }
+                else
+                {
+                    uvp = float2(0.5 + atan2(px, pz) / hfc, 0.5 + asin(clamp(py, -1.0, 1.0)) / vf);
+                }
+                if (tile > 1.0) uvp.x = frac(uvp.x * tile);
+                ok = (uvp.x >= 0.0 && uvp.x <= 1.0 && uvp.y >= 0.0 && uvp.y <= 1.0);
+            } while (false);
+
+            if (!ok) continue;
+
+            float fth2 = max(fth, 0.0001);
+            float lados = smoothstep(0.0, fth2, uvp.x) * smoothstep(0.0, fth2, 1.0 - uvp.x);
+            float arrab = smoothstep(0.0, fth2, uvp.y) * smoothstep(0.0, fth2, 1.0 - uvp.y);
+            float w = (bordes == 1) ? lados : ((bordes == 2) ? arrab : lados * arrab);
+            if (w <= 0.0) continue;
+
+            int esp = (int)round(aSize[i].z);
+            bool flipx = (esp == 1 || esp == 3);
+            bool flipy = (esp == 2 || esp == 3);
+            if (alterna && (k - (k / 2) * 2) == 1) flipx = !flipx;
+            if (flipx) uvp.x = 1.0 - uvp.x;
+            if (flipy) uvp.y = 1.0 - uvp.y;
+
+            float2 c0 = aCrop[i].xy;
+            c0.x = frac(c0.x + pasoCrop * (float)k);
+            float2 cs = max(aCrop[i].zw, float2(0.0001, 0.0001));
+            float2 uvs = clamp(c0 + uvp * cs, 0.0, 1.0);
+
+            suma += Tex.SampleLevel(TexSampler, float2(uvs.x, 1.0 - uvs.y), 0).rgb * w;
+            peso += w;
+        }
+
+        if (peso <= 0.0) continue;
+        float3 col = suma / peso;
+        float aa = min(peso, 1.0) * clamp(aSize[i].w, 0.0, 1.0);
+        acc = lerp(acc, col, aa);
     }
-    else
-    {
-        ok = t > -0.999;
-        x = atan2(dot(dd, R), t) / hh;
-        y = asin(clamp(dot(dd, U), -1.0, 1.0)) / hv;
-    }
-    if (!ok) return NEGRO;
-    float2 suv = float2(x, y) * 0.5 + 0.5;
-    float b = max(PantallaBorde, 1e-4);
-    m = smoothstep(0.0, b, suv.x) * smoothstep(0.0, b, 1.0 - suv.x)
-      * smoothstep(0.0, b, suv.y) * smoothstep(0.0, b, 1.0 - suv.y);
-    if (m <= 0.0) return NEGRO;
-    tuv = float2(clamp(suv.x, 0.0, 1.0), clamp(1.0 - suv.y, 0.0, 1.0));
+    return acc;
 }
 else
 {
@@ -298,7 +439,7 @@ def crear_material(mt):
     custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
 
     entradas = []
-    for nombre in ["UV", "Tex"] + [p[0] for p in PARAMETROS]:
+    for nombre in ["UV", "Tex"] + [p[0] for p in PARAMETROS if p[1] is not None] + VECTORES[1:] + ["PView"]:
         ci = unreal.CustomInput()
         ci.set_editor_property("input_name", nombre)
         entradas.append(ci)
@@ -310,12 +451,26 @@ def crear_material(mt):
 
     conectar(uv, "", "UV")
     conectar(tex, "", "Tex")
-    for i, (nombre, defecto) in enumerate(PARAMETROS):
+    escalares = [p for p in PARAMETROS if p[1] is not None]
+    for i, (nombre, defecto) in enumerate(escalares):
         e = mel.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -900, y + 260 + i * 70)
         e.set_editor_property("parameter_name", nombre)
         e.set_editor_property("default_value", defecto)
         e.set_editor_property("group", "Domo")
         conectar(e, "", nombre)
+    for j, nombre in enumerate(VECTORES):
+        if nombre == "PView":
+            defecto = (0.0, 0.0, 0.0, 0.0)
+        else:
+            defecto = VECTOR_DEFECTO[nombre[1:-1] if nombre[-1].isdigit() else nombre[1:]]
+        v = mel.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -1500, y + j * 90)
+        v.set_editor_property("parameter_name", nombre)
+        v.set_editor_property("default_value", unreal.LinearColor(*defecto))
+        v.set_editor_property("group", "Pantallas")
+        ap = mel.create_material_expression(material, unreal.MaterialExpressionAppendVector, -1250, y + j * 90)
+        mel.connect_material_expressions(v, "", ap, "A")
+        mel.connect_material_expressions(v, "A", ap, "B")
+        conectar(ap, "", nombre)
 
     brillo = mel.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -250, 200)
     brillo.set_editor_property("parameter_name", "Brillo")
@@ -331,7 +486,7 @@ def crear_material(mt):
     mel.set_base_material_usage(material, unreal.MaterialUsage.MATUSAGE_NANITE, True)
     mel.recompile_material(material)
     unreal.EditorAssetLibrary.save_loaded_asset(material, False)
-    log("M_DomoMedia {} con {} parametros.".format("creado" if nuevo else "rehecho", len(PARAMETROS) + 2))
+    log("M_DomoMedia {} con {} escalares y {} vectores.".format("creado" if nuevo else "rehecho", len(escalares), len(VECTORES)))
 
     mi, nuevo = cargar_o_crear(MI_PATH, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
     mel.set_material_instance_parent(mi, material)

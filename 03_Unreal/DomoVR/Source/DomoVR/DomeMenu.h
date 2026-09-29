@@ -54,6 +54,11 @@ private:
 	TArray<TSharedPtr<FString>> OpcionesVista;
 	TArray<TSharedPtr<FString>> OpcionesCalidad;
 	TArray<TSharedPtr<FString>> OpcionesSala;
+	TArray<TSharedPtr<FString>> OpcionesModo;
+	TArray<TSharedPtr<FString>> OpcionesPlantilla;
+	TArray<TSharedPtr<FString>> OpcionesForma;
+	TArray<TSharedPtr<FString>> OpcionesEspejo;
+	TArray<TSharedPtr<FString>> OpcionesBordes;
 	TArray<FVista> Vistas;
 	TArray<FString> MapasDeSala;
 
@@ -74,6 +79,9 @@ private:
 	TSharedRef<SWidget> SeccionImagen();
 	TSharedRef<SWidget> SeccionPantalla();
 	TSharedRef<SWidget> SeccionSalaYLuces();
+	TSharedRef<SWidget> SeccionMovimiento();
+	TSharedRef<SWidget> SeccionTeclas();
+	TSharedRef<SWidget> BotonTecla(int32 Accion, int32 Ranura);
 
 	TSharedRef<SWidget> Combo(TArray<TSharedPtr<FString>>* Opciones, TFunction<int32()> IndiceActual,
 		TFunction<void(int32)> AlElegir, TSharedPtr<SWidget>* Guardar = nullptr);

@@ -2,6 +2,8 @@
 
 #include "SpoutDomeReceiver.h"
 #include "DomeMenu.h"
+#include "DomePawn.h"
+#include "GameFramework/PlayerStart.h"
 
 #include "Components/InputComponent.h"
 #include "Components/LightComponent.h"
@@ -159,6 +161,221 @@ namespace
 		const FString E = FPaths::GetExtension(Archivo).ToLower();
 		return E == TEXT("mp4") || E == TEXT("mov") || E == TEXT("mkv") || E == TEXT("avi") || E == TEXT("m4v")
 			|| E == TEXT("wmv") || E == TEXT("webm");
+	}
+}
+
+// --- Pantallas 16:9 (plantillas, edicion en vivo, guardado) --------------------------
+
+namespace
+{
+	const TCHAR* FormaATexto(int32 F)
+	{
+		switch (F)
+		{
+		case 1: return TEXT("curva");
+		case 2: return TEXT("banda");
+		case 3: return TEXT("tunel");
+		case 4: return TEXT("cilindro");
+		default: return TEXT("plana");
+		}
+	}
+
+	int32 FormaDeTexto(const FString& T)
+	{
+		const FString L = T.ToLower();
+		if (L == TEXT("curva")) return 1;
+		if (L == TEXT("banda")) return 2;
+		if (L == TEXT("tunel")) return 3;
+		if (L == TEXT("cilindro")) return 4;
+		return 0;
+	}
+
+	const TCHAR* EspejoATexto(int32 E)
+	{
+		switch (E)
+		{
+		case 1: return TEXT("horizontal");
+		case 2: return TEXT("vertical");
+		case 3: return TEXT("ambos");
+		default: return TEXT("no");
+		}
+	}
+
+	int32 EspejoDeTexto(const FString& T)
+	{
+		const FString L = T.ToLower();
+		if (L == TEXT("horizontal")) return 1;
+		if (L == TEXT("vertical")) return 2;
+		if (L == TEXT("ambos")) return 3;
+		return 0;
+	}
+
+	const TCHAR* BordesATexto(int32 B)
+	{
+		return B == 1 ? TEXT("costados") : (B == 2 ? TEXT("arriba_abajo") : TEXT("todos"));
+	}
+
+	int32 BordesDeTexto(const FString& T)
+	{
+		const FString L = T.ToLower();
+		return L == TEXT("costados") ? 1 : (L == TEXT("arriba_abajo") ? 2 : 0);
+	}
+
+	FDomePantallaFila Fila(const TCHAR* Nombre, float Yaw, float Elev, float Ancho, float Alto, int32 Forma = 0)
+	{
+		FDomePantallaFila F;
+		F.Nombre = Nombre;
+		F.Yaw = Yaw;
+		F.Elevacion = Elev;
+		F.Ancho = Ancho;
+		F.Alto = Alto;
+		F.Forma = Forma;
+		return F;
+	}
+
+	struct FPlantilla
+	{
+		const TCHAR* Id;
+		const TCHAR* Etiqueta;
+	};
+
+	const FPlantilla Plantillas[] = {
+		{ TEXT("cine"), TEXT("Una pantalla (cine)") },
+		{ TEXT("grande"), TEXT("Una pantalla grande") },
+		{ TEXT("bajo"), TEXT("Una pantalla baja") },
+		{ TEXT("cenital"), TEXT("Una pantalla cenital") },
+		{ TEXT("sala_2"), TEXT("2 pantallas que ocupan el domo") },
+		{ TEXT("sala_4"), TEXT("4 pantallas (una frente a cada cuarto)") },
+		{ TEXT("sala_6"), TEXT("6 pantallas") },
+		{ TEXT("sala_4_espejo"), TEXT("4 pantallas espejadas") },
+		{ TEXT("sala_6_mosaico"), TEXT("Mosaico de 6 (cada una un pedazo)") },
+		{ TEXT("sala_corona"), TEXT("Corona (anillo de 6 + cenital)") },
+		{ TEXT("sala_corona_panorama"), TEXT("Corona panoramica") },
+		{ TEXT("tres"), TEXT("Tres pantallas") },
+		{ TEXT("espejo"), TEXT("Dos pantallas espejadas") },
+		{ TEXT("anillo"), TEXT("Anillo (banda alrededor)") },
+		{ TEXT("anillo_doble"), TEXT("Anillo doble") },
+		{ TEXT("tunel"), TEXT("Tunel") },
+		{ TEXT("tunel_con_sala"), TEXT("Tunel con pantallas") },
+		{ TEXT("cilindro"), TEXT("Cilindro (pared que sube)") },
+		{ TEXT("cilindro_doble"), TEXT("Cilindro doble") },
+		{ TEXT("cilindro_con_sala"), TEXT("Cilindro con pantallas") },
+		{ TEXT("fragmentos"), TEXT("Fragmentos (un tercio cada una)") },
+	};
+
+	/** Las plantillas de video_dome/screens_module.py (TouchDesigner), a las mismas cifras. */
+	TArray<FDomePantallaFila> ArmarPlantilla(const FString& Id)
+	{
+		TArray<FDomePantallaFila> R;
+		if (Id == TEXT("grande")) { R.Add(Fila(TEXT("grande"), 0, 48, 95, 53)); }
+		else if (Id == TEXT("bajo")) { R.Add(Fila(TEXT("bajo"), 0, 28, 80, 45)); }
+		else if (Id == TEXT("cenital")) { R.Add(Fila(TEXT("cenital"), 0, 70, 90, 51)); }
+		else if (Id == TEXT("sala_2"))
+		{
+			FDomePantallaFila F = Fila(TEXT("dos_grandes"), 0, 44, 170, 59, 1);
+			F.Copias = 2; F.Arco = 360; F.Solape = 12; F.Bordes = 1;
+			R.Add(F);
+		}
+		else if (Id == TEXT("sala_4") || Id == TEXT("sala_4_espejo"))
+		{
+			FDomePantallaFila F = Fila(Id == TEXT("sala_4") ? TEXT("cuatro") : TEXT("cuatro_espejo"), 0, 42, 82, 46);
+			F.Copias = 4; F.Arco = 360; F.Solape = 8; F.Bordes = 1;
+			F.bEspejoAlterno = Id == TEXT("sala_4_espejo");
+			R.Add(F);
+		}
+		else if (Id == TEXT("sala_6"))
+		{
+			FDomePantallaFila F = Fila(TEXT("seis"), 0, 40, 54, 30);
+			F.Copias = 6; F.Arco = 360; F.Solape = 6; F.Bordes = 1;
+			R.Add(F);
+		}
+		else if (Id == TEXT("sala_6_mosaico"))
+		{
+			FDomePantallaFila F = Fila(TEXT("mosaico"), 0, 40, 54, 54);
+			F.Copias = 6; F.Arco = 360; F.Corrimiento = 1.f / 6.f; F.CropX = -0.01f; F.CropW = 1.f / 6.f + 0.02f; F.Solape = 6; F.Bordes = 1;
+			R.Add(F);
+		}
+		else if (Id == TEXT("sala_corona") || Id == TEXT("sala_corona_panorama"))
+		{
+			const bool bPan = Id == TEXT("sala_corona_panorama");
+			FDomePantallaFila F = Fila(bPan ? TEXT("corona_pan") : TEXT("corona"), 0, 32, 66, 42);
+			F.Copias = 6; F.Arco = 360; F.Solape = 8; F.Bordes = 0;
+			if (bPan) { F.Corrimiento = 1.f / 6.f; F.CropX = -0.012f; F.CropW = 1.f / 6.f + 0.024f; }
+			else { F.bEspejoAlterno = true; }
+			R.Add(F);
+			FDomePantallaFila C = Fila(TEXT("cenital"), 0, 70, 96, 96, 1);
+			C.Opacidad = bPan ? 0.75f : 0.85f; C.Borde = 0.30f;
+			R.Add(C);
+		}
+		else if (Id == TEXT("tres"))
+		{
+			FDomePantallaFila A = Fila(TEXT("izq"), -38, 45, 34, 19); A.Espejo = 1;
+			FDomePantallaFila B = Fila(TEXT("centro"), 0, 45, 34, 19);
+			FDomePantallaFila C = Fila(TEXT("der"), 38, 45, 34, 19); C.Espejo = 1;
+			R.Add(A); R.Add(B); R.Add(C);
+		}
+		else if (Id == TEXT("espejo"))
+		{
+			FDomePantallaFila A = Fila(TEXT("a"), -42, 45, 60, 34);
+			FDomePantallaFila B = Fila(TEXT("b_espejo"), 42, 45, 60, 34); B.Espejo = 1;
+			R.Add(A); R.Add(B);
+		}
+		else if (Id == TEXT("anillo"))
+		{
+			FDomePantallaFila F = Fila(TEXT("anillo"), 0, 40, 360, 34, 2); F.Repeticion = 3;
+			R.Add(F);
+		}
+		else if (Id == TEXT("anillo_doble"))
+		{
+			FDomePantallaFila A = Fila(TEXT("anillo_bajo"), 0, 28, 360, 24, 2); A.Repeticion = 4;
+			FDomePantallaFila B = Fila(TEXT("anillo_alto"), 180, 58, 360, 22, 2); B.Repeticion = 2; B.Espejo = 2; B.Opacidad = 0.85f;
+			R.Add(A); R.Add(B);
+		}
+		else if (Id == TEXT("tunel"))
+		{
+			FDomePantallaFila F = Fila(TEXT("tunel"), 0, 90, 170, 170, 3); F.Repeticion = 4;
+			R.Add(F);
+		}
+		else if (Id == TEXT("tunel_con_sala"))
+		{
+			FDomePantallaFila A = Fila(TEXT("tunel"), 0, 90, 170, 170, 3); A.Repeticion = 5; A.Opacidad = 0.6f;
+			FDomePantallaFila B = Fila(TEXT("sala"), 0, 38, 70, 39); B.Copias = 4; B.Arco = 360; B.Borde = 0.06f;
+			R.Add(A); R.Add(B);
+		}
+		else if (Id == TEXT("cilindro"))
+		{
+			FDomePantallaFila F = Fila(TEXT("cilindro"), 0, 8, 360, 60, 4); F.Repeticion = 3; F.Recorrido = 1; F.Bordes = 2; F.Borde = 0.10f;
+			R.Add(F);
+		}
+		else if (Id == TEXT("cilindro_doble"))
+		{
+			FDomePantallaFila A = Fila(TEXT("pared"), 0, 6, 360, 50, 4); A.Repeticion = 3; A.Recorrido = 1; A.Bordes = 2; A.Borde = 0.08f;
+			FDomePantallaFila B = Fila(TEXT("pared_alta"), 180, 40, 360, 40, 4); B.Repeticion = 2; B.Recorrido = -0.6f; B.Espejo = 2; B.Opacidad = 0.7f; B.Bordes = 2; B.Borde = 0.12f;
+			R.Add(A); R.Add(B);
+		}
+		else if (Id == TEXT("cilindro_con_sala"))
+		{
+			FDomePantallaFila A = Fila(TEXT("cilindro"), 0, 8, 360, 70, 4); A.Repeticion = 3; A.Recorrido = 1; A.Opacidad = 0.55f; A.Bordes = 2; A.Borde = 0.10f;
+			FDomePantallaFila B = Fila(TEXT("sala"), 0, 38, 70, 39); B.Copias = 4; B.Arco = 360; B.Solape = 8; B.Bordes = 1;
+			R.Add(A); R.Add(B);
+		}
+		else if (Id == TEXT("fragmentos"))
+		{
+			FDomePantallaFila A = Fila(TEXT("frag_izq"), -46, 45, 42, 42); A.CropX = 0.f; A.CropW = 0.34f;
+			FDomePantallaFila B = Fila(TEXT("frag_centro"), 0, 45, 42, 42); B.CropX = 0.33f; B.CropW = 0.34f;
+			FDomePantallaFila C = Fila(TEXT("frag_der"), 46, 45, 42, 42); C.CropX = 0.66f; C.CropW = 0.34f;
+			R.Add(A); R.Add(B); R.Add(C);
+		}
+		else { R.Add(Fila(TEXT("cine"), 0, 45, 70, 39)); }
+		return R;
+	}
+
+	/** Una fila desde la vieja "pantalla" unica de la playlist. */
+	FDomePantallaFila FilaDeLaPantallaVieja(const FDomePantalla& V)
+	{
+		FDomePantallaFila F = Fila(TEXT("pantalla"), V.Azimut, V.Elevacion, V.Ancho, V.Alto, V.bCurva ? 1 : 0);
+		F.Borde = V.Borde;
+		return F;
 	}
 }
 
@@ -397,6 +614,11 @@ void ADomeMediaController::Inicializar()
 		AplicarParametros(Cues[FMath::Clamp(CueActual, 0, Cues.Num() - 1)]);
 	}
 	AplicarFuente();
+	if (Controles.Cargar(RutaControles()))
+	{
+		UE_LOG(LogDomoMedia, Display, TEXT("Controles leidos de %s"), *RutaControles());
+	}
+	AplicarMovimiento();
 }
 
 FString ADomeMediaController::ResolverRutaPlaylist() const
@@ -520,6 +742,56 @@ bool ADomeMediaController::CargarPlaylist(const FString& Ruta)
 			LeerNumero(*Pan, TEXT("borde"), C.Pantalla.Borde);
 			(*Pan)->TryGetBoolField(TEXT("curva"), C.Pantalla.bCurva);
 		}
+		LeerNumero(O, TEXT("giroPantallas"), C.GiroPantallas);
+		LeerNumero(O, TEXT("velRecorrido"), C.VelRecorrido);
+		LeerNumero(O, TEXT("velGiro"), C.VelGiro);
+		O->TryGetStringField(TEXT("plantilla"), C.Plantilla);
+		const TArray<TSharedPtr<FJsonValue>>* Filas = nullptr;
+		if (O->TryGetArrayField(TEXT("pantallas"), Filas) && Filas)
+		{
+			for (const TSharedPtr<FJsonValue>& FV : *Filas)
+			{
+				const TSharedPtr<FJsonObject> FO = FV.IsValid() ? FV->AsObject() : nullptr;
+				if (!FO.IsValid() || C.Pantallas.Num() >= 3)
+				{
+					continue;
+				}
+				FDomePantallaFila F;
+				FO->TryGetStringField(TEXT("nombre"), F.Nombre);
+				FO->TryGetBoolField(TEXT("encendida"), F.bEncendida);
+				FString Txt;
+				if (FO->TryGetStringField(TEXT("forma"), Txt)) { F.Forma = FormaDeTexto(Txt); }
+				if (FO->TryGetStringField(TEXT("espejo"), Txt)) { F.Espejo = EspejoDeTexto(Txt); }
+				if (FO->TryGetStringField(TEXT("bordes"), Txt)) { F.Bordes = BordesDeTexto(Txt); }
+				LeerNumero(FO, TEXT("yaw"), F.Yaw);
+				LeerNumero(FO, TEXT("elevacion"), F.Elevacion);
+				LeerNumero(FO, TEXT("roll"), F.Roll);
+				LeerNumero(FO, TEXT("ancho"), F.Ancho);
+				LeerNumero(FO, TEXT("alto"), F.Alto);
+				LeerNumero(FO, TEXT("opacidad"), F.Opacidad);
+				LeerNumero(FO, TEXT("cropX"), F.CropX);
+				LeerNumero(FO, TEXT("cropY"), F.CropY);
+				LeerNumero(FO, TEXT("cropW"), F.CropW);
+				LeerNumero(FO, TEXT("cropH"), F.CropH);
+				LeerNumero(FO, TEXT("borde"), F.Borde);
+				LeerNumero(FO, TEXT("repeticion"), F.Repeticion);
+				LeerNumero(FO, TEXT("solape"), F.Solape);
+				double Nn = 0.0;
+				if (FO->TryGetNumberField(TEXT("copias"), Nn)) { F.Copias = FMath::Clamp(FMath::RoundToInt(static_cast<float>(Nn)), 1, 12); }
+				LeerNumero(FO, TEXT("arco"), F.Arco);
+				FO->TryGetBoolField(TEXT("espejoAlterno"), F.bEspejoAlterno);
+				LeerNumero(FO, TEXT("corrimiento"), F.Corrimiento);
+				LeerNumero(FO, TEXT("recorrido"), F.Recorrido);
+				LeerNumero(FO, TEXT("giro"), F.Giro);
+				C.Pantallas.Add(F);
+			}
+		}
+		if (C.Pantallas.Num() == 0)
+		{
+			// playlist vieja (pantalla unica) o cue sin pantallas: una fila desde ahi
+			C.Pantallas.Add(FilaDeLaPantallaVieja(C.Pantalla));
+			C.Plantilla = TEXT("personalizado");
+		}
 		Cues.Add(C);
 	}
 
@@ -548,12 +820,7 @@ void ADomeMediaController::AplicarParametros(const FDomeCue& C)
 	M->SetScalarParameterValue(DomoParam::CentroY, C.Mapping.CentroY);
 	M->SetScalarParameterValue(DomoParam::Escala, C.Mapping.Escala);
 	M->SetScalarParameterValue(DomoParam::Rotar, C.Mapping.Rotar);
-	M->SetScalarParameterValue(DomoParam::PantallaAzimut, C.Pantalla.Azimut);
-	M->SetScalarParameterValue(DomoParam::PantallaElevacion, C.Pantalla.Elevacion);
-	M->SetScalarParameterValue(DomoParam::PantallaAncho, C.Pantalla.Ancho);
-	M->SetScalarParameterValue(DomoParam::PantallaAlto, C.Pantalla.Alto);
-	M->SetScalarParameterValue(DomoParam::PantallaCurva, C.Pantalla.bCurva ? 1.f : 0.f);
-	M->SetScalarParameterValue(DomoParam::PantallaBorde, C.Pantalla.Borde);
+	EmpujarPantallas(C);
 }
 
 void ADomeMediaController::AbrirCue(int32 Indice)
@@ -567,6 +834,8 @@ void ADomeMediaController::AbrirCue(int32 Indice)
 	const FDomeCue& C = Cues[Indice];
 	AplicarParametros(C);
 	bFormatoPendiente = C.bFormatoAuto;
+	AcumRecorrido = 0.f;
+	AcumGiro = 0.f;
 
 	if (Fuente != EDomeFuente::Media || !MediaPlayer)
 	{
@@ -715,9 +984,10 @@ void ADomeMediaController::Tick(float DeltaSeconds)
 
 	if (EsMundoDeJuego())
 	{
-		if (bControlTeclado && !InputComponent)
+		ProcesarTeclas();
+		if (bControlesSucios && FPlatformTime::Seconds() - UltimoCambioControles > 1.0)
 		{
-			ConfigurarTeclado();
+			GuardarControles();
 		}
 		if (Menu.IsValid() && !bMenuListo && GetWorld() && GetWorld()->GetFirstPlayerController())
 		{
@@ -726,6 +996,7 @@ void ADomeMediaController::Tick(float DeltaSeconds)
 			Menu->Mostrar(Menu->EstaVisible());
 		}
 		ActualizarFormatoAuto();
+		AnimarPantallas(DeltaSeconds);
 		LeerUdp();
 		CorrerGuion(DeltaSeconds);
 	}
@@ -769,9 +1040,43 @@ void ADomeMediaController::RecogerLuces()
 			IntensidadBase.Add(L, L->Intensity);
 		}
 	}
+	// El velo de la cupula (material aditivo): un MID por malla, con el parametro Nivel.
+	ResplandorMIDs.Reset();
+	TArray<AActor*> Velos;
+	UGameplayStatics::GetAllActorsWithTag(this, EtiquetaResplandor, Velos);
+	for (AActor* A : Velos)
+	{
+		TArray<UStaticMeshComponent*> Mallas;
+		A->GetComponents<UStaticMeshComponent>(Mallas);
+		for (UStaticMeshComponent* M : Mallas)
+		{
+			if (UMaterialInstanceDynamic* Mid = M->CreateDynamicMaterialInstance(0))
+			{
+				ResplandorMIDs.Add(Mid);
+			}
+		}
+	}
+	UltimoResplandor = -1.f;
 	bLucesRecogidas = true;
 	bLucesAplicadasUnaVez = false;
 	UltimaBusquedaLuces = FPlatformTime::Seconds();
+}
+
+void ADomeMediaController::ActualizarResplandor()
+{
+	const float Nivel = NivelLuces * IntensidadResplandor;
+	if (FMath::IsNearlyEqual(Nivel, UltimoResplandor, 0.0005f))
+	{
+		return;
+	}
+	UltimoResplandor = Nivel;
+	for (const TWeakObjectPtr<UMaterialInstanceDynamic>& Ptr : ResplandorMIDs)
+	{
+		if (UMaterialInstanceDynamic* Mid = Ptr.Get())
+		{
+			Mid->SetScalarParameterValue(TEXT("Nivel"), Nivel);
+		}
+	}
 }
 
 void ADomeMediaController::ActualizarLuces(float DeltaSeconds)
@@ -792,6 +1097,7 @@ void ADomeMediaController::ActualizarLuces(float DeltaSeconds)
 	const float Paso = SegundosFundidoLuces > KINDA_SMALL_NUMBER ? DeltaSeconds / SegundosFundidoLuces : 1.f;
 	const float Anterior = NivelLuces;
 	NivelLuces = FMath::Clamp(NivelLuces + FMath::Sign(Objetivo - NivelLuces) * FMath::Min(Paso, FMath::Abs(Objetivo - NivelLuces)), 0.f, 1.f);
+	ActualizarResplandor();
 	if (FMath::IsNearlyEqual(Anterior, NivelLuces) && (NivelLuces <= 0.f || NivelLuces >= 1.f) && bLucesAplicadasUnaVez)
 	{
 		return;
@@ -908,6 +1214,34 @@ void ADomeMediaController::Reiniciar()
 
 void ADomeMediaController::SetParam(FName Nombre, float Valor)
 {
+	{
+		const FString Txt = Nombre.ToString();
+		if (Txt.StartsWith(TEXT("S_")))
+		{
+			SetCampoPantalla(Txt.Mid(2), Valor);
+			return;
+		}
+		// nombres de la pantalla unica vieja: van a la primera fila
+		static const TMap<FString, FString> Viejos = {
+			{ TEXT("PantallaAzimut"), TEXT("Yaw") }, { TEXT("PantallaElevacion"), TEXT("Elevacion") },
+			{ TEXT("PantallaAncho"), TEXT("Ancho") }, { TEXT("PantallaAlto"), TEXT("Alto") },
+			{ TEXT("PantallaBorde"), TEXT("Borde") }, { TEXT("PantallaCurva"), TEXT("Forma") } };
+		if (const FString* Nuevo = Viejos.Find(Txt))
+		{
+			const int32 Antes = PantallaEditada;
+			PantallaEditada = 0;
+			SetCampoPantalla(*Nuevo, *Nuevo == TEXT("Forma") ? (Valor > 0.5f ? 1.f : 0.f) : Valor);
+			PantallaEditada = Antes;
+			return;
+		}
+	}
+	if (Nombre == TEXT("Resplandor")) { IntensidadResplandor = FMath::Max(Valor, 0.f); UltimoResplandor = -1.f; return; }
+	if (Nombre == TEXT("VelCaminar")) { Controles.VelocidadCaminar = Valor; AplicarMovimiento(); return; }
+	if (Nombre == TEXT("VelVuelo")) { Controles.VelocidadVuelo = Valor; AplicarMovimiento(); return; }
+	if (Nombre == TEXT("MultCorrer")) { Controles.MultiplicadorCorrer = Valor; AplicarMovimiento(); return; }
+	if (Nombre == TEXT("AlturaOjos")) { Controles.AlturaOjos = Valor; AplicarMovimiento(); return; }
+	if (Nombre == TEXT("Sensibilidad")) { Controles.Sensibilidad = Valor; AplicarMovimiento(); return; }
+	if (Nombre == TEXT("Gravedad")) { Controles.Gravedad = Valor; AplicarMovimiento(); return; }
 	if (Nombre == DomoParam::Brillo)
 	{
 		Brillo = Valor;
@@ -1144,6 +1478,219 @@ bool ADomeMediaController::AbrirVideoPorRuta(const FString& Ruta)
 	return AgregarVideos({ Ruta }) > 0 || Cues.Num() > 0;
 }
 
+// --- Pantallas 16:9: plantillas y edicion en vivo -----------------------------------
+
+int32 ADomeMediaController::NumeroDePlantillas()
+{
+	return UE_ARRAY_COUNT(Plantillas);
+}
+
+FString ADomeMediaController::IdDePlantilla(int32 Indice)
+{
+	return Indice >= 0 && Indice < UE_ARRAY_COUNT(Plantillas) ? FString(Plantillas[Indice].Id) : FString();
+}
+
+FString ADomeMediaController::EtiquetaDePlantilla(int32 Indice)
+{
+	return Indice >= 0 && Indice < UE_ARRAY_COUNT(Plantillas) ? FString(Plantillas[Indice].Etiqueta) : FString();
+}
+
+int32 ADomeMediaController::IndiceDePlantillaActual() const
+{
+	if (!Cues.IsValidIndex(CueActual))
+	{
+		return 0;
+	}
+	for (int32 i = 0; i < UE_ARRAY_COUNT(Plantillas); ++i)
+	{
+		if (Cues[CueActual].Plantilla == Plantillas[i].Id)
+		{
+			return i;
+		}
+	}
+	return INDEX_NONE;
+}
+
+void ADomeMediaController::AplicarPlantilla(const FString& Id)
+{
+	if (!Cues.IsValidIndex(CueActual))
+	{
+		return;
+	}
+	FDomeCue& C = Cues[CueActual];
+	C.Plantilla = Id;
+	C.Pantallas = ArmarPlantilla(Id);
+	C.VelRecorrido = 0.f;
+	C.VelGiro = 0.f;
+	for (const FDomePantallaFila& F : C.Pantallas)
+	{
+		if (!FMath::IsNearlyZero(F.Recorrido)) { C.VelRecorrido = 0.05f; }
+	}
+	PantallaEditada = 0;
+	if (C.Formato != EDomeFormato::Plano169)
+	{
+		C.Formato = EDomeFormato::Plano169;
+		C.bFormatoAuto = false;
+	}
+	AplicarParametros(C);
+	Mensaje(FString::Printf(TEXT("Pantallas: %s"), *EtiquetaDePlantilla(IndiceDePlantillaActual())));
+}
+
+void ADomeMediaController::AgregarPantalla()
+{
+	if (!Cues.IsValidIndex(CueActual) || Cues[CueActual].Pantallas.Num() >= 3)
+	{
+		Mensaje(TEXT("Hay lugar para 3 pantallas (filas) como maximo"));
+		return;
+	}
+	FDomeCue& C = Cues[CueActual];
+	C.Pantallas.Add(Fila(TEXT("pantalla"), 0, 45, 70, 39));
+	C.Plantilla = TEXT("personalizado");
+	PantallaEditada = C.Pantallas.Num() - 1;
+	AplicarParametros(C);
+}
+
+void ADomeMediaController::QuitarPantalla()
+{
+	if (!Cues.IsValidIndex(CueActual) || Cues[CueActual].Pantallas.Num() <= 1)
+	{
+		Mensaje(TEXT("Tiene que quedar al menos una pantalla"));
+		return;
+	}
+	FDomeCue& C = Cues[CueActual];
+	C.Pantallas.RemoveAt(FMath::Clamp(PantallaEditada, 0, C.Pantallas.Num() - 1));
+	C.Plantilla = TEXT("personalizado");
+	PantallaEditada = FMath::Clamp(PantallaEditada, 0, C.Pantallas.Num() - 1);
+	AplicarParametros(C);
+}
+
+namespace
+{
+	/** Campo flotante de una fila por nombre; los enteros y booleanos van como float. */
+	float* CampoDeFila(FDomePantallaFila& F, const FString& N)
+	{
+		if (N == TEXT("Yaw")) return &F.Yaw;
+		if (N == TEXT("Elevacion")) return &F.Elevacion;
+		if (N == TEXT("Roll")) return &F.Roll;
+		if (N == TEXT("Ancho")) return &F.Ancho;
+		if (N == TEXT("Alto")) return &F.Alto;
+		if (N == TEXT("Opacidad")) return &F.Opacidad;
+		if (N == TEXT("CropX")) return &F.CropX;
+		if (N == TEXT("CropY")) return &F.CropY;
+		if (N == TEXT("CropW")) return &F.CropW;
+		if (N == TEXT("CropH")) return &F.CropH;
+		if (N == TEXT("Borde")) return &F.Borde;
+		if (N == TEXT("Repeticion")) return &F.Repeticion;
+		if (N == TEXT("Solape")) return &F.Solape;
+		if (N == TEXT("Arco")) return &F.Arco;
+		if (N == TEXT("Corrimiento")) return &F.Corrimiento;
+		if (N == TEXT("Recorrido")) return &F.Recorrido;
+		if (N == TEXT("Giro")) return &F.Giro;
+		return nullptr;
+	}
+}
+
+float ADomeMediaController::GetCampoPantalla(const FString& Campo) const
+{
+	if (!Cues.IsValidIndex(CueActual))
+	{
+		return 0.f;
+	}
+	const FDomeCue& C = Cues[CueActual];
+	if (Campo == TEXT("Editada")) return static_cast<float>(PantallaEditada + 1);
+	if (Campo == TEXT("GiroTodas")) return C.GiroPantallas;
+	if (Campo == TEXT("VelRecorrido")) return C.VelRecorrido;
+	if (Campo == TEXT("VelGiro")) return C.VelGiro;
+	if (!C.Pantallas.IsValidIndex(PantallaEditada)) return 0.f;
+	FDomePantallaFila& F = const_cast<FDomePantallaFila&>(C.Pantallas[PantallaEditada]);
+	if (Campo == TEXT("Encendida")) return F.bEncendida ? 1.f : 0.f;
+	if (Campo == TEXT("Forma")) return static_cast<float>(F.Forma);
+	if (Campo == TEXT("Espejo")) return static_cast<float>(F.Espejo);
+	if (Campo == TEXT("Bordes")) return static_cast<float>(F.Bordes);
+	if (Campo == TEXT("Copias")) return static_cast<float>(F.Copias);
+	if (Campo == TEXT("EspejoAlterno")) return F.bEspejoAlterno ? 1.f : 0.f;
+	if (const float* P = CampoDeFila(F, Campo)) return *P;
+	return 0.f;
+}
+
+void ADomeMediaController::SetCampoPantalla(const FString& Campo, float Valor)
+{
+	if (!Cues.IsValidIndex(CueActual))
+	{
+		return;
+	}
+	FDomeCue& C = Cues[CueActual];
+	if (Campo == TEXT("Editada"))
+	{
+		PantallaEditada = FMath::Clamp(FMath::RoundToInt(Valor) - 1, 0, FMath::Max(C.Pantallas.Num() - 1, 0));
+		return;
+	}
+	if (Campo == TEXT("GiroTodas")) { C.GiroPantallas = Valor; AplicarParametros(C); return; }
+	if (Campo == TEXT("VelRecorrido")) { C.VelRecorrido = Valor; return; }
+	if (Campo == TEXT("VelGiro")) { C.VelGiro = Valor; return; }
+	if (!C.Pantallas.IsValidIndex(PantallaEditada)) return;
+	FDomePantallaFila& F = C.Pantallas[PantallaEditada];
+	if (Campo == TEXT("Encendida")) F.bEncendida = Valor > 0.5f;
+	else if (Campo == TEXT("Forma")) F.Forma = FMath::Clamp(FMath::RoundToInt(Valor), 0, 4);
+	else if (Campo == TEXT("Espejo")) F.Espejo = FMath::Clamp(FMath::RoundToInt(Valor), 0, 3);
+	else if (Campo == TEXT("Bordes")) F.Bordes = FMath::Clamp(FMath::RoundToInt(Valor), 0, 2);
+	else if (Campo == TEXT("Copias")) F.Copias = FMath::Clamp(FMath::RoundToInt(Valor), 1, 12);
+	else if (Campo == TEXT("EspejoAlterno")) F.bEspejoAlterno = Valor > 0.5f;
+	else if (float* P = CampoDeFila(F, Campo)) *P = Valor;
+	else return;
+	if (C.Plantilla != TEXT("personalizado") && !C.Plantilla.EndsWith(TEXT("*")))
+	{
+		C.Plantilla += TEXT("*");
+	}
+	AplicarParametros(C);
+}
+
+void ADomeMediaController::EmpujarPantallas(const FDomeCue& C)
+{
+	if (!DynamicMaterial)
+	{
+		return;
+	}
+	UMaterialInstanceDynamic* M = DynamicMaterial;
+	const int32 N = FMath::Min(C.Pantallas.Num(), 3);
+	M->SetVectorParameterValue(TEXT("PView"), FLinearColor(static_cast<float>(N), C.GiroPantallas, AcumRecorrido, AcumGiro));
+	for (int32 i = 0; i < 3; ++i)
+	{
+		const FString S = FString::FromInt(i);
+		if (i >= N)
+		{
+			for (const TCHAR* K : { TEXT("PPos"), TEXT("PSize"), TEXT("PCrop"), TEXT("POpt"), TEXT("PRep"), TEXT("PAnm") })
+			{
+				M->SetVectorParameterValue(FName(*(FString(K) + S)), FLinearColor(0, 0, 1, 0));
+			}
+			continue;
+		}
+		const FDomePantallaFila& F = C.Pantallas[i];
+		M->SetVectorParameterValue(FName(*(FString(TEXT("PPos")) + S)), FLinearColor(F.Yaw, F.Elevacion, F.Roll, static_cast<float>(F.Forma)));
+		M->SetVectorParameterValue(FName(*(FString(TEXT("PSize")) + S)), FLinearColor(F.Ancho, F.Alto, static_cast<float>(F.Espejo), F.Opacidad));
+		M->SetVectorParameterValue(FName(*(FString(TEXT("PCrop")) + S)), FLinearColor(F.CropX, F.CropY, F.CropW, F.CropH));
+		M->SetVectorParameterValue(FName(*(FString(TEXT("POpt")) + S)), FLinearColor(F.bEncendida ? 1.f : 0.f, F.Borde, F.Repeticion, F.Solape));
+		M->SetVectorParameterValue(FName(*(FString(TEXT("PRep")) + S)), FLinearColor(static_cast<float>(F.Copias), F.Arco, F.bEspejoAlterno ? 1.f : 0.f, F.Corrimiento));
+		M->SetVectorParameterValue(FName(*(FString(TEXT("PAnm")) + S)), FLinearColor(F.Recorrido, F.Giro, static_cast<float>(F.Bordes), 0.f));
+	}
+}
+
+void ADomeMediaController::AnimarPantallas(float DeltaSeconds)
+{
+	if (!Cues.IsValidIndex(CueActual) || Cues[CueActual].Formato != EDomeFormato::Plano169)
+	{
+		return;
+	}
+	const FDomeCue& C = Cues[CueActual];
+	if (FMath::IsNearlyZero(C.VelRecorrido) && FMath::IsNearlyZero(C.VelGiro))
+	{
+		return;
+	}
+	AcumRecorrido = FMath::Fmod(AcumRecorrido + C.VelRecorrido * DeltaSeconds, 1000.f);
+	AcumGiro = FMath::Fmod(AcumGiro + C.VelGiro * DeltaSeconds, 360000.f);
+	EmpujarPantallas(C);
+}
+
 // --- Menu y lista de videos ---------------------------------------------------------
 
 void ADomeMediaController::MostrarMenu(bool bVer)
@@ -1169,6 +1716,20 @@ bool ADomeMediaController::FotografiarMenu(const FString& Ruta, int32 Ancho, int
 
 float ADomeMediaController::GetParam(FName Nombre) const
 {
+	{
+		const FString Txt = Nombre.ToString();
+		if (Txt.StartsWith(TEXT("S_")))
+		{
+			return GetCampoPantalla(Txt.Mid(2));
+		}
+	}
+	if (Nombre == TEXT("Resplandor")) { return IntensidadResplandor; }
+	if (Nombre == TEXT("VelCaminar")) { return Controles.VelocidadCaminar; }
+	if (Nombre == TEXT("VelVuelo")) { return Controles.VelocidadVuelo; }
+	if (Nombre == TEXT("MultCorrer")) { return Controles.MultiplicadorCorrer; }
+	if (Nombre == TEXT("AlturaOjos")) { return Controles.AlturaOjos; }
+	if (Nombre == TEXT("Sensibilidad")) { return Controles.Sensibilidad; }
+	if (Nombre == TEXT("Gravedad")) { return Controles.Gravedad; }
 	if (Nombre == DomoParam::Brillo)
 	{
 		return Brillo;
@@ -1351,14 +1912,41 @@ bool ADomeMediaController::GuardarPlaylist()
 		}
 		if (C.Formato == EDomeFormato::Plano169)
 		{
-			const TSharedRef<FJsonObject> P = MakeShared<FJsonObject>();
-			P->SetNumberField(TEXT("azimut"), C.Pantalla.Azimut);
-			P->SetNumberField(TEXT("elevacion"), C.Pantalla.Elevacion);
-			P->SetNumberField(TEXT("ancho"), C.Pantalla.Ancho);
-			P->SetNumberField(TEXT("alto"), C.Pantalla.Alto);
-			P->SetBoolField(TEXT("curva"), C.Pantalla.bCurva);
-			P->SetNumberField(TEXT("borde"), C.Pantalla.Borde);
-			O->SetObjectField(TEXT("pantalla"), P);
+			O->SetStringField(TEXT("plantilla"), C.Plantilla);
+			if (C.GiroPantallas != 0.f) { O->SetNumberField(TEXT("giroPantallas"), C.GiroPantallas); }
+			if (C.VelRecorrido != 0.f) { O->SetNumberField(TEXT("velRecorrido"), C.VelRecorrido); }
+			if (C.VelGiro != 0.f) { O->SetNumberField(TEXT("velGiro"), C.VelGiro); }
+			TArray<TSharedPtr<FJsonValue>> Filas;
+			for (const FDomePantallaFila& F : C.Pantallas)
+			{
+				const TSharedRef<FJsonObject> P = MakeShared<FJsonObject>();
+				P->SetStringField(TEXT("nombre"), F.Nombre);
+				P->SetBoolField(TEXT("encendida"), F.bEncendida);
+				P->SetStringField(TEXT("forma"), FormaATexto(F.Forma));
+				P->SetNumberField(TEXT("yaw"), F.Yaw);
+				P->SetNumberField(TEXT("elevacion"), F.Elevacion);
+				P->SetNumberField(TEXT("roll"), F.Roll);
+				P->SetNumberField(TEXT("ancho"), F.Ancho);
+				P->SetNumberField(TEXT("alto"), F.Alto);
+				P->SetStringField(TEXT("espejo"), EspejoATexto(F.Espejo));
+				P->SetNumberField(TEXT("opacidad"), F.Opacidad);
+				P->SetNumberField(TEXT("cropX"), F.CropX);
+				P->SetNumberField(TEXT("cropY"), F.CropY);
+				P->SetNumberField(TEXT("cropW"), F.CropW);
+				P->SetNumberField(TEXT("cropH"), F.CropH);
+				P->SetNumberField(TEXT("borde"), F.Borde);
+				P->SetNumberField(TEXT("repeticion"), F.Repeticion);
+				P->SetNumberField(TEXT("solape"), F.Solape);
+				P->SetNumberField(TEXT("copias"), F.Copias);
+				P->SetNumberField(TEXT("arco"), F.Arco);
+				P->SetBoolField(TEXT("espejoAlterno"), F.bEspejoAlterno);
+				P->SetNumberField(TEXT("corrimiento"), F.Corrimiento);
+				P->SetStringField(TEXT("bordes"), BordesATexto(F.Bordes));
+				P->SetNumberField(TEXT("recorrido"), F.Recorrido);
+				P->SetNumberField(TEXT("giro"), F.Giro);
+				Filas.Add(MakeShared<FJsonValueObject>(P));
+			}
+			O->SetArrayField(TEXT("pantallas"), Filas);
 		}
 		Lista.Add(MakeShared<FJsonValueObject>(O));
 	}
@@ -1431,60 +2019,194 @@ void ADomeMediaController::IrAVista(const FVector& Ubicacion, const FRotator& Ro
 	{
 		return;
 	}
-	if (APawn* P = PC->GetPawn())
+	if (ADomePawn* J = Cast<ADomePawn>(PC->GetPawn()))
+	{
+		J->IrAOjos(Ubicacion, Rotacion);
+		Controles.Modo = EDomeModoMovimiento::Volar;
+	}
+	else if (APawn* P = PC->GetPawn())
 	{
 		P->SetActorLocation(Ubicacion, false, nullptr, ETeleportType::TeleportPhysics);
 		P->SetActorRotation(Rotacion);
 	}
 	PC->SetControlRotation(Rotacion);
-	Mensaje(FString::Printf(TEXT("Vista: %s"), *Nombre));
+	Mensaje(FString::Printf(TEXT("Vista: %s (modo volar; F vuelve a caminar)"), *Nombre));
+}
+
+// --- Teclas y movimiento ---------------------------------------------------------------
+
+bool ADomeMediaController::MenuVisible() const
+{
+	return Menu.IsValid() && Menu->EstaVisible();
+}
+
+FString ADomeMediaController::RutaControles() const
+{
+	return FPaths::Combine(FPaths::ConvertRelativePathToFull(CarpetaPlaylist), TEXT("controles.json"));
+}
+
+void ADomeMediaController::GuardarControles()
+{
+	bControlesSucios = false;
+	if (!Controles.Guardar(RutaControles()))
+	{
+		UE_LOG(LogDomoMedia, Warning, TEXT("No se pudo escribir %s"), *RutaControles());
+	}
+}
+
+void ADomeMediaController::AplicarMovimiento()
+{
+	APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	if (ADomePawn* J = PC ? Cast<ADomePawn>(PC->GetPawn()) : nullptr)
+	{
+		J->AplicarAjustes(Controles);
+	}
+	bControlesSucios = true;
+	UltimoCambioControles = FPlatformTime::Seconds();
+}
+
+void ADomeMediaController::PonerModoMovimiento(EDomeModoMovimiento Modo)
+{
+	Controles.Modo = Modo;
+	APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	if (ADomePawn* J = PC ? Cast<ADomePawn>(PC->GetPawn()) : nullptr)
+	{
+		J->PonerModo(Modo);
+	}
+	bControlesSucios = true;
+	UltimoCambioControles = FPlatformTime::Seconds();
+	Mensaje(Modo == EDomeModoMovimiento::Caminar ? TEXT("Modo: caminar")
+		: Modo == EDomeModoMovimiento::Volar ? TEXT("Modo: volar") : TEXT("Modo: fantasma (atraviesa todo)"));
+}
+
+void ADomeMediaController::RestablecerControles(bool bTeclas, bool bMovimiento)
+{
+	if (bTeclas) { Controles.RestablecerTeclas(); }
+	if (bMovimiento) { Controles.RestablecerMovimiento(); }
+	AplicarMovimiento();
+	Mensaje(TEXT("Controles restablecidos"));
+}
+
+void ADomeMediaController::IrAlInicio()
+{
+	UWorld* Mundo = GetWorld();
+	APlayerController* PC = Mundo ? Mundo->GetFirstPlayerController() : nullptr;
+	ADomePawn* J = PC ? Cast<ADomePawn>(PC->GetPawn()) : nullptr;
+	if (!J)
+	{
+		return;
+	}
+	AActor* Inicio = UGameplayStatics::GetActorOfClass(Mundo, APlayerStart::StaticClass());
+	if (Inicio)
+	{
+		J->SetActorLocation(Inicio->GetActorLocation(), false, nullptr, ETeleportType::TeleportPhysics);
+		PC->SetControlRotation(Inicio->GetActorRotation());
+	}
+	PonerModoMovimiento(EDomeModoMovimiento::Caminar);
+}
+
+void ADomeMediaController::EsperarTecla(EDomeAccion Accion, int32 Ranura)
+{
+	AccionEsperando = static_cast<int32>(Accion);
+	RanuraEsperando = Ranura;
+	Mensaje(FString::Printf(TEXT("Pulsa la tecla para \"%s\" (Esc cancela, Supr la borra)"), FDomeControles::Info(Accion).Etiqueta), 30.f);
+}
+
+void ADomeMediaController::CancelarEsperaDeTecla()
+{
+	AccionEsperando = -1;
+}
+
+void ADomeMediaController::CapturarTecla(APlayerController* PC)
+{
+	TArray<FKey> Todas;
+	EKeys::GetAllKeys(Todas);
+	for (const FKey& K : Todas)
+	{
+		if (!K.IsValid() || K.IsMouseButton() || K.IsGamepadKey() || K.IsTouch() || K.IsAxis1D() || K.IsAxis2D() || K.IsAxis3D())
+		{
+			continue;
+		}
+		if (!PC->WasInputKeyJustPressed(K))
+		{
+			continue;
+		}
+		const EDomeAccion Accion = static_cast<EDomeAccion>(AccionEsperando);
+		if (K == EKeys::Escape)
+		{
+			CancelarEsperaDeTecla();
+			Mensaje(TEXT("Cancelado"));
+			return;
+		}
+		if (K == EKeys::Delete || K == EKeys::BackSpace)
+		{
+			Controles.PonerTecla(Accion, RanuraEsperando, FKey());
+		}
+		else
+		{
+			Controles.PonerTecla(Accion, RanuraEsperando, K);
+		}
+		CancelarEsperaDeTecla();
+		bControlesSucios = true;
+		UltimoCambioControles = FPlatformTime::Seconds();
+		Mensaje(FString::Printf(TEXT("%s: %s"), FDomeControles::Info(Accion).Etiqueta, *Controles.Texto(Accion, RanuraEsperando)));
+		return;
+	}
+}
+
+void ADomeMediaController::ProcesarTeclas()
+{
+	APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	if (!PC)
+	{
+		return;
+	}
+	if (AccionEsperando >= 0)
+	{
+		CapturarTecla(PC);
+		return;
+	}
+	if (!bControlTeclado)
+	{
+		return;
+	}
+	const FDomeControles& K = Controles;
+	if (K.RecienApretada(EDomeAccion::Menu, PC)) { AlternarMenu(); }
+	if (K.RecienApretada(EDomeAccion::Siguiente, PC)) { Next(); }
+	if (K.RecienApretada(EDomeAccion::Anterior, PC)) { Prev(); }
+	if (K.RecienApretada(EDomeAccion::Negro, PC)) { ToggleBlackout(); }
+	if (K.RecienApretada(EDomeAccion::Pausa, PC)) { TogglePause(); }
+	if (K.RecienApretada(EDomeAccion::Reiniciar, PC)) { Reiniciar(); }
+	if (K.RecienApretada(EDomeAccion::Fuente, PC)) { ToggleFuente(); }
+	if (K.RecienApretada(EDomeAccion::Ayuda, PC)) { TeclaAyuda(); }
+	if (K.RecienApretada(EDomeAccion::CambiarModo, PC))
+	{
+		const EDomeModoMovimiento Siguiente_ = Controles.Modo == EDomeModoMovimiento::Caminar ? EDomeModoMovimiento::Volar
+			: Controles.Modo == EDomeModoMovimiento::Volar ? EDomeModoMovimiento::Fantasma : EDomeModoMovimiento::Caminar;
+		PonerModoMovimiento(Siguiente_);
+	}
+	static const FKey Numeros[] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five,
+		EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine };
+	for (int32 i = 0; i < UE_ARRAY_COUNT(Numeros); ++i)
+	{
+		if (PC->WasInputKeyJustPressed(Numeros[i]))
+		{
+			GoToCue(i);
+		}
+	}
 }
 
 // --- Teclado, mensajes y guion ------------------------------------------------
 
 void ADomeMediaController::ConfigurarTeclado()
 {
-	if (!bControlTeclado || !GetWorld())
-	{
-		return;
-	}
-	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (!PC)
-	{
-		return;
-	}
-	EnableInput(PC);
-	if (!InputComponent)
-	{
-		return;
-	}
-	InputComponent->KeyBindings.Reset();
-	InputComponent->BindKey(EKeys::Right, IE_Pressed, this, &ADomeMediaController::TeclaSiguiente);
-	InputComponent->BindKey(EKeys::PageDown, IE_Pressed, this, &ADomeMediaController::TeclaSiguiente);
-	InputComponent->BindKey(EKeys::Left, IE_Pressed, this, &ADomeMediaController::TeclaAnterior);
-	InputComponent->BindKey(EKeys::PageUp, IE_Pressed, this, &ADomeMediaController::TeclaAnterior);
-	InputComponent->BindKey(EKeys::B, IE_Pressed, this, &ADomeMediaController::TeclaNegro);
-	InputComponent->BindKey(EKeys::Period, IE_Pressed, this, &ADomeMediaController::TeclaNegro);
-	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ADomeMediaController::TeclaPausa);
-	InputComponent->BindKey(EKeys::Home, IE_Pressed, this, &ADomeMediaController::TeclaReiniciar);
-	InputComponent->BindKey(EKeys::S, IE_Pressed, this, &ADomeMediaController::TeclaFuente);
-	InputComponent->BindKey(EKeys::F1, IE_Pressed, this, &ADomeMediaController::TeclaAyuda);
-	InputComponent->BindKey(EKeys::F2, IE_Pressed, this, &ADomeMediaController::TeclaMenu);
-	InputComponent->BindKey(EKeys::M, IE_Pressed, this, &ADomeMediaController::TeclaMenu);
-
-	const FKey Numeros[] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five,
-		EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine };
-	for (int32 i = 0; i < UE_ARRAY_COUNT(Numeros); ++i)
-	{
-		FInputKeyBinding Enlace(FInputChord(Numeros[i]), IE_Pressed);
-		Enlace.KeyDelegate.GetDelegateForManualSet().BindWeakLambda(this, [this, i]() { TeclaCue(i); });
-		InputComponent->KeyBindings.Add(Enlace);
-	}
+	// Las teclas se leen por sondeo (ProcesarTeclas) contra FDomeControles: no hay
+	// nada que cablear, y el menu puede cambiarlas en vivo.
 }
 
 void ADomeMediaController::TeclaAyuda()
 {
-	Mensaje(TEXT("Flechas / RePag AvPag: cue   1-9: ir al cue   B o punto: negro   Espacio: pausa   Inicio: reiniciar   S: Spout/Media   F2 o M: menu"), 8.f);
+	Mensaje(FString::Printf(TEXT("WASD moverse   F: caminar/volar/fantasma   1-9: cue   Flechas: video   B: negro   Espacio: pausa   F3: Spout/Media   F2 o M: menu (%s para cambiar las teclas)"), TEXT("Movimiento y teclas")), 8.f);
 	Mensaje(DescribirEstado(), 8.f);
 }
 
@@ -1662,6 +2384,66 @@ namespace
 			ConControlador(W, [](ADomeMediaController& C) { C.GuardarPlaylist(); });
 		}));
 
+	FAutoConsoleCommandWithWorldAndArgs CmdPlantilla(TEXT("domo.Plantilla"), TEXT("domo.Plantilla id: montaje de pantallas 16:9 (cine, sala_2, sala_4, sala_corona, tunel, anillo, cilindro...)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& A, UWorld* W)
+		{
+			if (A.Num() == 0) { return; }
+			ConControlador(W, [&](ADomeMediaController& C) { C.AplicarPlantilla(A[0]); });
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdModo(TEXT("domo.Modo"), TEXT("domo.Modo caminar|volar|fantasma: como se mueve el jugador."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& A, UWorld* W)
+		{
+			ConControlador(W, [&](ADomeMediaController& C)
+			{
+				const FString M = A.Num() > 0 ? A[0].ToLower() : FString(TEXT("caminar"));
+				C.PonerModoMovimiento(M == TEXT("volar") ? EDomeModoMovimiento::Volar
+					: M == TEXT("fantasma") ? EDomeModoMovimiento::Fantasma : EDomeModoMovimiento::Caminar);
+			});
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdInicio(TEXT("domo.Inicio"), TEXT("Vuelve al jugador al PlayerStart, caminando."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* W)
+		{
+			ConControlador(W, [](ADomeMediaController& C) { C.IrAlInicio(); });
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdSuelo(TEXT("domo.Suelo"), TEXT("Traza hacia abajo desde el jugador y escribe en el log todo lo que toca (diagnostico de colisiones)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* W)
+		{
+			APlayerController* PC = W ? W->GetFirstPlayerController() : nullptr;
+			APawn* P = PC ? PC->GetPawn() : nullptr;
+			if (!P) { return; }
+			const FVector Pos = P->GetActorLocation();
+			const ECollisionChannel Canales[] = { ECC_Visibility, ECC_Pawn, ECC_WorldStatic };
+			const TCHAR* Nombres[] = { TEXT("Visibility"), TEXT("Pawn"), TEXT("WorldStatic") };
+			for (int32 c = 0; c < 3; ++c)
+			{
+				for (int32 complejo = 0; complejo < 2; ++complejo)
+				{
+					TArray<FHitResult> Golpes;
+					FCollisionQueryParams Params(SCENE_QUERY_STAT(DomoSuelo), complejo == 1, P);
+					W->LineTraceMultiByChannel(Golpes, FVector(Pos.X, Pos.Y, 600.f), FVector(Pos.X, Pos.Y, -1500.f), Canales[c], Params);
+					UE_LOG(LogDomoMedia, Display, TEXT("Suelo en (%.0f, %.0f) canal %s complejo=%d: %d golpes"), Pos.X, Pos.Y, Nombres[c], complejo, Golpes.Num());
+					for (const FHitResult& H : Golpes)
+					{
+						UE_LOG(LogDomoMedia, Display, TEXT("  z=%.1f %s"), H.ImpactPoint.Z, H.GetActor() ? *H.GetActor()->GetName() : TEXT("?"));
+					}
+				}
+			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdPosicion(TEXT("domo.Posicion"), TEXT("Escribe en el log donde esta el jugador (ojos y pies)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* W)
+		{
+			APlayerController* PC = W ? W->GetFirstPlayerController() : nullptr;
+			if (APawn* P = PC ? PC->GetPawn() : nullptr)
+			{
+				const FVector Ojos = PC->PlayerCameraManager ? PC->PlayerCameraManager->GetCameraLocation() : P->GetActorLocation();
+				UE_LOG(LogDomoMedia, Display, TEXT("Posicion: pawn %s centro %s ojos z=%.1f cm"), *P->GetClass()->GetName(), *P->GetActorLocation().ToString(), Ojos.Z);
+			}
+		}));
+
 	FAutoConsoleCommandWithWorldAndArgs CmdMenuFoto(TEXT("domo.MenuFoto"), TEXT("domo.MenuFoto Ruta.png [Ancho Alto]: dibuja el menu en un PNG (verificacion)."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& A, UWorld* W)
 		{
@@ -1730,7 +2512,11 @@ namespace
 			}
 			const FVector Pos(FCString::Atof(*A[0]), FCString::Atof(*A[1]), FCString::Atof(*A[2]));
 			const FRotator Rot(FCString::Atof(*A[3]), FCString::Atof(*A[4]), 0.f);
-			if (APawn* P = PC->GetPawn())
+			if (ADomePawn* J = Cast<ADomePawn>(PC->GetPawn()))
+			{
+				J->IrAOjos(Pos, Rot);
+			}
+			else if (APawn* P = PC->GetPawn())
 			{
 				P->SetActorLocation(Pos, false, nullptr, ETeleportType::TeleportPhysics);
 				P->SetActorRotation(Rot);

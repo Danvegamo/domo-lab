@@ -83,6 +83,7 @@ fallaron, en vez de seguir de largo y reventar mas abajo con un error
 críptico.
 """
 
+import math
 import os
 import sys
 import unreal
@@ -1218,6 +1219,18 @@ def asegurar_ambiente(actores):
         crear_skylight_domo(actores)
     else:
         log("SkyLight existente: se conserva.")
+    # El jugador (ADomePawn) camina: el inicio va de pie en el pasillo 1, mirando a la
+    # tarima. Se reubica en cada importacion (la posicion de la butaca era la altura de
+    # ojos de alguien sentado y dejaba al jugador metido en el piso).
+    inicios = [a for a in todos if isinstance(a, unreal.PlayerStart)]
+    if inicios and MANIFIESTO.get("pasillos"):
+        p0 = MANIFIESTO["pasillos"][0]
+        ang = math.radians(p0["ang_deg"])
+        r = p0["r_min_m"] + 3.3
+        loc, rot = _a_unreal([r * math.cos(ang), r * math.sin(ang), 0.9], p0["ang_deg"] + 180.0)
+        inicios[0].set_actor_location(loc, False, True)
+        inicios[0].set_actor_rotation(rot, False)
+        log("PlayerStart movido al pasillo 1 ({:.0f}, {:.0f}) cm, de pie, mirando a la tarima.".format(loc.x, loc.y))
     if not any(isinstance(a, unreal.PlayerStart) for a in todos):
         ojo = MANIFIESTO["ojo"]
         loc, rot = _a_unreal(ojo["pos_m"], ojo["yaw_deg"])

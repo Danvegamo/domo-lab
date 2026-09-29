@@ -10,6 +10,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DomeControles.h"
 #include "GameFramework/Actor.h"
 #include "DomeMediaController.generated.h"
 
@@ -97,6 +98,100 @@ struct FDomePantalla
 	float Borde = 0.02f;
 };
 
+/** Una fila de pantallas sobre la cupula (formato Plano169). Es una fila de la tabla
+ *  `screens` de TouchDesigner (video_dome/screens_module.py): una pantalla que puede
+ *  repetirse en anillo con las copias cosidas entre si. */
+USTRUCT(BlueprintType)
+struct FDomePantallaFila
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	FString Nombre = TEXT("pantalla");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	bool bEncendida = true;
+
+	/** 0 plana, 1 curva, 2 banda, 3 tunel, 4 cilindro. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	int32 Forma = 0;
+
+	/** Azimut del centro, grados (0 al frente, + a la derecha). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Yaw = 0.f;
+
+	/** Elevacion del centro, grados (0 horizonte, 90 cenit). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Elevacion = 45.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Roll = 0.f;
+
+	/** Ancho y alto angulares, grados. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Ancho = 70.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Alto = 39.f;
+
+	/** 0 no, 1 horizontal, 2 vertical, 3 ambos. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	int32 Espejo = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Opacidad = 1.f;
+
+	/** Recorte del cuadro que usa la pantalla (fracciones 0 a 1). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float CropX = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float CropY = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float CropW = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float CropH = 1.f;
+
+	/** Borde suave, fraccion de la pantalla. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Borde = 0.04f;
+
+	/** Repeticiones del video dentro de la pantalla (banda, tunel, cilindro). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Repeticion = 1.f;
+
+	/** Grados que se encima una copia con la siguiente. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Solape = 0.f;
+
+	/** Copias en anillo (1 a 12) y el arco que ocupan, en grados. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	int32 Copias = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Arco = 360.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	bool bEspejoAlterno = false;
+
+	/** Corrimiento del recorte por copia (mosaico). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Corrimiento = 0.f;
+
+	/** Bordes que se degradan: 0 todos, 1 solo los costados, 2 solo arriba y abajo. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	int32 Bordes = 0;
+
+	/** Cuanto le afecta el recorrido y el giro animados del cue. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Recorrido = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Giro = 0.f;
+};
+
 /** Un cue de la playlist: un video y como se pone en la cupula. */
 USTRUCT(BlueprintType)
 struct FDomeCue
@@ -140,8 +235,27 @@ struct FDomeCue
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
 	FDomeMapping Mapping;
 
+	/** Pantalla unica de las playlists viejas; al leer se convierte en una fila de Pantallas. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
 	FDomePantalla Pantalla;
+
+	/** Plantilla de pantallas del formato Plano169 y las filas (hasta 3). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	FString Plantilla = TEXT("cine");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	TArray<FDomePantallaFila> Pantallas;
+
+	/** Giro de todo el montaje, grados. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float GiroPantallas = 0.f;
+
+	/** Recorrido (vueltas por segundo del cilindro y el tunel) y giro (grados por segundo) animados. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float VelRecorrido = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float VelGiro = 0.f;
 
 	/** Volumen del audio del video (0 a 1 o mas). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
@@ -308,6 +422,61 @@ public:
 	/** Mueve al jugador (cm, grados). Lo usan el menu y domo.Camara. */
 	void IrAVista(const FVector& Ubicacion, const FRotator& Rotacion, const FString& Nombre);
 
+	// --- Pantallas 16:9 ---------------------------------------------------------------
+	// Plantillas de pantallas (corona, 4 pantallas, 2 pantallas que ocupan el domo,
+	// tunel, anillo, cilindro...) y edicion en vivo de cada fila. Son las de
+	// TouchDesigner (video_dome). Se guardan en playlist.json con cada cue.
+
+	static int32 NumeroDePlantillas();
+	static FString IdDePlantilla(int32 Indice);
+	static FString EtiquetaDePlantilla(int32 Indice);
+
+	/** Indice de la plantilla del cue actual, o INDEX_NONE si esta editada a mano. */
+	int32 IndiceDePlantillaActual() const;
+
+	/** Pone las pantallas de la plantilla en el cue actual (y el formato en Plano169). */
+	UFUNCTION(BlueprintCallable, Category = "Domo")
+	void AplicarPlantilla(const FString& Id);
+
+	UFUNCTION(BlueprintCallable, Category = "Domo")
+	void AgregarPantalla();
+
+	UFUNCTION(BlueprintCallable, Category = "Domo")
+	void QuitarPantalla();
+
+	/** Campo de la fila editada (Yaw, Elevacion, Ancho, Alto, Forma, Copias...) o del montaje
+	 *  (GiroTodas, VelRecorrido, VelGiro). Editada = numero de fila desde 1. */
+	float GetCampoPantalla(const FString& Campo) const;
+	void SetCampoPantalla(const FString& Campo, float Valor);
+
+	/** Fila que se edita en el menu (desde 0). */
+	int32 PantallaEditada = 0;
+
+	// --- Movimiento y teclas ------------------------------------------------------
+	// Los ajustes de movimiento y las teclas viven en Controles y se guardan solos
+	// en controles.json, junto a playlist.json. Ver DomeControles.h.
+
+	FDomeControles Controles;
+
+	bool MenuVisible() const;
+
+	/** Empieza a esperar la proxima tecla para asignarla a la accion (ranura 0 o 1). */
+	void EsperarTecla(EDomeAccion Accion, int32 Ranura);
+	void CancelarEsperaDeTecla();
+	bool EstaEsperandoTecla() const { return AccionEsperando >= 0; }
+	int32 AccionEsperando = -1;
+	int32 RanuraEsperando = 0;
+
+	/** Empuja los ajustes de Controles al jugador y los guarda. */
+	void AplicarMovimiento();
+	void PonerModoMovimiento(EDomeModoMovimiento Modo);
+	void RestablecerControles(bool bTeclas, bool bMovimiento);
+	void GuardarControles();
+	FString RutaControles() const;
+
+	/** Vuelve al jugador al PlayerStart, con los pies en el piso. */
+	void IrAlInicio();
+
 	// --- Control por UDP ----------------------------------------------------------
 	// TouchDesigner (UDP Out DAT), Resolume, QLab o un script mandan lineas de
 	// texto a este puerto: cada linea es un comando de consola domo.* (domo.Cue 2,
@@ -355,6 +524,15 @@ public:
 	/** Etiqueta (Tag) de los actores que son luces de sala. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo|Luces")
 	FName EtiquetaLuces = FName(TEXT("domo_luz"));
+
+	/** Etiqueta del actor que da el velo blanco-morado a la cupula cuando las luces estan
+	 *  encendidas (lo crea 03_Unreal/realismo_sala.py). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo|Luces")
+	FName EtiquetaResplandor = FName(TEXT("domo_resplandor"));
+
+	/** Intensidad del velo de la cupula con las luces encendidas (0 lo apaga). */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Domo|Luces")
+	float IntensidadResplandor = 0.5f;
 
 	/** Hay proyeccion: el Spout entrega cuadros, o el reproductor de Media esta en marcha. */
 	UFUNCTION(BlueprintPure, Category = "Domo|Luces")
@@ -483,6 +661,9 @@ private:
 	TMap<TWeakObjectPtr<class ULightComponent>, float> IntensidadBase;
 	TArray<TWeakObjectPtr<AActor>> ActoresLuz;
 	void RecogerLuces();
+	void ActualizarResplandor();
+	TArray<TWeakObjectPtr<class UMaterialInstanceDynamic>> ResplandorMIDs;
+	float UltimoResplandor = -1.f;
 	void ConfigurarTeclado();
 	TSharedPtr<FDomeMenu> Menu;
 	FString CarpetaEnJson;
@@ -490,6 +671,14 @@ private:
 	bool bFormatoPendiente = false;
 	bool bCopiaHecha = false;
 	bool bMenuListo = false;
+	bool bControlesSucios = false;
+	double UltimoCambioControles = 0.0;
+	void ProcesarTeclas();
+	void EmpujarPantallas(const FDomeCue& C);
+	void AnimarPantallas(float DeltaSeconds);
+	float AcumRecorrido = 0.f;
+	float AcumGiro = 0.f;
+	void CapturarTecla(class APlayerController* PC);
 	FSocket* SocketUdp = nullptr;
 	FString UdpDescripcion;
 	void AbrirUdp();

@@ -190,9 +190,15 @@ relativa a `Content/` (`Movies/playlist.json`), que en el build es
 | B o punto | fundido a negro (imagen y audio) y de vuelta |
 | Espacio | pausa y play |
 | Inicio | volver al principio del cue |
-| S | alternar la fuente entre Media y Spout |
+| F3 | alternar la fuente entre Media y Spout (antes era S) |
 | F1 | ayuda y estado en pantalla |
 | F2 o M | mostrar u ocultar el menú en pantalla (ver abajo) |
+| W A S D | moverse; **Q / E** bajan y suben en vuelo, **Mayús** corre |
+| F | alterna Caminar, Volar y Fantasma |
+
+Todas estas teclas se pueden **cambiar desde el menú** (sección *Teclas*) y se
+guardan en `controles.json`, junto a `playlist.json`. Los números 1 a 9 van
+siempre al video 1 a 9.
 
 Av Pág, Re Pág, B y punto son las teclas que mandan los presentadores
 inalámbricos, así que uno de esos sirve de control de cabina. El controlador
@@ -266,7 +272,10 @@ ocultan (también el botón *Ocultar*). En el editor arranca oculto
 | Fuente y video | Desplegable de fuente (Spout o Media); nombre del sender de Spout (Enter para aplicar); desplegable con los videos de la lista; anterior, play/pausa, reiniciar, siguiente; barra de tiempo; **Abrir video…** (diálogo de Windows, uno o varios archivos de cualquier carpeta), **Traer la carpeta** (agrega los videos de la carpeta de la lista que no estén), **Recargar lista**, **Guardar lista** (escribe `playlist.json`, con una copia `.bak` la primera vez); Repetir, Pasar al siguiente, Negro |
 | Imagen en la cúpula | Formato del video (360, domemaster, VR180, VR180 lado a lado, plano 16:9) y deslizadores de Brillo, Volumen, Giro, Inclinar, Rodar, Horizonte, Curva, FOV del contenido y el mapping del domemaster (Centro X e Y, Escala, Rotar). Valen para el cue actual y se guardan con *Guardar lista* |
 | Pantalla 16:9 | Azimut, elevación, ancho, alto, borde y curvatura de la pantalla del formato plano |
-| Sala, luces y vista | Luces (automáticas, encendidas, apagadas), punto de vista (espectador, cabina mirando la cúpula o las pantallas, tarima, cada pasillo hacia su salida), calidad (VR o Render), sala (180, 90, 45) y salir |
+| Pantallas 16:9 (montajes) | Los montajes de pantallas de TouchDesigner: una pantalla, grande, baja, cenital, **2 pantallas que ocupan el domo**, **4 pantallas**, 6, espejadas, mosaico, **corona**, corona panorámica, tres, **anillo**, anillo doble, **túnel**, túnel con pantallas, cilindro (pared que sube), cilindro doble y fragmentos. Hasta 3 filas; cada una se elige (Pantalla 1, 2, 3), se agrega o se quita y se ajusta en submenús: *Forma y tamaño* (forma plana, curva, banda, túnel o cilindro; azimut, elevación, rodar, ancho, alto, opacidad, borde), *Copias en anillo* (copias, arco, solape, espejar de a una, corrimiento del recorte, repeticiones), *Recorte, espejo y bordes* y *Movimiento del montaje* (girar todo, giro continuo, recorrido continuo). Se guardan con cada video en `playlist.json` |
+| Sala, luces y vista | Luces (automáticas, encendidas, apagadas), **velo de la cúpula con luces**, punto de vista (espectador, cabina mirando la cúpula o las pantallas, tarima, cada pasillo hacia su salida), calidad (VR o Render), sala (180, 90, 45) y salir |
+| Movimiento | Modo (caminar, volar, fantasma), velocidades, correr, altura de ojos, sensibilidad del mouse, gravedad, volver al inicio |
+| Teclas | Cada acción con dos teclas: clic, pulsar la tecla nueva (Esc cancela, Supr borra) |
 
 Un video que se agrega desde el menú toma el formato del nombre del archivo
 (`domemaster`, `360`, `vr180`, `16x9`…) o, si el nombre no dice nada, de sus
@@ -282,6 +291,35 @@ los desplegables, el diálogo de archivos y los deslizadores se revisaron por
 construcción y por sus efectos (los mismos métodos que los comandos `domo.*`,
 que sí se probaron), no pulsándolos.
 
+### El jugador: caminar, volar o atravesar
+
+El jugador es un `Character` (`ADomePawn`, con `ADomeGameMode` como modo de
+juego del proyecto) y no el `DefaultPawn` del motor, que volaba en la dirección
+de la mirada y sin colisiones: al mirar abajo y avanzar se caía uno del piso.
+Aparece de pie en el pasillo 1, mirando a la tarima. Tres modos (tecla F o el
+menú): **Caminar** (gravedad y colisiones con el piso, la tarima, el muro y la
+cabina; las butacas no chocan, para no quedar atorado), **Volar** (sin gravedad,
+con colisiones) y **Fantasma** (atraviesa todo). Los puntos de vista del menú
+ponen los *ojos* en el lugar de la butaca (o la cabina) y pasan a Volar, para
+que la gravedad no lo baje de ahí; F vuelve a Caminar. Con el menú abierto el
+mouse solo gira la vista con el clic derecho apretado (se puede cambiar).
+Consola: `domo.Modo caminar|volar|fantasma`, `domo.Inicio`, `domo.Posicion`.
+
+La colisión sale de mallas con `Use Complex Collision As Simple`
+(`realismo_sala.ajustar_colision`, que corre en cada importación): el importador
+de FBX les generaba un casco convexo sólido a la cúpula y al muro, y eso
+expulsaba al jugador por el techo.
+
+### El velo de la cúpula al encender las luces
+
+Con las luces de la sala encendidas (sin señal, o a mano) la cúpula recibe un
+velo tenue de blanco en el cenit a morado en el borde, que acompaña a las luces
+de las paredes. Es una copia de la cúpula un poco más chica con un material
+aditivo (`M_DomoResplandor`, actor `Resplandor_Domo` con la etiqueta
+`domo_resplandor`) que el controlador sube y baja con el mismo fundido de las
+luces. Se regula en el menú (*Velo de la cúpula con luces*), con `domo.Param
+Resplandor 0.5` o `IntensidadResplandor` en la config; 0 lo apaga.
+
 ### Control por UDP (TouchDesigner, Resolume, QLab, un script)
 
 El ejecutable escucha líneas de texto en `127.0.0.1:7000`. Cada línea es un
@@ -289,7 +327,10 @@ comando de consola `domo.*`; cualquier otra cosa se ignora (no se puede mandar
 `quit` ni otros comandos del motor). Ejemplos: `domo.Cue 2`, `domo.Luces 0`,
 `domo.Negro 1`, `domo.Param Yaw 45`, `domo.Sender TD_Domo_Lab`,
 `domo.Abrir C:/videos/domemaster.mp4` (lo agrega a la lista y lo pone),
-`domo.Guardar`, `domo.Menu 0`. Un mensaje puede traer varias líneas.
+`domo.Guardar`, `domo.Menu 0`, `domo.Plantilla sala_corona` (o `sala_2`,
+`sala_4`, `tunel`, `anillo`, `cilindro`…), `domo.Param S_Yaw 45` (cualquier campo
+de la pantalla elegida con el prefijo `S_`), `domo.Modo volar`. Un mensaje puede
+traer varias líneas.
 
 - El puerto se cambia con `PuertoUdp` (config del controlador) o
   `-DomoUdp=<puerto>`; `0` lo apaga.

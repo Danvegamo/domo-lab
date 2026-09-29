@@ -554,3 +554,15 @@ salida no llevan la etiqueta y nunca se apagan.
   (visto en el último segundo y medio).
 - Hace falta recompilar (el editor lo hace solo al abrir) y, para la versión
   empaquetada, volver a correr `empaquetar.ps1`.
+
+### Colisiones, inicio del jugador y velo de la cúpula (29 de septiembre de 2026)
+
+- `realismo_sala.ajustar_colision` deja con colisión (malla completa) `SM_Piso`,
+  `SM_Tarima`, `SM_Muro`, `SM_ControlPiso`, `SM_Cabina`, `SM_Consola` y `SM_Rack`, y
+  sin colisión todo lo demás, y borra las formas simples que genera el
+  importador de FBX (`get_simple_collision_count` devuelve -1 en el commandlet:
+  se limpia el agregado a mano).
+- El `PlayerStart` se reubica en cada importación al pasillo 1, de pie, mirando a
+  la tarima. Los puntos de vista (`domo_vista`) siguen siendo alturas de ojos.
+- `resplandor_de_la_cupula` crea el actor `Resplandor_Domo` (ver
+  `06_Unreal_standalone.md`).

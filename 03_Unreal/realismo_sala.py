@@ -543,6 +543,49 @@ def borrar_materiales_viejos(carpeta, nombres):
 # Nanite
 # ---------------------------------------------------------------------------
 
+# Mallas con las que el jugador choca (ADomePawn camina sobre el piso). Usan la malla
+# completa como colision (complex as simple), asi el piso, la tarima, el muro y la
+# cabina paran al jugador sin armar cajas a mano. Butacas, listones, luces, sillas y
+# monitores no llevan colision: el jugador las atraviesa en vez de quedar atorado.
+MALLAS_CON_COLISION = {"SM_Piso", "SM_Tarima", "SM_Muro", "SM_ControlPiso", "SM_Cabina", "SM_Consola", "SM_Rack"}
+
+
+def ajustar_colision(mesh, nombre):
+    """Colision de la malla segun MALLAS_CON_COLISION. Primero se borran las formas
+    simples que el importador genera solo (un casco convexo de la cupula o del muro
+    seria un solido que expulsa al jugador); despues, las mallas con colision usan la
+    malla completa. Devuelve True si algo cambio."""
+    cambio = False
+    cuerpo = mesh.get_editor_property("body_setup")
+    if cuerpo is not None:
+        geom = cuerpo.get_editor_property("agg_geom")
+        formas = sum(len(geom.get_editor_property(k)) for k in
+                     ("convex_elems", "box_elems", "sphere_elems", "sphyl_elems", "tapered_capsule_elems"))
+        if formas > 0:
+            # get_simple_collision_count devuelve -1 en el commandlet: se limpia el agregado a mano.
+            for k in ("convex_elems", "box_elems", "sphere_elems", "sphyl_elems", "tapered_capsule_elems"):
+                geom.set_editor_property(k, [])
+            cuerpo.set_editor_property("agg_geom", geom)
+            cambio = True
+    cuerpo = mesh.get_editor_property("body_setup")
+    if cuerpo is None:
+        return cambio
+    if nombre in MALLAS_CON_COLISION:
+        objetivo = unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE
+    else:
+        objetivo = unreal.CollisionTraceFlag.CTF_USE_SIMPLE_AS_COMPLEX
+    if cuerpo.get_editor_property("collision_trace_flag") != objetivo:
+        cuerpo.set_editor_property("collision_trace_flag", objetivo)
+        cambio = True
+    if cambio:
+        try:
+            mesh.post_edit_change()
+        except Exception:  # noqa: BLE001
+            pass
+        unreal.EditorAssetLibrary.save_loaded_asset(mesh, False)
+    return cambio
+
+
 def aplicar_nanite(mesh, nombre):
     """Nanite en todas las mallas estaticas salvo la cupula: SM_Domo lleva un
     material de cielo (is_sky) que el SkyLight captura cada cuadro, y esa
@@ -550,6 +593,8 @@ def aplicar_nanite(mesh, nombre):
     Nanite. fallback_relative_error = 0 para que el trazado de rayos use la
     malla completa (son mallas livianas)."""
     querer = nombre != "SM_Domo"
+    if ajustar_colision(mesh, nombre):
+        log("Colision de {}: {}".format(nombre, "malla completa" if nombre in MALLAS_CON_COLISION else "ninguna"))
     sub = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
     try:
         ajustes = sub.get_nanite_settings(mesh)
@@ -654,6 +699,79 @@ def _rot_vec(yaw_deg, x, y):
 
 
 ETIQUETA_VISTA = "domo_vista"
+ETIQUETA_RESPLANDOR = "domo_resplandor"
+M_RESPLANDOR_PATH = CARPETA_MATERIALES + "/M_DomoResplandor"
+MI_RESPLANDOR_PATH = CARPETA_MATERIALES + "/MI_DomoResplandor"
+MALLA_DOMO = "/Game/Sala/sala_domo_SM_Domo"
+
+# V de la cupula = 0 en el cenit y 1 en el borde. Con las luces encendidas la cupula
+# recibe un velo tenue de blanco (cenit) a morado (borde), como la luz de los cobertizos
+# de un planetario; el controlador lo sube y lo baja con las luces de la sala.
+HLSL_RESPLANDOR = """
+float c = saturate(UV.y);
+float t = smoothstep(0.0, 0.85, c);
+float3 col = lerp(Blanco, Morado, t);
+float velo = 0.55 + 0.45 * c;
+return col * velo * Nivel;
+"""
+
+
+def crear_material_resplandor():
+    mel = unreal.MaterialEditingLibrary
+    m = _cargar_o_crear_material(M_RESPLANDOR_PATH)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+    m.set_editor_property("two_sided", True)
+    uv = mel.create_material_expression(m, unreal.MaterialExpressionTextureCoordinate, -700, 0)
+    uv.set_editor_property("coordinate_index", 0)
+    nivel = mel.create_material_expression(m, unreal.MaterialExpressionScalarParameter, -700, 120)
+    nivel.set_editor_property("parameter_name", "Nivel")
+    nivel.set_editor_property("default_value", 0.0)
+    blanco = mel.create_material_expression(m, unreal.MaterialExpressionVectorParameter, -700, 240)
+    blanco.set_editor_property("parameter_name", "Blanco")
+    blanco.set_editor_property("default_value", unreal.LinearColor(0.92, 0.86, 1.0, 1.0))
+    morado = mel.create_material_expression(m, unreal.MaterialExpressionVectorParameter, -700, 360)
+    morado.set_editor_property("parameter_name", "Morado")
+    morado.set_editor_property("default_value", unreal.LinearColor(0.55, 0.10, 1.0, 1.0))
+    c = _custom(m, "ResplandorDomo", HLSL_RESPLANDOR, unreal.CustomMaterialOutputType.CMOT_FLOAT3,
+                ["UV", "Nivel", "Blanco", "Morado"], -300, 100)
+    _conectar(uv, "", c, "UV")
+    _conectar(nivel, "", c, "Nivel")
+    _conectar(blanco, "", c, "Blanco")
+    _conectar(morado, "", c, "Morado")
+    mel.connect_material_property(c, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel.set_base_material_usage(m, unreal.MaterialUsage.MATUSAGE_NANITE, True)
+    mel.recompile_material(m)
+    unreal.EditorAssetLibrary.save_loaded_asset(m, False)
+    mi = _instancia(MI_RESPLANDOR_PATH, m)
+    unreal.EditorAssetLibrary.save_loaded_asset(mi, False)
+    log("M_DomoResplandor listo.")
+    return mi
+
+
+def resplandor_de_la_cupula(actor_subsystem):
+    """Una copia de la cupula, un poco mas chica, con el velo blanco-morado (material
+    aditivo). Etiqueta domo_resplandor: ADomeMediaController le sube el parametro Nivel
+    cuando las luces estan encendidas."""
+    malla = unreal.EditorAssetLibrary.load_asset(MALLA_DOMO)
+    if malla is None:
+        aviso("No se encontro la malla de la cupula ({}): no hay resplandor.".format(MALLA_DOMO))
+        return 0
+    mi = crear_material_resplandor()
+    a = actor_subsystem.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+    if a is None:
+        fallar("spawn_actor_from_class devolvio None para el resplandor de la cupula.")
+    comp = a.static_mesh_component
+    comp.set_static_mesh(malla)
+    comp.set_material(0, mi)
+    comp.set_editor_property("cast_shadow", False)
+    comp.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+    a.set_actor_scale3d(unreal.Vector(0.996, 0.996, 0.996))
+    a.set_actor_label("Resplandor_Domo")
+    a.tags = [unreal.Name(ETIQUETA_DETALLE), unreal.Name(ETIQUETA_RESPLANDOR)]
+    a.set_folder_path(CARPETA_DETALLES)
+    return 1
+
 PREFIJO_VISTA = "vista:"
 
 
@@ -741,6 +859,7 @@ def detalles_180(actor_subsystem, mats, manifiesto):
     else:
         log("No hay Monitores_Actor en el nivel: se omiten las pantallas de la consola.")
     n += puntos_de_vista(actor_subsystem, manifiesto)
+    n += resplandor_de_la_cupula(actor_subsystem)
     # luces de muro: un foco de luz real cada N focos de la franja emisiva
     lm = manifiesto.get("luces_muro")
     if lm:
