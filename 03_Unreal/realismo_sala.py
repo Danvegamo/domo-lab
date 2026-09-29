@@ -547,7 +547,8 @@ def borrar_materiales_viejos(carpeta, nombres):
 # completa como colision (complex as simple), asi el piso, la tarima, el muro y la
 # cabina paran al jugador sin armar cajas a mano. Butacas, listones, luces, sillas y
 # monitores no llevan colision: el jugador las atraviesa en vez de quedar atorado.
-MALLAS_CON_COLISION = {"SM_Piso", "SM_Tarima", "SM_Muro", "SM_ControlPiso", "SM_Cabina", "SM_Consola", "SM_Rack"}
+MALLAS_CON_COLISION = {"SM_Piso", "SM_Tarima", "SM_Muro", "SM_ControlPiso", "SM_Cabina", "SM_Consola", "SM_Rack",
+                       "SM_Graderia", "SM_Plataformas", "SM_Barandas"}
 
 
 def ajustar_colision(mesh, nombre):

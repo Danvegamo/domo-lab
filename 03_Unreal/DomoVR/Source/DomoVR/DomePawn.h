@@ -65,4 +65,8 @@ class DOMOVR_API ADomeGameMode : public AGameModeBase
 
 public:
 	ADomeGameMode();
+
+	/** Siempre hay inicio: el primer PlayerStart aunque el jugador quepa mal ahi (la sala 45
+	 *  no arrancaba: el motor descartaba el unico PlayerStart y el jugador no aparecia). */
+	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
 };

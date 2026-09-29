@@ -5,7 +5,9 @@
 #include "DomeMediaController.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerStart.h"
 
 namespace
 {
@@ -19,9 +21,24 @@ ADomeGameMode::ADomeGameMode()
 	DefaultPawnClass = ADomePawn::StaticClass();
 }
 
+AActor* ADomeGameMode::ChoosePlayerStart_Implementation(AController* Player)
+{
+	if (AActor* Motor = Super::ChoosePlayerStart_Implementation(Player))
+	{
+		return Motor;
+	}
+	for (TActorIterator<APlayerStart> It(GetWorld()); It; ++It)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DomeGameMode: el motor no eligio inicio; se usa %s."), *It->GetName());
+		return *It;
+	}
+	return nullptr;
+}
+
 ADomePawn::ADomePawn()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	SpawnCollisionHandlingMethod = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 	bUseControllerRotationYaw = true;
 	bUseControllerRotationPitch = false;
@@ -42,6 +59,7 @@ ADomePawn::ADomePawn()
 	Mov->GroundFriction = 10.f;
 	Mov->JumpZVelocity = 0.f;
 	Mov->SetWalkableFloorAngle(50.f);
+	Mov->MaxStepHeight = 55.f;
 }
 
 void ADomePawn::BeginPlay()
@@ -114,7 +132,7 @@ void ADomePawn::AsentarEnElPiso()
 	const float Mitad = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
 	const FVector Pos = GetActorLocation();
 	FHitResult Golpe;
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(DomoPiso), true, this);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(DomoPiso), false, this);
 	const FVector Desde(Pos.X, Pos.Y, Pos.Z + 400.f);
 	const FVector Hasta(Pos.X, Pos.Y, Pos.Z - 3000.f);
 	if (Mundo->LineTraceSingleByChannel(Golpe, Desde, Hasta, ECC_Visibility, Params))

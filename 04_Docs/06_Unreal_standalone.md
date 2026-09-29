@@ -310,6 +310,43 @@ La colisión sale de mallas con `Use Complex Collision As Simple`
 de FBX les generaba un casco convexo sólido a la cúpula y al muro, y eso
 expulsaba al jugador por el techo.
 
+### Video que se traba: qué pasa y cómo se arregla
+
+Medido el 29 de septiembre de 2026 con el video de Dan (`Programme DomoArte - short
+_5.1_h265.mp4`: HEVC de 4096×4096, 30 fps, 60 Mbps, audio 5.1, 13,5 GB): el
+juego seguía a más de 100 fps y el reloj del video avanzaba al ritmo real, pero el
+proceso gastaba unos **3 núcleos más** que con un video de 2K (6,7 contra 3,3 con
+`t.MaxFPS 60`). Es el decodificador: el reproductor de Windows (WmfMedia)
+decodifica HEVC en **CPU** porque el proyecto usa DX12 (su decodificación por
+hardware solo existe con DX11), y 16 megapíxeles por cuadro a 30 fps no le
+alcanzan. ffmpeg decodifica ese mismo archivo a 117 fps usando unos 8 núcleos.
+
+La salida es un video más liviano, no un ajuste del motor:
+
+- **Menú > Fuente y video > Optimizar video**, o `domo.Optimizar [lado]`: hace con
+  ffmpeg una copia H.264 del video actual (2048 de lado por defecto; el control
+  "Lado de la copia" lo cambia) en `Movies/optimizados/`, la agrega a la lista con los
+  mismos ajustes de imagen y pasa a ella. Sigue reproduciendo mientras convierte y
+  muestra el avance. Ruta de GPU completa (decodifica, escala y codifica con NVENC;
+  casi no usa CPU) y, si falla, con la CPU decodificando y, si falla, x264 (más lento).
+  Un clip de 40 s tardó unos 20 s; el video de 29 min, unos 9.
+- Necesita ffmpeg: junto al ejecutable, en la carpeta de los videos o en el `PATH`.
+- Al abrir un video de 3500 px o más de lado el menú avisa que puede trabarse.
+- Con la copia (H.264, 2048×2048) el uso de CPU vuelve al de un video de 2K.
+- `domo.Estado` ahora escribe también los cuadros por segundo y el cuadro más lento.
+
+### La sala 45 (y la 90) en el ejecutable
+
+Con el jugador nuevo la sala 45 no mostraba nada: el nivel tiene un solo
+`PlayerStart`, a la altura de los ojos, y el motor lo descartaba porque el jugador no
+cabía ahí (`FindPlayerStart: NO PLAYERSTART with positive rating`, `SpawnActor failed
+because of collision`), así que no aparecía ningún jugador ni cámara. Además la
+cúpula de esas salas tenía colisión y la gradería/plataformas no. Ahora
+`ADomeGameMode` usa siempre el primer `PlayerStart`, el jugador aparece aunque haya
+colisión y camina sobre la gradería (paso de hasta 55 cm), y las mallas de las salas
+45 y 90 tienen la misma colisión que las de la 180 (`SM_Graderia`, `SM_Plataformas` y
+`SM_Barandas` chocan; la cúpula y las butacas no).
+
 ### El velo de la cúpula al encender las luces
 
 Con las luces de la sala encendidas (sin señal, o a mano) la cúpula recibe un

@@ -26,6 +26,7 @@
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
+#include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
 #include "InputCoreTypes.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -561,6 +562,7 @@ bool ADomeMediaController::AplicarPreset(const FString& Nombre)
 void ADomeMediaController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	CerrarUdp();
+	CancelarOptimizacion();
 	Menu.Reset();
 	bMenuListo = false;
 	if (MediaPlayer)
@@ -834,6 +836,7 @@ void ADomeMediaController::AbrirCue(int32 Indice)
 	const FDomeCue& C = Cues[Indice];
 	AplicarParametros(C);
 	bFormatoPendiente = C.bFormatoAuto;
+	bPesoRevisado = false;
 	AcumRecorrido = 0.f;
 	AcumGiro = 0.f;
 
@@ -995,7 +998,21 @@ void ADomeMediaController::Tick(float DeltaSeconds)
 			bMenuListo = true;
 			Menu->Mostrar(Menu->EstaVisible());
 		}
+		// Cuadros por segundo reales (ventana de 2 s) y el cuadro mas lento: domo.Estado los muestra.
+		FpsAcumTiempo += DeltaSeconds;
+		FpsAcumMax = FMath::Max(FpsAcumMax, DeltaSeconds);
+		++FpsAcumCuadros;
+		if (FpsAcumTiempo >= 2.f)
+		{
+			FpsMedio = FpsAcumCuadros / FpsAcumTiempo;
+			CuadroMasLentoMs = FpsAcumMax * 1000.f;
+			FpsAcumTiempo = 0.f;
+			FpsAcumMax = 0.f;
+			FpsAcumCuadros = 0;
+		}
 		ActualizarFormatoAuto();
+		RevisarPeso();
+		ActualizarOptimizacion();
 		AnimarPantallas(DeltaSeconds);
 		LeerUdp();
 		CorrerGuion(DeltaSeconds);
@@ -1236,6 +1253,7 @@ void ADomeMediaController::SetParam(FName Nombre, float Valor)
 		}
 	}
 	if (Nombre == TEXT("Resplandor")) { IntensidadResplandor = FMath::Max(Valor, 0.f); UltimoResplandor = -1.f; return; }
+	if (Nombre == TEXT("LadoOptimizado")) { LadoOptimizado = FMath::Clamp(FMath::RoundToInt(Valor), 512, 4096); return; }
 	if (Nombre == TEXT("VelCaminar")) { Controles.VelocidadCaminar = Valor; AplicarMovimiento(); return; }
 	if (Nombre == TEXT("VelVuelo")) { Controles.VelocidadVuelo = Valor; AplicarMovimiento(); return; }
 	if (Nombre == TEXT("MultCorrer")) { Controles.MultiplicadorCorrer = Valor; AplicarMovimiento(); return; }
@@ -1341,9 +1359,9 @@ FString ADomeMediaController::DescribirEstado() const
 	}
 	const float Envolvente = MediaSound ? MediaSound->GetEnvelopeValue() : 0.f;
 	return FString::Printf(
-		TEXT("fuente=%s cue=%d/%d '%s' reproductor=%s t=%.2f/%.2f tasa=%.2f textura=%dx%d pistas_audio=%d envolvente_audio=%.4f negro=%d"),
+		TEXT("fuente=%s cue=%d/%d '%s' reproductor=%s t=%.2f/%.2f tasa=%.2f textura=%dx%d pistas_audio=%d envolvente_audio=%.4f negro=%d fps=%.1f cuadro_mas_lento=%.0f ms"),
 		Fuente == EDomeFuente::Media ? TEXT("Media") : TEXT("Spout"), CueActual + 1, Cues.Num(), *GetNombreCue(CueActual),
-		*Rep, Tiempo, Duracion, Tasa, VideoW, VideoH, Audio, Envolvente, bNegro ? 1 : 0);
+		*Rep, Tiempo, Duracion, Tasa, VideoW, VideoH, Audio, Envolvente, bNegro ? 1 : 0, FpsMedio, CuadroMasLentoMs);
 }
 
 // --- Eventos del reproductor --------------------------------------------------
@@ -1691,6 +1709,214 @@ void ADomeMediaController::AnimarPantallas(float DeltaSeconds)
 	EmpujarPantallas(C);
 }
 
+// --- Optimizar videos pesados --------------------------------------------------------------
+
+void ADomeMediaController::RevisarPeso()
+{
+	if (bPesoRevisado || !MediaPlayer || !Cues.IsValidIndex(CueActual) || !MediaPlayer->IsReady())
+	{
+		return;
+	}
+	const FIntPoint D = MediaPlayer->GetVideoTrackDimensions(INDEX_NONE, INDEX_NONE);
+	if (D.X <= 0 || D.Y <= 0)
+	{
+		return;
+	}
+	bPesoRevisado = true;
+	if (FMath::Max(D.X, D.Y) >= 3500)
+	{
+		Mensaje(FString::Printf(TEXT("Video pesado (%dx%d): puede trabarse. Menu > Fuente y video > Optimizar video hace una copia liviana."), D.X, D.Y), 12.f);
+	}
+}
+
+FString ADomeMediaController::BuscarFfmpeg() const
+{
+	TArray<FString> Candidatos;
+	Candidatos.Add(FPaths::Combine(FPlatformProcess::BaseDir(), TEXT("ffmpeg.exe")));
+	Candidatos.Add(FPaths::Combine(FPaths::ConvertRelativePathToFull(CarpetaPlaylist), TEXT("ffmpeg.exe")));
+	Candidatos.Add(FPaths::Combine(FPaths::ConvertRelativePathToFull(CarpetaPlaylist), TEXT("ffmpeg"), TEXT("ffmpeg.exe")));
+	FString Ruta = FPlatformMisc::GetEnvironmentVariable(TEXT("PATH"));
+	TArray<FString> Carpetas;
+	Ruta.ParseIntoArray(Carpetas, TEXT(";"), true);
+	for (const FString& C : Carpetas)
+	{
+		Candidatos.Add(FPaths::Combine(C, TEXT("ffmpeg.exe")));
+	}
+	for (const FString& C : Candidatos)
+	{
+		if (FPaths::FileExists(C))
+		{
+			return C;
+		}
+	}
+	return FString();
+}
+
+bool ADomeMediaController::LanzarFfmpeg(int32 Fase)
+{
+	const FString Ffmpeg = BuscarFfmpeg();
+	if (Ffmpeg.IsEmpty())
+	{
+		Mensaje(TEXT("No encuentro ffmpeg. Ponlo junto al ejecutable, en la carpeta de los videos o en el PATH."), 10.f);
+		return false;
+	}
+	IFileManager::Get().Delete(*SalidaOptimizar, false, true, true);
+	IFileManager::Get().Delete(*ProgresoOptimizar, false, true, true);
+	const int32 L = FMath::Clamp(LadoOptimizado, 512, 4096);
+	const FString Filtro = FString::Printf(
+		TEXT("scale='min(%d,iw)':'min(%d,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2"), L, L);
+	// Fase 0: todo en la GPU (decodifica, escala y codifica con NVENC; casi no usa CPU).
+	// Fase 1: decodifica en CPU y codifica con NVENC. Fase 2: todo en CPU (x264).
+	const FString FiltroGpu = FString::Printf(TEXT("scale_cuda=w=%d:h=%d:force_original_aspect_ratio=decrease"), L, L);
+	const FString Entrada = Fase == 0 ? TEXT("-hwaccel cuda -hwaccel_output_format cuda") : TEXT("");
+	const FString Video = Fase == 2
+		? TEXT("-c:v libx264 -preset veryfast -crf 20 -profile:v high -pix_fmt yuv420p")
+		: (Fase == 0 ? TEXT("-c:v h264_nvenc -preset p5 -b:v 25M -maxrate 40M -profile:v high")
+			: TEXT("-c:v h264_nvenc -preset p5 -b:v 25M -maxrate 40M -profile:v high -pix_fmt yuv420p"));
+	const FString Args = FString::Printf(
+		TEXT("-y -hide_banner -loglevel error -nostats -progress \"%s\" %s -i \"%s\" -map 0:v:0 -map 0:a:0? -vf \"%s\" %s -c:a aac -ac 2 -b:a 192k -movflags +faststart \"%s\""),
+		*ProgresoOptimizar, *Entrada, *EntradaOptimizar, Fase == 0 ? *FiltroGpu : *Filtro, *Video, *SalidaOptimizar);
+	UE_LOG(LogDomoMedia, Display, TEXT("Optimizar (fase %d): %s %s"), Fase, *Ffmpeg, *Args);
+	FaseOptimizar = Fase;
+	// Prioridad baja para no trabar la proyeccion mientras se convierte.
+	ProcOptimizar = FPlatformProcess::CreateProc(*Ffmpeg, *Args, false, true, true, nullptr, -1, nullptr, nullptr);
+	return ProcOptimizar.IsValid();
+}
+
+bool ADomeMediaController::OptimizarVideoActual()
+{
+	if (bOptimizando)
+	{
+		Mensaje(TEXT("Ya se esta optimizando un video."));
+		return false;
+	}
+	if (!Cues.IsValidIndex(CueActual))
+	{
+		Mensaje(TEXT("No hay video para optimizar."));
+		return false;
+	}
+	const FDomeCue& C = Cues[CueActual];
+	const FString Base = FPaths::ConvertRelativePathToFull(CarpetaPlaylist);
+	FString Entrada = FPaths::IsRelative(C.Archivo) ? FPaths::Combine(Base, C.Archivo) : C.Archivo;
+	Entrada = FPaths::ConvertRelativePathToFull(Entrada);
+	FPaths::NormalizeFilename(Entrada);
+	if (!FPaths::FileExists(Entrada))
+	{
+		Mensaje(TEXT("El archivo del video no existe."));
+		return false;
+	}
+	const FString Carpeta = FPaths::Combine(Base, TEXT("optimizados"));
+	IFileManager::Get().MakeDirectory(*Carpeta, true);
+	EntradaOptimizar = Entrada;
+	SalidaOptimizar = FPaths::Combine(Carpeta, FPaths::GetBaseFilename(Entrada) + FString::Printf(TEXT("_%d.mp4"), FMath::Clamp(LadoOptimizado, 512, 4096)));
+	ProgresoOptimizar = FPaths::Combine(Carpeta, TEXT("progreso.txt"));
+	DuracionOptimizar = MediaPlayer ? MediaPlayer->GetDuration().GetTotalSeconds() : 0.0;
+	CueOptimizado = CueActual;
+	if (FPaths::IsSamePath(Entrada, SalidaOptimizar))
+	{
+		Mensaje(TEXT("Este video ya es una copia optimizada."));
+		return false;
+	}
+	if (!LanzarFfmpeg(0))
+	{
+		return false;
+	}
+	bOptimizando = true;
+	UltimoAvisoOptimizar = 0.0;
+	Mensaje(FString::Printf(TEXT("Optimizando %s (lado %d). Sigue reproduciendo; al terminar se agrega a la lista."),
+		*FPaths::GetCleanFilename(Entrada), FMath::Clamp(LadoOptimizado, 512, 4096)), 8.f);
+	return true;
+}
+
+void ADomeMediaController::CancelarOptimizacion()
+{
+	if (ProcOptimizar.IsValid())
+	{
+		if (FPlatformProcess::IsProcRunning(ProcOptimizar))
+		{
+			FPlatformProcess::TerminateProc(ProcOptimizar, true);
+		}
+		FPlatformProcess::CloseProc(ProcOptimizar);
+	}
+	if (bOptimizando)
+	{
+		bOptimizando = false;
+		IFileManager::Get().Delete(*SalidaOptimizar, false, true, true);
+	}
+}
+
+void ADomeMediaController::ActualizarOptimizacion()
+{
+	if (!bOptimizando)
+	{
+		return;
+	}
+	if (FPlatformProcess::IsProcRunning(ProcOptimizar))
+	{
+		const double Ahora = FPlatformTime::Seconds();
+		if (Ahora - UltimoAvisoOptimizar > 3.0)
+		{
+			UltimoAvisoOptimizar = Ahora;
+			FString Texto;
+			double Segundos = 0.0;
+			if (FFileHelper::LoadFileToString(Texto, *ProgresoOptimizar, FFileHelper::EHashOptions::None, FILEREAD_AllowWrite))
+			{
+				int32 I = Texto.Find(TEXT("out_time_us="), ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+				if (I != INDEX_NONE)
+				{
+					Segundos = FCString::Atod(*Texto.Mid(I + 12)) / 1000000.0;
+				}
+			}
+			const FString Avance = DuracionOptimizar > 1.0
+				? FString::Printf(TEXT("%.0f %%"), FMath::Clamp(Segundos / DuracionOptimizar * 100.0, 0.0, 100.0))
+				: FString::Printf(TEXT("%.0f s"), Segundos);
+			Mensaje(FString::Printf(TEXT("Optimizando %s: %s"), *FPaths::GetCleanFilename(EntradaOptimizar), *Avance), 4.f);
+		}
+		return;
+	}
+
+	int32 Codigo = 0;
+	FPlatformProcess::GetProcReturnCode(ProcOptimizar, &Codigo);
+	FPlatformProcess::CloseProc(ProcOptimizar);
+	const bool bExiste = FPaths::FileExists(SalidaOptimizar) && IFileManager::Get().FileSize(*SalidaOptimizar) > 100000;
+	if (Codigo != 0 || !bExiste)
+	{
+		if (FaseOptimizar < 2)
+		{
+			UE_LOG(LogDomoMedia, Warning, TEXT("Optimizar fase %d fallo (codigo %d); se reintenta con otra ruta."), FaseOptimizar, Codigo);
+			Mensaje(FaseOptimizar == 0 ? TEXT("La ruta de GPU fallo; se reintenta decodificando en CPU.") : TEXT("NVENC fallo; se reintenta con la CPU (mas lento)."), 6.f);
+			if (LanzarFfmpeg(FaseOptimizar + 1))
+			{
+				return;
+			}
+		}
+		bOptimizando = false;
+		Mensaje(TEXT("No se pudo optimizar el video (ver el log)."), 10.f);
+		return;
+	}
+
+	bOptimizando = false;
+	if (Cues.IsValidIndex(CueOptimizado))
+	{
+		FDomeCue Nuevo = Cues[CueOptimizado];
+		Nuevo.Nombre += TEXT(" (optimizado)");
+		const FString Base = FPaths::ConvertRelativePathToFull(CarpetaPlaylist);
+		FString Rel = SalidaOptimizar;
+		Nuevo.Archivo = (FPaths::MakePathRelativeTo(Rel, *(Base / TEXT(""))) && !Rel.StartsWith(TEXT(".."))) ? Rel : SalidaOptimizar;
+		Nuevo.bFormatoAuto = false;
+		const int32 Indice = Cues.Add(Nuevo);
+		if (Menu.IsValid())
+		{
+			Menu->RefrescarListas();
+		}
+		if (Fuente == EDomeFuente::Media)
+		{
+			GoToCue(Indice);
+		}
+		Mensaje(FString::Printf(TEXT("Listo: %s. Guardar lista lo deja en playlist.json."), *FPaths::GetCleanFilename(SalidaOptimizar)), 10.f);
+	}
+}
+
 // --- Menu y lista de videos ---------------------------------------------------------
 
 void ADomeMediaController::MostrarMenu(bool bVer)
@@ -1724,6 +1950,7 @@ float ADomeMediaController::GetParam(FName Nombre) const
 		}
 	}
 	if (Nombre == TEXT("Resplandor")) { return IntensidadResplandor; }
+	if (Nombre == TEXT("LadoOptimizado")) { return static_cast<float>(LadoOptimizado); }
 	if (Nombre == TEXT("VelCaminar")) { return Controles.VelocidadCaminar; }
 	if (Nombre == TEXT("VelVuelo")) { return Controles.VelocidadVuelo; }
 	if (Nombre == TEXT("MultCorrer")) { return Controles.MultiplicadorCorrer; }
@@ -2382,6 +2609,16 @@ namespace
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* W)
 		{
 			ConControlador(W, [](ADomeMediaController& C) { C.GuardarPlaylist(); });
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdOptimizar(TEXT("domo.Optimizar"), TEXT("Hace una copia liviana (H.264, 2048) del video actual con ffmpeg y la agrega a la lista."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& A, UWorld* W)
+		{
+			ConControlador(W, [&](ADomeMediaController& C)
+			{
+				if (A.Num() > 0) { C.LadoOptimizado = FCString::Atoi(*A[0]); }
+				C.OptimizarVideoActual();
+			});
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdPlantilla(TEXT("domo.Plantilla"), TEXT("domo.Plantilla id: montaje de pantallas 16:9 (cine, sala_2, sala_4, sala_corona, tunel, anillo, cilindro...)."),

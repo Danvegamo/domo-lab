@@ -422,6 +422,25 @@ public:
 	/** Mueve al jugador (cm, grados). Lo usan el menu y domo.Camara. */
 	void IrAVista(const FVector& Ubicacion, const FRotator& Rotacion, const FString& Nombre);
 
+	// --- Optimizar videos pesados ---------------------------------------------------------
+	// Un video de 4096x4096 en HEVC (o 4K a 60 Mbps) no lo decodifica el reproductor de
+	// Windows con la fluidez de un video de 2K: WMF decodifica en CPU con el motor en DX12
+	// (medido: unos 3 nucleos de mas y cuadros perdidos). "Optimizar" hace con ffmpeg una
+	// copia H.264 mas liviana (por defecto de 2048 de lado), con NVENC y, si falla, x264, y
+	// la agrega a la lista con los mismos ajustes de imagen. Necesita ffmpeg (junto al
+	// ejecutable, en la carpeta de los videos o en el PATH).
+
+	/** Lado mayor de la copia optimizada, en pixeles. */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Domo|Optimizar")
+	int32 LadoOptimizado = 2048;
+
+	/** Optimiza el video del cue actual en segundo plano. */
+	UFUNCTION(BlueprintCallable, Category = "Domo")
+	bool OptimizarVideoActual();
+
+	bool EstaOptimizando() const { return bOptimizando; }
+	void CancelarOptimizacion();
+
 	// --- Pantallas 16:9 ---------------------------------------------------------------
 	// Plantillas de pantallas (corona, 4 pantallas, 2 pantallas que ocupan el domo,
 	// tunel, anillo, cilindro...) y edicion en vivo de cada fila. Son las de
@@ -671,9 +690,28 @@ private:
 	bool bFormatoPendiente = false;
 	bool bCopiaHecha = false;
 	bool bMenuListo = false;
+	float FpsMedio = 0.f;
+	float CuadroMasLentoMs = 0.f;
+	float FpsAcumTiempo = 0.f;
+	float FpsAcumMax = 0.f;
+	int32 FpsAcumCuadros = 0;
 	bool bControlesSucios = false;
 	double UltimoCambioControles = 0.0;
 	void ProcesarTeclas();
+	bool bOptimizando = false;
+	int32 FaseOptimizar = 0;
+	int32 CueOptimizado = INDEX_NONE;
+	FProcHandle ProcOptimizar;
+	FString EntradaOptimizar;
+	FString SalidaOptimizar;
+	FString ProgresoOptimizar;
+	double DuracionOptimizar = 0.0;
+	double UltimoAvisoOptimizar = 0.0;
+	bool bPesoRevisado = false;
+	FString BuscarFfmpeg() const;
+	bool LanzarFfmpeg(int32 Fase);
+	void ActualizarOptimizacion();
+	void RevisarPeso();
 	void EmpujarPantallas(const FDomeCue& C);
 	void AnimarPantallas(float DeltaSeconds);
 	float AcumRecorrido = 0.f;

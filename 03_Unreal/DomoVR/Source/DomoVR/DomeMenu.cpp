@@ -531,6 +531,22 @@ TSharedRef<SWidget> FDomeMenu::SeccionVideo()
 		]
 	];
 
+	Caja->AddSlot().AutoHeight().Padding(0, 4)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(2, 0)
+		[
+			Boton(LOCTEXT("Optimizar", "Optimizar video (si se traba)"),
+				[Deb]() { if (Deb.IsValid()) { Deb->OptimizarVideoActual(); } },
+				LOCTEXT("OptimizarAy", "Hace con ffmpeg una copia liviana (H.264) del video actual y la agrega a la lista. Sirve para videos de 4K o HEVC pesados."))
+		]
+	];
+
+	Caja->AddSlot().AutoHeight().Padding(0, 2)
+	[
+		Deslizador(LOCTEXT("LadoOpt", "Lado de la copia (px)"), TEXT("LadoOptimizado"), 1024.f, 4096.f, 512.f)
+	];
+
 	Caja->AddSlot().AutoHeight().Padding(0, 2)
 	[
 		SNew(SHorizontalBox)

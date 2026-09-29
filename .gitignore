@@ -47,3 +47,4 @@ Movies/*.mov
 # Archivos locales de Visual Studio
 03_Unreal/DomoVR/*.slnx
 03_Unreal/DomoVR/.vsconfig
+03_Unreal/Build_nuevo/
