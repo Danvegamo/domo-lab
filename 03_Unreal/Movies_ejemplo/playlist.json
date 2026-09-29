@@ -35,6 +35,13 @@
       "loop": true
     },
     {
+      "nombre":"Prueba de video domomaster con volumen",
+      "archivo":"C:\\Users\\Danvegamo\\Downloads\\Programme DomoArte - short _5.1_h265.mp4",
+      "formato": "domemaster",
+      "volumen": 0.5,
+      "loop": true
+    },
+    {
       "nombre": "Patron en una pantalla 16:9 al frente",
       "archivo": "patron_4096x2048.mp4",
       "formato": "169",

@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "5.8",
+	"EngineAssociation": "{3B59DD65-47F8-535E-44E2-12994F164093}",
 	"Category": "",
 	"Description": "Visualizador VR de una sala de domo tipo planetario (proyeccion sobre cupula via TouchDesigner por Spout). El proyecto sigue siendo Blueprint en su logica de juego salvo ASpoutDomeReceiver (el puente Spout, en C++ por pedido explicito del usuario); el modulo DomoVR existe para poder compilar SpoutPlugin y esa clase.",
 	"Modules": [
