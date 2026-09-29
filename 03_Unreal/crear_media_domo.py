@@ -101,7 +101,11 @@ PARAMETROS = [
 # PView = cuantas filas, giro global (grados), recorrido acumulado, giro acumulado (grados).
 # Los vectores llegan al nodo Custom como float4 (RGB mas alfa por un Append).
 MAX_FILAS = 3
-VECTORES = ["PView"] + ["P{}{}".format(k, i) for i in range(MAX_FILAS) for k in ("Pos", "Size", "Crop", "Opt", "Rep", "Anm")]
+VECTORES = ["PView", "PBg0", "PBg1"] + ["P{}{}".format(k, i) for i in range(MAX_FILAS) for k in ("Pos", "Size", "Crop", "Opt", "Rep", "Anm")]
+# Fondo desenfocado detras de las pantallas (pagina Fondo de VIDEO_DOME):
+#   PBg0 = modo (0 sin fondo, 1 lavado, 2 envolvente), desenfoque, brillo, saturacion
+#   PBg1 = zoom del lavado, repeticiones del envolvente, giro (grados)
+BG_DEFECTO = {"PBg0": (2.0, 60.0, 0.35, 0.7), "PBg1": (1.8, 2.0, 0.0, 0.0)}
 VECTOR_DEFECTO = {
     "Pos": (0.0, 45.0, 0.0, 0.0), "Size": (70.0, 39.0, 0.0, 1.0), "Crop": (0.0, 0.0, 1.0, 1.0),
     "Opt": (1.0, 0.04, 1.0, 0.0), "Rep": (1.0, 360.0, 0.0, 0.0), "Anm": (0.0, 0.0, 0.0, 0.0),
@@ -218,6 +222,42 @@ else if (f == 4)
     float4 aRep[3] = { PRep0, PRep1, PRep2 };
     float4 aAnm[3] = { PAnm0, PAnm1, PAnm2 };
     float3 acc = float3(0.0, 0.0, 0.0);
+
+    // Capa de fondo (bg_blur + bg_map de TouchDesigner): el video, desenfocado, llenando la cupula.
+    // El desenfoque se lee de un nivel alto de mip (MT_Domo genera mips); 5 muestras lo suavizan.
+    int bgm = (int)round(PBg0.x);
+    float mediaD = radians(fovc) * 0.5;
+    float rr = th / max(mediaD, 1e-4);
+    if (bgm > 0 && rr <= 1.0)
+    {
+        float bwx, bwy;
+        Tex.GetDimensions(bwx, bwy);
+        float2 bw = float2(bwx, bwy);
+        float2 buv;
+        if (bgm == 2)
+        {
+            float ab = (azq - radians(PBg1.z)) / (2.0 * K_PI) + 0.5;
+            float tl = max(PBg1.y, 1.0);
+            float xw = ab * tl;
+            xw = xw - 2.0 * floor(xw * 0.5);
+            buv = float2(abs(xw - 1.0), clamp(rr, 0.0, 1.0));
+        }
+        else
+        {
+            float zm = max(PBg1.x, 0.01);
+            float asp = bw.x / max(bw.y, 1.0);
+            buv = float2(0.5 + q.x * 0.5 / zm, 0.5 - q.y * 0.5 * asp / zm);
+        }
+        float lv = clamp(log2(max(PBg0.y, 1.0)), 0.0, 11.0);
+        float2 pz = exp2(lv) / max(bw, float2(1.0, 1.0));
+        float3 bc = Tex.SampleLevel(TexSampler, buv, lv).rgb * 0.4;
+        bc += Tex.SampleLevel(TexSampler, buv + float2(pz.x, pz.y), lv).rgb * 0.15;
+        bc += Tex.SampleLevel(TexSampler, buv + float2(-pz.x, pz.y), lv).rgb * 0.15;
+        bc += Tex.SampleLevel(TexSampler, buv + float2(pz.x, -pz.y), lv).rgb * 0.15;
+        bc += Tex.SampleLevel(TexSampler, buv + float2(-pz.x, -pz.y), lv).rgb * 0.15;
+        float lum = dot(bc, float3(0.299, 0.587, 0.114));
+        acc = lerp(float3(lum, lum, lum), bc, PBg0.w) * PBg0.z;
+    }
 
     [loop] for (int i = 0; i < 3; ++i)
     {
@@ -405,6 +445,8 @@ def crear_player_y_textura():
     mt.set_editor_property("auto_clear", True)
     mt.set_editor_property("clear_color", unreal.LinearColor(0.0, 0.0, 0.0, 1.0))
     # u da la vuelta (un 360 cierra sobre si mismo); v no.
+    # Mips: el fondo desenfocado de los montajes de pantallas lee el video en un nivel alto.
+    mt.set_editor_property("enable_gen_mips", True)
     mt.set_editor_property("address_x", unreal.TextureAddress.TA_WRAP)
     mt.set_editor_property("address_y", unreal.TextureAddress.TA_CLAMP)
     log("MT_Domo {} (sRGB, sin mips, new style output).".format("creada" if nuevo else "reutilizada"))
@@ -461,6 +503,8 @@ def crear_material(mt):
     for j, nombre in enumerate(VECTORES):
         if nombre == "PView":
             defecto = (0.0, 0.0, 0.0, 0.0)
+        elif nombre in BG_DEFECTO:
+            defecto = BG_DEFECTO[nombre]
         else:
             defecto = VECTOR_DEFECTO[nombre[1:-1] if nombre[-1].isdigit() else nombre[1:]]
         v = mel.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -1500, y + j * 90)

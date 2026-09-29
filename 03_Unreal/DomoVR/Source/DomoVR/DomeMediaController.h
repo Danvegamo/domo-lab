@@ -192,6 +192,40 @@ struct FDomePantallaFila
 	float Giro = 0.f;
 };
 
+/** Capa de fondo de los montajes de pantallas (la pagina Fondo de VIDEO_DOME en TouchDesigner):
+ *  el propio video, desenfocado, detras de las pantallas. */
+USTRUCT(BlueprintType)
+struct FDomeFondo
+{
+	GENERATED_BODY()
+
+	/** 0 sin fondo (negro), 1 lavado (copia agrandada del cuadro), 2 envolvente (el cuadro da la vuelta al domo). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	int32 Modo = 2;
+
+	/** Cuanto se desenfoca (equivale al tamano del Blur de TouchDesigner sobre 1080 px). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Desenfoque = 60.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Brillo = 0.35f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Saturacion = 0.7f;
+
+	/** Zoom del lavado; tiene que ser al menos el aspecto del video (1,78 en 16:9). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Zoom = 1.8f;
+
+	/** Repeticiones del envolvente alrededor del domo. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Repeticiones = 2.f;
+
+	/** Giro del fondo, grados (se suma al giro de todo el montaje). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	float Giro = 0.f;
+};
+
 /** Un cue de la playlist: un video y como se pone en la cupula. */
 USTRUCT(BlueprintType)
 struct FDomeCue
@@ -256,6 +290,10 @@ struct FDomeCue
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
 	float VelGiro = 0.f;
+
+	/** Fondo desenfocado detras de las pantallas (formato Plano169). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
+	FDomeFondo Fondo;
 
 	/** Volumen del audio del video (0 a 1 o mas). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Domo")
@@ -630,6 +668,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Domo")
 	static bool AplicarPreset(const FString& Nombre);
 
+	/** Perfil de render segun la pantalla y la tarjeta: auto, vr, monitor, proyector o ligero.
+	 *  El porcentaje de pantalla se calcula con la resolucion real de la ventana. "auto" elige por
+	 *  visor conectado, fabricante, memoria de video y trazado de rayos. Se guarda en ajustes.json. */
+	UFUNCTION(BlueprintCallable, Category = "Domo")
+	void AplicarPerfil(const FString& Id);
+
+	/** Descripcion corta del perfil y de la tarjeta para el menu y el log. */
+	FString DescribirPerfil() const;
+
+	/** Paredes de la sala: 0 negras, 1 con la madera original. Rugosidad del piso: multiplica la del
+	 *  material (mas alto, menos reflejo). Se guardan en ajustes.json. */
+	int32 ParedesModo = 0;
+	float RugosidadPiso = 1.8f;
+	FString PerfilActual = TEXT("auto");
+	void AplicarSala();
+
+	/** ajustes.json (junto a la playlist): perfil, paredes, piso, luces, velo, decodificador. */
+	void GuardarAjustes();
+	void MarcarAjustes();
+
 	//~ Begin AActor interface
 	virtual void Tick(float DeltaSeconds) override;
 	virtual bool ShouldTickIfViewportsOnly() const override;
@@ -655,9 +713,14 @@ private:
 	bool bInicializado = false;
 	bool bCueAbierto = false;
 	bool bPendienteAvanzar = false;
-	/** Si el reproductor elegido (Electra) no abre el archivo, se reintenta una vez con WmfMedia. */
+	/** Si Electra no abre el archivo se reintenta por etapas: 0 Electra con todos sus decodificadores
+	 *  de GPU (NVDEC y D3D12 Video), 1 Electra solo con el de Media Foundation (D3D12 Video apagado),
+	 *  2 WmfMedia en CPU. EtapaAbierta es la del cue abierto; EtapaSiguiente la que pide el reintento. */
 	bool bRespaldoPendiente = false;
-	bool bAbiertoConRespaldo = false;
+	int32 EtapaAbierta = 0;
+	int32 EtapaSiguiente = 0;
+	int32 DimOptimizarX = 0;
+	int32 DimOptimizarY = 0;
 	float AlfaNegro = 0.f;
 	double UltimoReintento = 0.0;
 	FString CarpetaPlaylist;
@@ -706,6 +769,24 @@ private:
 	int32 FpsAcumCuadros = 0;
 	bool bControlesSucios = false;
 	double UltimoCambioControles = 0.0;
+	bool bAjustesSucios = false;
+	double UltimoCambioAjustes = 0.0;
+	FString PerfilResuelto;
+	FIntPoint UltimaResolucion = FIntPoint::ZeroValue;
+	struct FMatSala
+	{
+		TWeakObjectPtr<class UMaterialInstanceDynamic> Mid;
+		int32 Tipo = 0;                       // 0 muro, 1 listones, 2 piso
+		FLinearColor TinteOriginal = FLinearColor::White;
+		float RugOriginal = 1.f;
+	};
+	TArray<FMatSala> MatsSala;
+	bool bSalaRecogida = false;
+	void RecogerSala();
+	void CargarAjustes();
+	FString RutaAjustes() const;
+	FString ElegirPerfilAuto() const;
+	void AplicarResolucionInterna();
 	void ProcesarTeclas();
 	bool bOptimizando = false;
 	int32 FaseOptimizar = 0;

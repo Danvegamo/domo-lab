@@ -19,6 +19,10 @@
 #include "SocketSubsystem.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+#include "RHI.h"
+#include "RHIGlobals.h"
+#include "IXRTrackingSystem.h"
+#include "IHeadMountedDisplay.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "FileMediaSource.h"
@@ -481,7 +485,12 @@ void ADomeMediaController::BeginPlay()
 		AplicarPreset(Preset);
 	}
 
+	if (IConsoleVariable* V = IConsoleManager::Get().FindConsoleVariable(TEXT("ElectraDecoders.bDoNotUseD3D12Video")))
+	{
+		V->Set(0, ECVF_SetByConsole);
+	}
 	Inicializar();
+	CargarAjustes();
 	ConfigurarTeclado();
 
 	bool bVerMenu = GIsEditor ? false : bMenuAlArrancar;
@@ -520,42 +529,99 @@ void ADomeMediaController::BeginPlay()
 	}
 }
 
-bool ADomeMediaController::AplicarPreset(const FString& Nombre)
+namespace DomoPerfil
 {
-	// Los valores de "VR" son los de fabrica del proyecto (DefaultEngine.ini);
-	// "Render" sube la resolucion interna (TSR la reconstruye a la salida), usa
-	// hit lighting en Lumen (reflejos de la cupula en el metal y el barniz con
-	// el material real, no con la cache de superficie) y afina el muestreo.
-	// Ver 04_Docs/02_Sala_Unreal.md, seccion "Presets VR y Render".
-	struct FValor { const TCHAR* CVar; const TCHAR* VR; const TCHAR* Render; };
-	static const FValor Tabla[] = {
-		{ TEXT("r.ScreenPercentage"), TEXT("100"), TEXT("200") },
-		{ TEXT("r.TSR.History.ScreenPercentage"), TEXT("100"), TEXT("200") },
-		{ TEXT("r.Lumen.HardwareRayTracing.LightingMode"), TEXT("0"), TEXT("2") },
-		{ TEXT("r.Lumen.Reflections.DownsampleFactor"), TEXT("2"), TEXT("1") },
-		{ TEXT("r.Lumen.Reflections.MaxRoughnessToTrace"), TEXT("0.4"), TEXT("0.6") },
-		{ TEXT("r.Lumen.ScreenProbeGather.DownsampleFactor"), TEXT("16"), TEXT("8") },
-		{ TEXT("r.Lumen.ScreenProbeGather.TracingOctahedronResolution"), TEXT("8"), TEXT("12") },
-		{ TEXT("r.SkyLight.RealTimeReflectionCapture.TimeSlice"), TEXT("0"), TEXT("0") },
+	/** Un perfil de render. PixelesM es la cantidad de pixeles internos (en millones) a la que apunta:
+	 *  el porcentaje de pantalla sale de la resolucion real de la ventana, asi el mismo perfil sirve
+	 *  en un monitor 1080p, en uno 4K o en un proyector. 0 = resolucion nativa (visor VR). */
+	struct FDatos
+	{
+		const TCHAR* Id;
+		const TCHAR* Nombre;
+		double PixelesM;
+		const TCHAR* HitLighting;
+		const TCHAR* ReflDown;
+		const TCHAR* ReflRug;
+		const TCHAR* ProbeDown;
+		const TCHAR* Octa;
+		const TCHAR* TrazadoHw;
 	};
-	const bool bRender = Nombre.Equals(TEXT("Render"), ESearchCase::IgnoreCase);
-	if (!bRender && !Nombre.Equals(TEXT("VR"), ESearchCase::IgnoreCase))
+
+	static const FDatos Tabla[] = {
+		{ TEXT("vr"), TEXT("Visor VR"), 0.0, TEXT("0"), TEXT("2"), TEXT("0.4"), TEXT("16"), TEXT("8"), TEXT("1") },
+		{ TEXT("monitor"), TEXT("Monitor"), 3.7, TEXT("0"), TEXT("1"), TEXT("0.5"), TEXT("12"), TEXT("8"), TEXT("1") },
+		{ TEXT("proyector"), TEXT("Proyector o domo (alta)"), 8.3, TEXT("2"), TEXT("1"), TEXT("0.6"), TEXT("8"), TEXT("12"), TEXT("1") },
+		{ TEXT("ligero"), TEXT("Ligero (tarjeta modesta)"), 1.6, TEXT("0"), TEXT("4"), TEXT("0.3"), TEXT("32"), TEXT("8"), TEXT("0") },
+	};
+
+	static const FDatos* Buscar(const FString& Id)
 	{
-		UE_LOG(LogDomoMedia, Warning, TEXT("Preset desconocido '%s' (VR o Render)."), *Nombre);
-		return false;
-	}
-	for (const FValor& V : Tabla)
-	{
-		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(V.CVar))
+		for (const FDatos& D : Tabla)
 		{
-			Var->Set(bRender ? V.Render : V.VR, ECVF_SetByConsole);
+			if (Id.Equals(D.Id, ESearchCase::IgnoreCase)) { return &D; }
+		}
+		return nullptr;
+	}
+
+	static FIntPoint TamanoVentana()
+	{
+		if (GEngine && GEngine->GameViewport && GEngine->GameViewport->Viewport)
+		{
+			const FIntPoint V = GEngine->GameViewport->Viewport->GetSizeXY();
+			if (V.X > 0 && V.Y > 0) { return V; }
+		}
+		return FIntPoint(1920, 1080);
+	}
+
+	static int32 PorcentajeDePantalla(const FDatos& D)
+	{
+		if (D.PixelesM <= 0.0) { return 100; }
+		const FIntPoint V = TamanoVentana();
+		const double Pix = static_cast<double>(V.X) * static_cast<double>(V.Y);
+		return FMath::Clamp(FMath::RoundToInt(static_cast<float>(100.0 * FMath::Sqrt(D.PixelesM * 1.0e6 / Pix))), 50, 200);
+	}
+
+	static void PonerCVar(const TCHAR* Nombre, const FString& Valor)
+	{
+		if (IConsoleVariable* V = IConsoleManager::Get().FindConsoleVariable(Nombre))
+		{
+			V->Set(*Valor, ECVF_SetByConsole);
 		}
 		else
 		{
-			UE_LOG(LogDomoMedia, Warning, TEXT("Preset %s: no existe %s en esta version del motor."), *Nombre, V.CVar);
+			UE_LOG(LogDomoMedia, Verbose, TEXT("Perfil: no existe %s en esta version del motor."), Nombre);
 		}
 	}
-	UE_LOG(LogDomoMedia, Display, TEXT("Preset de calidad: %s"), bRender ? TEXT("Render") : TEXT("VR"));
+
+	static void Aplicar(const FDatos& D)
+	{
+		const int32 Sp = PorcentajeDePantalla(D);
+		PonerCVar(TEXT("r.ScreenPercentage"), FString::FromInt(Sp));
+		PonerCVar(TEXT("r.TSR.History.ScreenPercentage"), FString::FromInt(FMath::Max(Sp, 100)));
+		PonerCVar(TEXT("r.Lumen.HardwareRayTracing.LightingMode"), D.HitLighting);
+		PonerCVar(TEXT("r.Lumen.Reflections.DownsampleFactor"), D.ReflDown);
+		PonerCVar(TEXT("r.Lumen.Reflections.MaxRoughnessToTrace"), D.ReflRug);
+		PonerCVar(TEXT("r.Lumen.ScreenProbeGather.DownsampleFactor"), D.ProbeDown);
+		PonerCVar(TEXT("r.Lumen.ScreenProbeGather.TracingOctahedronResolution"), D.Octa);
+		PonerCVar(TEXT("r.Lumen.HardwareRayTracing"), D.TrazadoHw);
+		PonerCVar(TEXT("r.SkyLight.RealTimeReflectionCapture.TimeSlice"), TEXT("0"));
+	}
+}
+
+bool ADomeMediaController::AplicarPreset(const FString& Nombre)
+{
+	// Los presets viejos: "VR" es el perfil de visor y "Render" el de proyector o domo (alta).
+	// Ver 04_Docs/02_Sala_Unreal.md, seccion "Presets VR y Render" y 06_Unreal_standalone.md, "Perfiles de render".
+	FString Id = Nombre.ToLower();
+	if (Id == TEXT("render")) { Id = TEXT("proyector"); }
+	const DomoPerfil::FDatos* D = DomoPerfil::Buscar(Id);
+	if (!D)
+	{
+		UE_LOG(LogDomoMedia, Warning, TEXT("Preset desconocido '%s' (VR o Render; o un perfil: vr, monitor, proyector, ligero)."), *Nombre);
+		return false;
+	}
+	DomoPerfil::Aplicar(*D);
+	UE_LOG(LogDomoMedia, Display, TEXT("Preset de calidad: %s"), D->Nombre);
 	return true;
 }
 
@@ -747,6 +813,19 @@ bool ADomeMediaController::CargarPlaylist(const FString& Ruta)
 		LeerNumero(O, TEXT("giroPantallas"), C.GiroPantallas);
 		LeerNumero(O, TEXT("velRecorrido"), C.VelRecorrido);
 		LeerNumero(O, TEXT("velGiro"), C.VelGiro);
+		const TSharedPtr<FJsonObject>* Fon = nullptr;
+		if (O->TryGetObjectField(TEXT("fondo"), Fon) && Fon)
+		{
+			double ModoF = C.Fondo.Modo;
+			(*Fon)->TryGetNumberField(TEXT("modo"), ModoF);
+			C.Fondo.Modo = FMath::Clamp(FMath::RoundToInt(static_cast<float>(ModoF)), 0, 2);
+			LeerNumero(*Fon, TEXT("desenfoque"), C.Fondo.Desenfoque);
+			LeerNumero(*Fon, TEXT("brillo"), C.Fondo.Brillo);
+			LeerNumero(*Fon, TEXT("saturacion"), C.Fondo.Saturacion);
+			LeerNumero(*Fon, TEXT("zoom"), C.Fondo.Zoom);
+			LeerNumero(*Fon, TEXT("repeticiones"), C.Fondo.Repeticiones);
+			LeerNumero(*Fon, TEXT("giro"), C.Fondo.Giro);
+		}
 		O->TryGetStringField(TEXT("plantilla"), C.Plantilla);
 		const TArray<TSharedPtr<FJsonValue>>* Filas = nullptr;
 		if (O->TryGetArrayField(TEXT("pantallas"), Filas) && Filas)
@@ -869,9 +948,16 @@ void ADomeMediaController::AbrirCue(int32 Indice)
 	FuenteArchivo->SetFilePath(Ruta);
 
 	const FName Respaldo(TEXT("WmfMedia"));
-	bAbiertoConRespaldo = bRespaldoPendiente;
+	EtapaAbierta = bRespaldoPendiente ? EtapaSiguiente : 0;
 	bRespaldoPendiente = false;
-	MediaPlayer->SetDesiredPlayerName(bAbiertoConRespaldo ? Respaldo : Reproductor);
+	EtapaSiguiente = 0;
+	// D3D12 Video viene apagado de fabrica en el motor: se enciende (NVDEC le gana en NVIDIA) y solo se
+	// apaga en la etapa 1, para probar el decodificador de Media Foundation de Electra.
+	if (IConsoleVariable* V = IConsoleManager::Get().FindConsoleVariable(TEXT("ElectraDecoders.bDoNotUseD3D12Video")))
+	{
+		V->Set(EtapaAbierta == 1 ? 1 : 0, ECVF_SetByConsole);
+	}
+	MediaPlayer->SetDesiredPlayerName(EtapaAbierta >= 2 ? Respaldo : (EtapaAbierta == 1 && Reproductor.IsNone() ? FName(TEXT("ElectraPlayer")) : Reproductor));
 	MediaPlayer->PlayOnOpen = true;
 	MediaPlayer->SetLooping(C.Loop);
 	bPendienteAvanzar = false;
@@ -1017,6 +1103,18 @@ void ADomeMediaController::Tick(float DeltaSeconds)
 		{
 			AbrirCue(CueActual);
 		}
+		if (!bSalaRecogida && GetWorld() && GetWorld()->GetTimeSeconds() > 1.0)
+		{
+			RecogerSala();
+		}
+		if (!PerfilResuelto.IsEmpty() && UltimaResolucion != DomoPerfil::TamanoVentana())
+		{
+			AplicarResolucionInterna();
+		}
+		if (bAjustesSucios && FPlatformTime::Seconds() - UltimoCambioAjustes > 1.0)
+		{
+			GuardarAjustes();
+		}
 		ActualizarFormatoAuto();
 		RevisarPeso();
 		ActualizarOptimizacion();
@@ -1041,11 +1139,13 @@ void ADomeMediaController::SetLuces(bool bEncender)
 {
 	bLucesAutomaticas = false;
 	bLucesEncendidas = bEncender;
+	MarcarAjustes();
 }
 
 void ADomeMediaController::LucesAutomaticas(bool bActivar)
 {
 	bLucesAutomaticas = bActivar;
+	MarcarAjustes();
 }
 
 void ADomeMediaController::RecogerLuces()
@@ -1259,8 +1359,10 @@ void ADomeMediaController::SetParam(FName Nombre, float Valor)
 			return;
 		}
 	}
-	if (Nombre == TEXT("Resplandor")) { IntensidadResplandor = FMath::Max(Valor, 0.f); UltimoResplandor = -1.f; return; }
-	if (Nombre == TEXT("LadoOptimizado")) { LadoOptimizado = FMath::Clamp(FMath::RoundToInt(Valor), 512, 4096); return; }
+	if (Nombre == TEXT("Resplandor")) { IntensidadResplandor = FMath::Max(Valor, 0.f); UltimoResplandor = -1.f; MarcarAjustes(); return; }
+	if (Nombre == TEXT("LadoOptimizado")) { LadoOptimizado = FMath::Clamp(FMath::RoundToInt(Valor), 512, 4096); MarcarAjustes(); return; }
+	if (Nombre == TEXT("Paredes")) { ParedesModo = Valor > 0.5f ? 1 : 0; AplicarSala(); MarcarAjustes(); return; }
+	if (Nombre == TEXT("RugosidadPiso")) { RugosidadPiso = FMath::Clamp(Valor, 0.2f, 6.f); AplicarSala(); MarcarAjustes(); return; }
 	if (Nombre == TEXT("VelCaminar")) { Controles.VelocidadCaminar = Valor; AplicarMovimiento(); return; }
 	if (Nombre == TEXT("VelVuelo")) { Controles.VelocidadVuelo = Valor; AplicarMovimiento(); return; }
 	if (Nombre == TEXT("MultCorrer")) { Controles.MultiplicadorCorrer = Valor; AplicarMovimiento(); return; }
@@ -1407,6 +1509,7 @@ void ADomeMediaController::PonerReproductor(const FString& Nombre)
 		Nuevo = FName(*Nombre);
 	}
 	Reproductor = Nuevo;
+	MarcarAjustes();
 	UE_LOG(LogDomoMedia, Display, TEXT("Reproductor: %s"), Nuevo.IsNone() ? TEXT("automatico") : *Nuevo.ToString());
 	if (Fuente == EDomeFuente::Media && Cues.IsValidIndex(CueActual))
 	{
@@ -1421,16 +1524,19 @@ void ADomeMediaController::AlFallarApertura(FString Url)
 		return;
 	}
 	const FName Respaldo(TEXT("WmfMedia"));
-	if (!bAbiertoConRespaldo && !Reproductor.IsNone() && Reproductor != Respaldo)
+	if (EtapaAbierta < 2 && !Reproductor.IsNone() && Reproductor != Respaldo)
 	{
-		// Electra rechaza lo que la GPU no decodifica (por ejemplo HEVC nivel 6, de 4096x4096); WmfMedia lo abre en CPU.
-		UE_LOG(LogDomoMedia, Warning, TEXT("%s no pudo abrir %s; se reintenta con WmfMedia (decodifica en CPU)."), *Reproductor.ToString(),
-			Url.IsEmpty() && Cues.IsValidIndex(CueActual) ? *Cues[CueActual].Archivo : *Url);
+		// Electra rechaza lo que su decodificador de GPU no acepta; se prueba el de Media Foundation de
+		// Electra (etapa 1) y, por ultimo, WmfMedia, que decodifica en CPU (etapa 2).
+		EtapaSiguiente = EtapaAbierta + 1;
+		UE_LOG(LogDomoMedia, Warning, TEXT("%s no pudo abrir %s (etapa %d); se reintenta con %s."), *Reproductor.ToString(),
+			Url.IsEmpty() && Cues.IsValidIndex(CueActual) ? *Cues[CueActual].Archivo : *Url, EtapaAbierta,
+			EtapaSiguiente == 1 ? TEXT("el decodificador de Media Foundation de Electra") : TEXT("WmfMedia (decodifica en CPU)"));
 		bRespaldoPendiente = true;
 		return;
 	}
 	UE_LOG(LogDomoMedia, Warning, TEXT("No se pudo abrir %s con %s. Revisar el codec (H.264 o HEVC en .mp4; ver 04_Docs/06_Unreal_standalone.md)."),
-		*Url, bAbiertoConRespaldo ? *Respaldo.ToString() : *Reproductor.ToString());
+		*Url, EtapaAbierta >= 2 ? *Respaldo.ToString() : *Reproductor.ToString());
 	Mensaje(FString::Printf(TEXT("No se pudo abrir %s"), *FPaths::GetCleanFilename(Url)), 6.f);
 	// No reintentar en bucle: queda cerrado hasta el proximo cambio de cue.
 	bCueAbierto = false;
@@ -1659,6 +1765,13 @@ float ADomeMediaController::GetCampoPantalla(const FString& Campo) const
 	}
 	const FDomeCue& C = Cues[CueActual];
 	if (Campo == TEXT("Editada")) return static_cast<float>(PantallaEditada + 1);
+	if (Campo == TEXT("Fondo_Modo")) return static_cast<float>(C.Fondo.Modo);
+	if (Campo == TEXT("Fondo_Desenfoque")) return C.Fondo.Desenfoque;
+	if (Campo == TEXT("Fondo_Brillo")) return C.Fondo.Brillo;
+	if (Campo == TEXT("Fondo_Saturacion")) return C.Fondo.Saturacion;
+	if (Campo == TEXT("Fondo_Zoom")) return C.Fondo.Zoom;
+	if (Campo == TEXT("Fondo_Repeticiones")) return C.Fondo.Repeticiones;
+	if (Campo == TEXT("Fondo_Giro")) return C.Fondo.Giro;
 	if (Campo == TEXT("GiroTodas")) return C.GiroPantallas;
 	if (Campo == TEXT("VelRecorrido")) return C.VelRecorrido;
 	if (Campo == TEXT("VelGiro")) return C.VelGiro;
@@ -1684,6 +1797,18 @@ void ADomeMediaController::SetCampoPantalla(const FString& Campo, float Valor)
 	if (Campo == TEXT("Editada"))
 	{
 		PantallaEditada = FMath::Clamp(FMath::RoundToInt(Valor) - 1, 0, FMath::Max(C.Pantallas.Num() - 1, 0));
+		return;
+	}
+	if (Campo.StartsWith(TEXT("Fondo_")))
+	{
+		if (Campo == TEXT("Fondo_Modo")) C.Fondo.Modo = FMath::Clamp(FMath::RoundToInt(Valor), 0, 2);
+		else if (Campo == TEXT("Fondo_Desenfoque")) C.Fondo.Desenfoque = FMath::Clamp(Valor, 0.f, 200.f);
+		else if (Campo == TEXT("Fondo_Brillo")) C.Fondo.Brillo = FMath::Clamp(Valor, 0.f, 2.f);
+		else if (Campo == TEXT("Fondo_Saturacion")) C.Fondo.Saturacion = FMath::Clamp(Valor, 0.f, 2.f);
+		else if (Campo == TEXT("Fondo_Zoom")) C.Fondo.Zoom = FMath::Clamp(Valor, 1.f, 4.f);
+		else if (Campo == TEXT("Fondo_Repeticiones")) C.Fondo.Repeticiones = FMath::Clamp(Valor, 1.f, 8.f);
+		else if (Campo == TEXT("Fondo_Giro")) C.Fondo.Giro = Valor;
+		AplicarParametros(C);
 		return;
 	}
 	if (Campo == TEXT("GiroTodas")) { C.GiroPantallas = Valor; AplicarParametros(C); return; }
@@ -1715,6 +1840,8 @@ void ADomeMediaController::EmpujarPantallas(const FDomeCue& C)
 	UMaterialInstanceDynamic* M = DynamicMaterial;
 	const int32 N = FMath::Min(C.Pantallas.Num(), 3);
 	M->SetVectorParameterValue(TEXT("PView"), FLinearColor(static_cast<float>(N), C.GiroPantallas, AcumRecorrido, AcumGiro));
+	M->SetVectorParameterValue(TEXT("PBg0"), FLinearColor(static_cast<float>(C.Fondo.Modo), C.Fondo.Desenfoque, C.Fondo.Brillo, C.Fondo.Saturacion));
+	M->SetVectorParameterValue(TEXT("PBg1"), FLinearColor(C.Fondo.Zoom, C.Fondo.Repeticiones, C.Fondo.Giro + C.GiroPantallas, 0.f));
 	for (int32 i = 0; i < 3; ++i)
 	{
 		const FString S = FString::FromInt(i);
@@ -1807,19 +1934,52 @@ bool ADomeMediaController::LanzarFfmpeg(int32 Fase)
 	IFileManager::Get().Delete(*SalidaOptimizar, false, true, true);
 	IFileManager::Get().Delete(*ProgresoOptimizar, false, true, true);
 	const int32 L = FMath::Clamp(LadoOptimizado, 512, 4096);
-	const FString Filtro = FString::Printf(
+	// Tamano de salida: el del video encajado en L x L, con ancho y alto pares (vpp_qsv no tiene
+	// force_original_aspect_ratio, asi que el filtro de Intel recibe el tamano ya calculado).
+	int32 W = L, H = L;
+	if (DimOptimizarX > 0 && DimOptimizarY > 0)
+	{
+		const float Escala = FMath::Min(1.f, static_cast<float>(L) / static_cast<float>(FMath::Max(DimOptimizarX, DimOptimizarY)));
+		W = FMath::Max(2, (FMath::RoundToInt(DimOptimizarX * Escala) / 2) * 2);
+		H = FMath::Max(2, (FMath::RoundToInt(DimOptimizarY * Escala) / 2) * 2);
+	}
+	const FString FiltroCpu = FString::Printf(
 		TEXT("scale='min(%d,iw)':'min(%d,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2"), L, L);
-	// Fase 0: todo en la GPU (decodifica, escala y codifica con NVENC; casi no usa CPU).
-	// Fase 1: decodifica en CPU y codifica con NVENC. Fase 2: todo en CPU (x264).
-	const FString FiltroGpu = FString::Printf(TEXT("scale_cuda=w=%d:h=%d:force_original_aspect_ratio=decrease"), L, L);
-	const FString Entrada = Fase == 0 ? TEXT("-hwaccel cuda -hwaccel_output_format cuda") : TEXT("");
-	const FString Video = Fase == 2
-		? TEXT("-c:v libx264 -preset veryfast -crf 20 -profile:v high -pix_fmt yuv420p")
-		: (Fase == 0 ? TEXT("-c:v h264_nvenc -preset p5 -b:v 25M -maxrate 40M -profile:v high")
-			: TEXT("-c:v h264_nvenc -preset p5 -b:v 25M -maxrate 40M -profile:v high -pix_fmt yuv420p"));
+
+	// Fase 0: decodifica, escala y codifica con la GPU. Fase 1: decodifica en CPU y codifica con la GPU.
+	// Fase 2: todo en CPU (x264). El codificador de GPU depende del fabricante (sus ejemplos y limites,
+	// en 04_Docs/07_GPUs_AMD_e_Intel.md, seccion 4): NVIDIA NVENC, AMD AMF, Intel Quick Sync.
+	FString Entrada, Filtro, Video;
+	if (Fase == 2 || (!IsRHIDeviceNVIDIA() && !IsRHIDeviceAMD() && !IsRHIDeviceIntel()))
+	{
+		Fase = 2;
+		Filtro = FiltroCpu;
+		Video = TEXT("-c:v libx264 -preset veryfast -crf 20 -profile:v high -pix_fmt yuv420p");
+	}
+	else if (IsRHIDeviceNVIDIA())
+	{
+		Entrada = Fase == 0 ? TEXT("-hwaccel cuda -hwaccel_output_format cuda") : TEXT("");
+		Filtro = Fase == 0 ? FString::Printf(TEXT("scale_cuda=w=%d:h=%d:force_original_aspect_ratio=decrease"), L, L) : FiltroCpu;
+		Video = Fase == 0 ? TEXT("-c:v h264_nvenc -preset p5 -b:v 25M -maxrate 40M -profile:v high")
+			: TEXT("-c:v h264_nvenc -preset p5 -b:v 25M -maxrate 40M -profile:v high -pix_fmt yuv420p");
+	}
+	else if (IsRHIDeviceAMD())
+	{
+		// d3d11va decodifica en cualquier fabricante; el escalado va en CPU (scale_d3d11 fallo en las pruebas).
+		Entrada = Fase == 0 ? TEXT("-hwaccel d3d11va") : TEXT("");
+		Filtro = FString::Printf(TEXT("scale=%d:%d:flags=bicubic,format=nv12"), W, H);
+		Video = TEXT("-c:v h264_amf -usage transcoding -quality quality -rc vbr_peak -b:v 25M -maxrate 40M -profile:v high");
+	}
+	else
+	{
+		const bool bTodoGpu = Fase == 0 && DimOptimizarX > 0;
+		Entrada = bTodoGpu ? TEXT("-hwaccel qsv -hwaccel_output_format qsv") : TEXT("");
+		Filtro = bTodoGpu ? FString::Printf(TEXT("vpp_qsv=w=%d:h=%d"), W, H) : FString::Printf(TEXT("scale=%d:%d:flags=bicubic,format=nv12"), W, H);
+		Video = TEXT("-c:v h264_qsv -preset slow -b:v 25M -maxrate 40M -profile:v high");
+	}
 	const FString Args = FString::Printf(
 		TEXT("-y -hide_banner -loglevel error -nostats -progress \"%s\" %s -i \"%s\" -map 0:v:0 -map 0:a:0? -vf \"%s\" %s -c:a aac -ac 2 -b:a 192k -movflags +faststart \"%s\""),
-		*ProgresoOptimizar, *Entrada, *EntradaOptimizar, Fase == 0 ? *FiltroGpu : *Filtro, *Video, *SalidaOptimizar);
+		*ProgresoOptimizar, *Entrada, *EntradaOptimizar, *Filtro, *Video, *SalidaOptimizar);
 	UE_LOG(LogDomoMedia, Display, TEXT("Optimizar (fase %d): %s %s"), Fase, *Ffmpeg, *Args);
 	FaseOptimizar = Fase;
 	// Prioridad baja para no trabar la proyeccion mientras se convierte.
@@ -1860,6 +2020,11 @@ bool ADomeMediaController::OptimizarVideoActual()
 	{
 		Mensaje(TEXT("Este video ya es una copia optimizada."));
 		return false;
+	}
+	{
+		const FIntPoint Dim = MediaPlayer ? MediaPlayer->GetVideoTrackDimensions(INDEX_NONE, INDEX_NONE) : FIntPoint::ZeroValue;
+		DimOptimizarX = Dim.X;
+		DimOptimizarY = Dim.Y;
 	}
 	if (!LanzarFfmpeg(0))
 	{
@@ -1928,7 +2093,7 @@ void ADomeMediaController::ActualizarOptimizacion()
 		if (FaseOptimizar < 2)
 		{
 			UE_LOG(LogDomoMedia, Warning, TEXT("Optimizar fase %d fallo (codigo %d); se reintenta con otra ruta."), FaseOptimizar, Codigo);
-			Mensaje(FaseOptimizar == 0 ? TEXT("La ruta de GPU fallo; se reintenta decodificando en CPU.") : TEXT("NVENC fallo; se reintenta con la CPU (mas lento)."), 6.f);
+			Mensaje(FaseOptimizar == 0 ? TEXT("La ruta de GPU fallo; se reintenta decodificando en CPU.") : TEXT("El codificador de la GPU fallo; se reintenta con la CPU (mas lento)."), 6.f);
 			if (LanzarFfmpeg(FaseOptimizar + 1))
 			{
 				return;
@@ -1995,6 +2160,8 @@ float ADomeMediaController::GetParam(FName Nombre) const
 	}
 	if (Nombre == TEXT("Resplandor")) { return IntensidadResplandor; }
 	if (Nombre == TEXT("LadoOptimizado")) { return static_cast<float>(LadoOptimizado); }
+	if (Nombre == TEXT("Paredes")) { return static_cast<float>(ParedesModo); }
+	if (Nombre == TEXT("RugosidadPiso")) { return RugosidadPiso; }
 	if (Nombre == TEXT("VelCaminar")) { return Controles.VelocidadCaminar; }
 	if (Nombre == TEXT("VelVuelo")) { return Controles.VelocidadVuelo; }
 	if (Nombre == TEXT("MultCorrer")) { return Controles.MultiplicadorCorrer; }
@@ -2187,6 +2354,17 @@ bool ADomeMediaController::GuardarPlaylist()
 			if (C.GiroPantallas != 0.f) { O->SetNumberField(TEXT("giroPantallas"), C.GiroPantallas); }
 			if (C.VelRecorrido != 0.f) { O->SetNumberField(TEXT("velRecorrido"), C.VelRecorrido); }
 			if (C.VelGiro != 0.f) { O->SetNumberField(TEXT("velGiro"), C.VelGiro); }
+			{
+				const TSharedRef<FJsonObject> Fo = MakeShared<FJsonObject>();
+				Fo->SetNumberField(TEXT("modo"), C.Fondo.Modo);
+				Fo->SetNumberField(TEXT("desenfoque"), C.Fondo.Desenfoque);
+				Fo->SetNumberField(TEXT("brillo"), C.Fondo.Brillo);
+				Fo->SetNumberField(TEXT("saturacion"), C.Fondo.Saturacion);
+				Fo->SetNumberField(TEXT("zoom"), C.Fondo.Zoom);
+				Fo->SetNumberField(TEXT("repeticiones"), C.Fondo.Repeticiones);
+				Fo->SetNumberField(TEXT("giro"), C.Fondo.Giro);
+				O->SetObjectField(TEXT("fondo"), Fo);
+			}
 			TArray<TSharedPtr<FJsonValue>> Filas;
 			for (const FDomePantallaFila& F : C.Pantallas)
 			{
@@ -2302,6 +2480,193 @@ void ADomeMediaController::IrAVista(const FVector& Ubicacion, const FRotator& Ro
 	}
 	PC->SetControlRotation(Rotacion);
 	Mensaje(FString::Printf(TEXT("Vista: %s (modo volar; F vuelve a caminar)"), *Nombre));
+}
+
+// --- Perfiles de render, sala y ajustes guardados ---------------------------------------------
+
+FString ADomeMediaController::ElegirPerfilAuto() const
+{
+	if (GEngine && GEngine->XRSystem.IsValid())
+	{
+		IHeadMountedDisplay* Hmd = GEngine->XRSystem->GetHMDDevice();
+		if (Hmd && Hmd->IsHMDEnabled()) { return TEXT("vr"); }
+	}
+	const uint64 Vram = GRHIGlobals.GpuInfo.DedicatedVideoMemory;
+	const bool bRt = GRHISupportsRayTracing;
+	const bool bIntegrada = GRHIDeviceIsIntegrated || (Vram > 0 && Vram < (3ull << 30));
+	if (bIntegrada) { return TEXT("ligero"); }
+	// Con trazado de rayos por hardware y 8 GB o mas (RTX, RDNA2 o mas nuevo, Arc): perfil de monitor.
+	if (bRt && Vram >= (8ull << 30)) { return TEXT("monitor"); }
+	return TEXT("ligero");
+}
+
+void ADomeMediaController::AplicarPerfil(const FString& IdPedido)
+{
+	FString Id = IdPedido.TrimStartAndEnd().ToLower();
+	if (Id == TEXT("render")) { Id = TEXT("proyector"); }
+	if (Id.IsEmpty()) { Id = TEXT("auto"); }
+	const FString Resuelto = Id == TEXT("auto") ? ElegirPerfilAuto() : Id;
+	const DomoPerfil::FDatos* D = DomoPerfil::Buscar(Resuelto);
+	if (!D)
+	{
+		UE_LOG(LogDomoMedia, Warning, TEXT("Perfil desconocido '%s' (auto, vr, monitor, proyector o ligero)."), *IdPedido);
+		return;
+	}
+	PerfilActual = Id;
+	PerfilResuelto = D->Id;
+	UltimaResolucion = DomoPerfil::TamanoVentana();
+	DomoPerfil::Aplicar(*D);
+	MarcarAjustes();
+	UE_LOG(LogDomoMedia, Display, TEXT("%s"), *DescribirPerfil());
+	Mensaje(FString::Printf(TEXT("Calidad: %s"), D->Nombre), 3.f);
+}
+
+void ADomeMediaController::AplicarResolucionInterna()
+{
+	const DomoPerfil::FDatos* D = DomoPerfil::Buscar(PerfilResuelto);
+	if (!D) { return; }
+	UltimaResolucion = DomoPerfil::TamanoVentana();
+	const int32 Sp = DomoPerfil::PorcentajeDePantalla(*D);
+	DomoPerfil::PonerCVar(TEXT("r.ScreenPercentage"), FString::FromInt(Sp));
+	DomoPerfil::PonerCVar(TEXT("r.TSR.History.ScreenPercentage"), FString::FromInt(FMath::Max(Sp, 100)));
+}
+
+FString ADomeMediaController::DescribirPerfil() const
+{
+	const DomoPerfil::FDatos* D = DomoPerfil::Buscar(PerfilResuelto);
+	const FIntPoint V = DomoPerfil::TamanoVentana();
+	const int32 Sp = D ? DomoPerfil::PorcentajeDePantalla(*D) : 100;
+	const uint64 Vram = GRHIGlobals.GpuInfo.DedicatedVideoMemory;
+	const TCHAR* Fabricante = IsRHIDeviceNVIDIA() ? TEXT("NVIDIA") : IsRHIDeviceAMD() ? TEXT("AMD") : IsRHIDeviceIntel() ? TEXT("Intel") : TEXT("otro");
+	const FString Tarjeta = GRHIAdapterName.Contains(Fabricante) ? GRHIAdapterName : FString::Printf(TEXT("%s %s"), Fabricante, *GRHIAdapterName);
+	return FString::Printf(TEXT("Perfil %s (%s) en %s, %d MB de video, trazado de rayos %s; ventana %dx%d a %d %%"),
+		D ? D->Nombre : TEXT("sin aplicar"), *PerfilActual, *Tarjeta, static_cast<int32>(Vram >> 20),
+		GRHISupportsRayTracing ? TEXT("si") : TEXT("no"), V.X, V.Y, Sp);
+}
+
+void ADomeMediaController::RecogerSala()
+{
+	UWorld* Mundo = GetWorld();
+	if (!Mundo) { return; }
+	MatsSala.Reset();
+	for (TActorIterator<AActor> It(Mundo); It; ++It)
+	{
+		TArray<UStaticMeshComponent*> Mallas;
+		It->GetComponents<UStaticMeshComponent>(Mallas);
+		for (UStaticMeshComponent* M : Mallas)
+		{
+			for (int32 i = 0; i < M->GetNumMaterials(); ++i)
+			{
+				UMaterialInterface* Mat = M->GetMaterial(i);
+				if (!Mat) { continue; }
+				const FString N = Mat->GetName();
+				int32 Tipo = -1;
+				if (N == TEXT("MI_Muro")) { Tipo = 0; }
+				else if (N == TEXT("MI_Madera")) { Tipo = 1; }
+				else if (N == TEXT("MI_Piso")) { Tipo = 2; }
+				if (Tipo < 0) { continue; }
+				if (UMaterialInstanceDynamic* Mid = M->CreateDynamicMaterialInstance(i, Mat))
+				{
+					FMatSala F;
+					F.Mid = Mid;
+					F.Tipo = Tipo;
+					F.TinteOriginal = Mid->K2_GetVectorParameterValue(TEXT("Tinte"));
+					F.RugOriginal = Mid->K2_GetScalarParameterValue(TEXT("RugMul"));
+					MatsSala.Add(F);
+				}
+			}
+		}
+	}
+	bSalaRecogida = true;
+	UE_LOG(LogDomoMedia, Display, TEXT("Sala: %d materiales de muro, listones y piso."), MatsSala.Num());
+	AplicarSala();
+}
+
+void ADomeMediaController::AplicarSala()
+{
+	if (!bSalaRecogida) { return; }
+	static const FLinearColor Negro(0.008f, 0.008f, 0.010f, 1.f);
+	for (const FMatSala& F : MatsSala)
+	{
+		UMaterialInstanceDynamic* Mid = F.Mid.Get();
+		if (!Mid) { continue; }
+		if (F.Tipo == 2)
+		{
+			Mid->SetScalarParameterValue(TEXT("RugMul"), F.RugOriginal * RugosidadPiso);
+		}
+		else
+		{
+			Mid->SetVectorParameterValue(TEXT("Tinte"), ParedesModo == 0 ? Negro : F.TinteOriginal);
+		}
+	}
+}
+
+FString ADomeMediaController::RutaAjustes() const
+{
+	return FPaths::Combine(FPaths::ConvertRelativePathToFull(CarpetaPlaylist), TEXT("ajustes.json"));
+}
+
+void ADomeMediaController::MarcarAjustes()
+{
+	bAjustesSucios = true;
+	UltimoCambioAjustes = FPlatformTime::Seconds();
+}
+
+void ADomeMediaController::GuardarAjustes()
+{
+	bAjustesSucios = false;
+	const TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+	O->SetStringField(TEXT("_nota"), TEXT("Ajustes del ejecutable: los escribe el menu. Se pueden editar a mano con el programa cerrado."));
+	O->SetStringField(TEXT("perfil"), PerfilActual);
+	O->SetNumberField(TEXT("paredes"), ParedesModo);
+	O->SetNumberField(TEXT("rugosidadPiso"), RugosidadPiso);
+	O->SetNumberField(TEXT("resplandor"), IntensidadResplandor);
+	O->SetStringField(TEXT("luces"), bLucesAutomaticas ? TEXT("auto") : (bLucesEncendidas ? TEXT("on") : TEXT("off")));
+	O->SetStringField(TEXT("reproductor"), Reproductor.IsNone() ? TEXT("auto") : *Reproductor.ToString());
+	O->SetNumberField(TEXT("ladoOptimizado"), LadoOptimizado);
+	FString Texto;
+	const TSharedRef<TJsonWriter<>> W = TJsonWriterFactory<>::Create(&Texto);
+	if (!FJsonSerializer::Serialize(O, W) || !FFileHelper::SaveStringToFile(Texto, *RutaAjustes(), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		UE_LOG(LogDomoMedia, Warning, TEXT("No se pudo escribir %s"), *RutaAjustes());
+	}
+}
+
+void ADomeMediaController::CargarAjustes()
+{
+	FString Texto;
+	if (FFileHelper::LoadFileToString(Texto, *RutaAjustes()))
+	{
+		TSharedPtr<FJsonObject> O;
+		if (FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Texto), O) && O.IsValid())
+		{
+			O->TryGetStringField(TEXT("perfil"), PerfilActual);
+			double N = 0.0;
+			if (O->TryGetNumberField(TEXT("paredes"), N)) { ParedesModo = N > 0.5 ? 1 : 0; }
+			if (O->TryGetNumberField(TEXT("rugosidadPiso"), N)) { RugosidadPiso = FMath::Clamp(static_cast<float>(N), 0.2f, 6.f); }
+			if (O->TryGetNumberField(TEXT("resplandor"), N)) { IntensidadResplandor = FMath::Max(static_cast<float>(N), 0.f); UltimoResplandor = -1.f; }
+			if (O->TryGetNumberField(TEXT("ladoOptimizado"), N)) { LadoOptimizado = FMath::Clamp(FMath::RoundToInt(static_cast<float>(N)), 512, 4096); }
+			FString S;
+			if (O->TryGetStringField(TEXT("luces"), S))
+			{
+				if (S == TEXT("on")) { bLucesAutomaticas = false; bLucesEncendidas = true; }
+				else if (S == TEXT("off")) { bLucesAutomaticas = false; bLucesEncendidas = false; }
+				else { bLucesAutomaticas = true; }
+			}
+			if (O->TryGetStringField(TEXT("reproductor"), S) && !S.IsEmpty())
+			{
+				Reproductor = S.Equals(TEXT("auto"), ESearchCase::IgnoreCase) ? NAME_None : FName(*S);
+			}
+			UE_LOG(LogDomoMedia, Display, TEXT("Ajustes leidos de %s"), *RutaAjustes());
+		}
+	}
+	bAjustesSucios = false;
+	FString Forzado;
+	if (!GIsEditor && !FParse::Value(FCommandLine::Get(), TEXT("DomoPreset="), Forzado))
+	{
+		AplicarPerfil(PerfilActual);
+		bAjustesSucios = false;
+	}
 }
 
 // --- Teclas y movimiento ---------------------------------------------------------------
@@ -2652,7 +3017,7 @@ namespace
 	FAutoConsoleCommandWithWorldAndArgs CmdGuardar(TEXT("domo.Guardar"), TEXT("Escribe la playlist con los ajustes actuales."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* W)
 		{
-			ConControlador(W, [](ADomeMediaController& C) { C.GuardarPlaylist(); });
+			ConControlador(W, [](ADomeMediaController& C) { C.GuardarPlaylist(); C.GuardarAjustes(); });
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdOptimizar(TEXT("domo.Optimizar"), TEXT("Hace una copia liviana (H.264, 2048) del video actual con ffmpeg y la agrega a la lista."),
@@ -2663,6 +3028,22 @@ namespace
 				if (A.Num() > 0) { C.LadoOptimizado = FCString::Atoi(*A[0]); }
 				C.OptimizarVideoActual();
 			});
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdPerfil(TEXT("domo.Perfil"), TEXT("domo.Perfil auto|vr|monitor|proyector|ligero: perfil de render segun la pantalla y la tarjeta (sin argumento, describe el actual)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& A, UWorld* W)
+		{
+			ConControlador(W, [&](ADomeMediaController& C)
+			{
+				if (A.Num() > 0) { C.AplicarPerfil(A[0]); }
+				UE_LOG(LogDomoMedia, Display, TEXT("%s"), *C.DescribirPerfil());
+			});
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdParedes(TEXT("domo.Paredes"), TEXT("domo.Paredes 0|1: paredes de la sala negras (0) o con la madera original (1)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& A, UWorld* W)
+		{
+			ConControlador(W, [&](ADomeMediaController& C) { C.SetParam(TEXT("Paredes"), A.Num() > 0 ? static_cast<float>(FCString::Atoi(*A[0])) : 0.f); });
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdReproductor(TEXT("domo.Reproductor"), TEXT("domo.Reproductor auto|electra|protron|wmf: elige el decodificador de video (electra y protron usan la GPU con DX12)."),

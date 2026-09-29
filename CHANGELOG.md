@@ -4,6 +4,26 @@ Bitácora de cambios de domo-lab, de lo más reciente a lo más antiguo. Cada en
 dice qué cambió y por qué; el detalle técnico y las mediciones están en
 [04_Docs](04_Docs/). El estado futuro está en la [hoja de ruta](README.md#hoja-de-ruta).
 
+## 29 de septiembre de 2026 · Sala, fondo desenfocado, perfiles de render y ajustes guardados
+
+- **Paredes negras.** En el ejecutable las paredes de la sala 180 salían con la textura de
+  madera. Ahora son negras por defecto y el menú permite volver a la madera (`domo.Paredes 0|1`).
+- **Piso con menos reflejo.** Nuevo control «Rugosidad del piso»; el piso pulido de la sala 180
+  refleja ahora bastante menos (por defecto 1,8 veces su rugosidad original).
+- **Fondo desenfocado en los montajes 16:9.** El ejecutable no tenía la capa de fondo de
+  VIDEO_DOME (solo había pantallas sobre negro). Se portó al material de la cúpula: modos
+  sin fondo, lavado y envolvente, con desenfoque, brillo, saturación, zoom, repeticiones y giro,
+  guardados por cue en `playlist.json`. El desenfoque usa los mips de la textura del video.
+- **Perfiles de render según la pantalla y la tarjeta:** automático, visor VR, monitor, proyector o
+  domo, y ligero. El porcentaje de pantalla se calcula con la resolución real de la ventana.
+  `domo.Perfil`, y el menú muestra el fabricante, la memoria de video y la resolución interna.
+- **`ajustes.json`:** el perfil, las paredes, el piso, el velo, las luces y el decodificador se guardan
+  solos y se aplican al abrir. `empaquetar.ps1` lo conserva.
+- **AMD e Intel:** investigación y decisiones en [07_GPUs_AMD_e_Intel.md](04_Docs/07_GPUs_AMD_e_Intel.md).
+  El decodificador D3D12 Video de Electra, apagado de fábrica en el motor, se enciende al arrancar (es el camino
+  de GPU para HEVC en AMD e Intel); **Optimizar video** usa NVENC, AMF o Quick Sync según la tarjeta. Solo se
+  probó en NVIDIA: lo demás está por verificar con la tarjeta en la mano.
+
 ## 29 de septiembre de 2026 · Decodificación de video en la GPU
 
 - **El video ya no se traba.** El ejecutable reproduce ahora con **Electra**, el
@@ -11,10 +31,10 @@ dice qué cambió y por qué; el detalle técnico y las mediciones están en
   prueba (HEVC de 4096 × 4096, 60 Mb/s) el proceso pasó de 6,5 a 1,5 núcleos de CPU
   y el decodificador de la GPU trabaja al 15 %. No se cambió de DirectX 12.
 - Decodificadores habilitados en `DomoVR.uproject`: `D3D12VideoDecodersElectra`
-  (D3D12 Video, cualquier fabricante) y `NVDECElectra` (NVIDIA; es el que abre
-  HEVC de nivel 6, que el primero rechaza).
-- Si Electra no acepta un archivo, el ejecutable lo reintenta solo con
-  `WmfMedia` (CPU) y lo deja escrito en el log.
+  (D3D12 Video, cualquier fabricante; el motor lo trae apagado y el controlador lo enciende)
+  y `NVDECElectra` (NVIDIA, tiene prioridad). Los dos abren HEVC de 4096 × 4096 nivel 6 en la RTX 3090.
+- Si Electra no acepta un archivo, el ejecutable lo reintenta por etapas (Electra con el decodificador de
+  Media Foundation y, por último, `WmfMedia` en CPU) y lo deja escrito en el log.
 - Menú **Fuente y video > Decodificador de video** y comando
   `domo.Reproductor auto|electra|protron|wmf` para elegir el reproductor.
 - **Optimizar video** (copia H.264 de 2048 con NVENC) sigue disponible para los

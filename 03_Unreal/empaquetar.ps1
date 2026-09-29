@@ -57,7 +57,7 @@ $Argumentos = @(
 # (los que se editaron desde el menu del ejecutable). Se guardan aparte y se devuelven al terminar.
 $MoviesBuildAntes = Join-Path $Salida "Windows\DomoVR\Content\Movies"
 $Respaldo = Join-Path $env:TEMP "domo_movies_respaldo"
-$Conservar = @("playlist.json", "controles.json")
+$Conservar = @("playlist.json", "controles.json", "ajustes.json")
 Remove-Item $Respaldo -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $Respaldo -Force | Out-Null
 foreach ($Nombre in $Conservar) {

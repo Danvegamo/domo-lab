@@ -54,6 +54,8 @@ private:
 	TArray<TSharedPtr<FString>> OpcionesLuces;
 	TArray<TSharedPtr<FString>> OpcionesVista;
 	TArray<TSharedPtr<FString>> OpcionesCalidad;
+	TArray<TSharedPtr<FString>> OpcionesParedes;
+	TArray<TSharedPtr<FString>> OpcionesFondo;
 	TArray<TSharedPtr<FString>> OpcionesSala;
 	TArray<TSharedPtr<FString>> OpcionesModo;
 	TArray<TSharedPtr<FString>> OpcionesPlantilla;

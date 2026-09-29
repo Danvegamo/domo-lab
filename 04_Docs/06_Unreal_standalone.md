@@ -104,8 +104,9 @@ HEVC de 4096 × 4096:
 | Audio | AAC (estéreo o 5.1) |
 
 Cuando Electra no acepta un archivo (MPEG-4 parte 2, por ejemplo, o un perfil
-HEVC 4:4:4) el ejecutable lo reintenta solo con `WmfMedia` y lo escribe en el
-log (`se reintenta con WmfMedia`); ese camino decodifica en CPU. Para convertir
+HEVC 4:4:4) el ejecutable lo reintenta solo por etapas: Electra con su decodificador de Media
+Foundation (sin D3D12 Video) y, si tampoco, `WmfMedia`, que decodifica en CPU; cada reintento queda
+escrito en el log. Para convertir
 un video a una receta segura de H.264:
 
 ```
@@ -325,10 +326,13 @@ por hardware solo existe con DX11), y 16 megapíxeles por cuadro a 30 fps no le 
 **Solución (sin cambiar a DX11):** el ejecutable usa ahora **Electra**, el reproductor propio
 de Unreal, con dos decodificadores de GPU que sí trabajan con DX12:
 
-- `D3D12VideoDecodersElectra`: decodificación por hardware con la API D3D12 Video de Windows
-  (cualquier fabricante). Cubre H.264 y HEVC hasta el nivel 5.x.
-- `NVDECElectra`: el decodificador de NVIDIA (NVDEC). Es el que abre HEVC de 4096×4096 nivel 6,
-  que el de D3D12 no acepta. Es experimental en UE 5.8 y solo existe con tarjetas NVIDIA.
+- `NVDECElectra`: el decodificador de NVIDIA (NVDEC). Es experimental en UE 5.8 y solo existe con
+  tarjetas NVIDIA. En una NVIDIA es el que decodifica (prioridad 100 frente a 5 del de D3D12).
+- `D3D12VideoDecodersElectra`: decodificación por hardware con la API D3D12 Video de Windows, para
+  cualquier fabricante. **Viene apagado de fábrica en el motor** (`ElectraDecoders.bDoNotUseD3D12Video`
+  arranca en 1); el controlador lo enciende al arrancar y antes de abrir cada video. En la RTX 3090,
+  con NVDEC apagado, abrió los cuatro clips de prueba, incluido HEVC 4096×4096 nivel 6.0; en AMD e Intel es
+  el camino previsto y no está verificado ([07_GPUs_AMD_e_Intel.md](07_GPUs_AMD_e_Intel.md)).
 
 Ambos van habilitados en `DomoVR.uproject` junto a `ElectraPlayer` y `ElectraCodecs`. Electra elige
 el mejor decodificador disponible para cada archivo. Con el mismo video de Dan:
@@ -353,8 +357,8 @@ H.264 4096×2048 a 60 fps con audio. Un MPEG-4 parte 2 de 1080p cae a `WmfMedia`
 
 | Opción | Estado | Nota |
 |---|---|---|
-| Electra + `D3D12VideoDecodersElectra` | usada | H.264 y HEVC hasta nivel 5.x; no acepta HEVC nivel 6 |
-| Electra + `NVDECElectra` | usada | H.264, HEVC, AV1 y VP9 según la tarjeta; experimental; solo NVIDIA |
+| Electra + `D3D12VideoDecodersElectra` | usada (respaldo en NVIDIA, primera opción en AMD e Intel) | H.264 y HEVC hasta nivel 6.3; apagado de fábrica en el motor, el controlador lo enciende |
+| Electra + `NVDECElectra` | usada en NVIDIA | H.264, HEVC, AV1 y VP9 según la tarjeta; experimental; solo NVIDIA; prioridad sobre D3D12 |
 | Protron (`ElectraProtron`) | disponible en el menú | reproductor de `.mp4` locales sobre los mismos decodificadores; en las pruebas no mejoró a Electra |
 | `WmfMedia` con DX11 | descartada | Media Foundation solo decodifica en GPU con el RHI de DX11 |
 | HAP (`HAPMedia`) | no probada | códec que la GPU descomprime sin decodificar; archivos de 10 a 20 veces más grandes; exige convertir |
@@ -364,8 +368,9 @@ H.264 4096×2048 a 60 fps con audio. Un MPEG-4 parte 2 de 1080p cae a `WmfMedia`
 **Optimizar video** (`domo.Optimizar [lado]`): hace con ffmpeg una copia H.264 del video actual
 (2048 de lado por defecto; el control «Lado de la copia» lo cambia) en `Movies/optimizados/`, la
 agrega a la lista con los mismos ajustes de imagen y pasa a ella. Sigue reproduciendo mientras
-convierte y muestra el avance. Usa la GPU completa (decodifica, escala y codifica con NVENC; casi
-no usa CPU) y, si falla, la CPU decodificando y, si falla, x264 (más lento). Un clip de 40 s
+convierte y muestra el avance. Usa la GPU (NVIDIA: decodifica, escala y codifica con NVENC, casi sin CPU; AMD: decodifica
+con d3d11va y codifica con AMF; Intel: Quick Sync completo) y, si falla, la CPU decodificando y, si falla, x264
+(más lento). Solo el camino NVIDIA está probado. Un clip de 40 s
 tardó unos 20 s; el video de 29 min, unos 9. Necesita ffmpeg: junto al ejecutable, en la carpeta
 de los videos o en el `PATH`.
 
@@ -392,6 +397,66 @@ aditivo (`M_DomoResplandor`, actor `Resplandor_Domo` con la etiqueta
 `domo_resplandor`) que el controlador sube y baja con el mismo fundido de las
 luces. Se regula en el menú (*Velo de la cúpula con luces*), con `domo.Param
 Resplandor 0.5` o `IntensidadResplandor` en la config; 0 lo apaga.
+
+### Perfiles de render según la pantalla y la tarjeta
+
+**Menú > Sala, luces y vista > Calidad de render**, o `domo.Perfil auto|vr|monitor|proyector|ligero`
+(`domo.Perfil` sin argumento describe el que está activo). Cada perfil fija cuántos píxeles
+internos renderiza el juego y qué tan pesado es Lumen; el **porcentaje de pantalla se calcula con
+la resolución real de la ventana**, así el mismo perfil sirve en un monitor 1080p, en uno 4K o en un
+proyector, y se recalcula solo si la ventana cambia de tamaño.
+
+| Perfil | Píxeles internos | Lumen | Para qué |
+|---|---|---|---|
+| `vr` | nativos (100 %) | reflejos a mitad de resolución, sondas de 16 px | visor de realidad virtual: el visor ya pide su propia resolución |
+| `monitor` | 3,7 millones (≈1440p) | reflejos a resolución completa, sondas de 12 px | monitor o pantalla común; es el que elige `auto` en una tarjeta capaz |
+| `proyector` | 8,3 millones (≈4K) | *hit lighting* (reflejos con el material real), sondas de 8 px | capturas y proyección en cúpula o pared; es el antiguo preset `Render` |
+| `ligero` | 1,6 millones | reflejos a un cuarto, sin trazado de rayos por hardware | tarjetas modestas, gráficas integradas |
+
+`auto` elige por: visor conectado (`vr`); gráfica integrada o menos de 3 GB de video (`ligero`);
+trazado de rayos por hardware con 8 GB o más (`monitor`); en cualquier otro caso `ligero`. El fabricante
+(NVIDIA, AMD, Intel), la memoria y la resolución interna quedan escritos en el menú y en el log.
+Los presets `VR` y `Render` (`domo.Preset`, `-DomoPreset=`) siguen funcionando y equivalen a `vr` y
+`proyector`. Para AMD e Intel ver [07_GPUs_AMD_e_Intel.md](07_GPUs_AMD_e_Intel.md).
+
+### Ajustes que se guardan (`ajustes.json`)
+
+Junto a `playlist.json` y `controles.json` el ejecutable escribe `ajustes.json` (un segundo después
+de cada cambio): perfil de render, paredes, rugosidad del piso, velo de la cúpula, luces
+(automáticas, encendidas o apagadas), decodificador de video y lado de la copia liviana. Al abrir
+el programa se leen y se aplican; `-DomoPreset=` pisa el perfil. Los montajes de pantallas, el fondo
+y los formatos de cada video van en `playlist.json` (botón **Guardar lista** o `domo.Guardar`, que
+guarda las dos cosas). `empaquetar.ps1` conserva los tres archivos del build al reempaquetar.
+
+### Paredes y piso de la sala
+
+- **Paredes de la sala** (menú, `domo.Paredes 0|1`): *Negras* (por defecto) o *Madera original*. Cambia
+  el tinte del muro y de los listones de la sala de 180; en las salas 45 y 90 el muro ya era casi negro.
+- **Rugosidad del piso** (menú, `domo.Param RugosidadPiso 1.8`): multiplica la rugosidad del material del
+  piso; 1 es el original de la sala, más alto refleja menos. Por defecto 1,8 (el piso pulido de la sala 180
+  reflejaba demasiado las luces del muro).
+
+Los cambios son de ejecución (instancias dinámicas de material); los materiales del proyecto no se
+modifican.
+
+### Fondo desenfocado detrás de las pantallas
+
+En los montajes de pantallas 16:9 el espacio entre pantallas ya no queda negro: el propio video,
+desenfocado, llena la cúpula, como la página *Fondo* de VIDEO_DOME en TouchDesigner. **Menú > Pantallas
+16:9 > Fondo desenfocado detrás de las pantallas**:
+
+| Control | Qué hace |
+|---|---|
+| Fondo | *Sin fondo* (negro), *Lavado* (copia agrandada del cuadro, que llena el círculo) o *Envolvente* (el cuadro da la vuelta al domo, espejado para que no se vea la costura) |
+| Desenfoque | tamaño del desenfoque (equivale al `Blur` de TouchDesigner sobre 1080 px; por defecto 60) |
+| Brillo, Saturación | 0,35 y 0,7 por defecto |
+| Zoom del lavado | mínimo 1,78 en un video 16:9, o aparecen bandas rectas |
+| Repeticiones del envolvente | cuántas veces da la vuelta el cuadro (2 por defecto) |
+| Girar el fondo | grados; se suma al giro de todo el montaje |
+
+El desenfoque se lee de un nivel alto de mipmaps de la textura del video (`MT_Domo` genera mips) con
+cinco muestras que lo suavizan; cuesta menos que un desenfoque real. Se guarda por cue en `playlist.json`
+(objeto `fondo`).
 
 ### Control por UDP (TouchDesigner, Resolume, QLab, un script)
 
@@ -521,9 +586,9 @@ este proyecto, y no existen en el build empaquetado.
 - **8 bits.** `MT_Domo` es de 8 bits por canal, igual que el receptor de
   Spout. Un video de 10 bits abre (Electra), pero sin la precisión extra.
 - **Códecs.** H.264 y HEVC hasta 4096 × 4096 y 60 cuadros a 4096 × 2048 están
-  verificados con Electra. HAP, ProRes y 8K quedan fuera. HEVC de nivel 6 pide una tarjeta
-  NVIDIA (NVDEC); en otra GPU el ejecutable cae a `WmfMedia` (CPU) o hay que usar
-  **Optimizar video**.
+  verificados con Electra. HAP, ProRes y 8K quedan fuera. HEVC de nivel 6 se probó con NVDEC y con D3D12
+  Video en NVIDIA; en otra GPU, si el decodificador D3D12 no lo acepta, el ejecutable cae a `WmfMedia` (CPU) o hay
+  que usar **Optimizar video**, que ahora usa el codificador de cada fabricante (NVENC, AMF, Quick Sync).
 - **Una pantalla.** El formato `"169"` es una sola pantalla
   (`pantalla169.frag`). Los montajes de muchas pantallas, templates y
   recorridos de `VIDEO_DOME` siguen siendo cosa de TouchDesigner.

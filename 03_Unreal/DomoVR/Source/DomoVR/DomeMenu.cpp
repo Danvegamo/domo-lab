@@ -156,7 +156,10 @@ FDomeMenu::FDomeMenu(ADomeMediaController* InDuenio)
 		Opcion(TEXT("Tunel (polar)")), Opcion(TEXT("Cilindro (pared)")) };
 	OpcionesEspejo = { Opcion(TEXT("Sin espejo")), Opcion(TEXT("Horizontal")), Opcion(TEXT("Vertical")), Opcion(TEXT("Ambos")) };
 	OpcionesBordes = { Opcion(TEXT("Los cuatro lados")), Opcion(TEXT("Solo los costados")), Opcion(TEXT("Solo arriba y abajo")) };
-	OpcionesCalidad = { Opcion(TEXT("VR (liviana)")), Opcion(TEXT("Render (capturas, pesada)")) };
+	OpcionesCalidad = { Opcion(TEXT("Automatico (pantalla y tarjeta)")), Opcion(TEXT("Visor VR")), Opcion(TEXT("Monitor")),
+		Opcion(TEXT("Proyector o domo (alta)")), Opcion(TEXT("Ligero (tarjeta modesta)")) };
+	OpcionesParedes = { Opcion(TEXT("Negras")), Opcion(TEXT("Madera original")) };
+	OpcionesFondo = { Opcion(TEXT("Sin fondo (negro)")), Opcion(TEXT("Lavado (copia agrandada)")), Opcion(TEXT("Envolvente (da la vuelta)")) };
 	OpcionesSala = { Opcion(TEXT("Sala domo 180 (planetario)")), Opcion(TEXT("Sala 90")), Opcion(TEXT("Sala 45")) };
 	MapasDeSala = { TEXT("DomoVR"), TEXT("DomoVR_90"), TEXT("DomoVR_45") };
 }
@@ -762,6 +765,22 @@ TSharedRef<SWidget> FDomeMenu::SeccionPantalla()
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0, 2)
 		[
+			Sub(LOCTEXT("SubFondo", "Fondo desenfocado detras de las pantallas"),
+				Bloque({
+					Fila(LOCTEXT("FondoModo", "Fondo"),
+						Combo(&OpcionesFondo,
+							[Deb]() { return Deb.IsValid() ? FMath::RoundToInt(Deb->GetCampoPantalla(TEXT("Fondo_Modo"))) : 0; },
+							[Deb](int32 I) { if (Deb.IsValid()) { Deb->SetCampoPantalla(TEXT("Fondo_Modo"), static_cast<float>(I)); } })),
+					Deslizador(LOCTEXT("FDesenfoque", "Desenfoque"), TEXT("S_Fondo_Desenfoque"), 0.f, 200.f, 1.f),
+					Deslizador(LOCTEXT("FBrillo", "Brillo"), TEXT("S_Fondo_Brillo"), 0.f, 2.f, 0.01f),
+					Deslizador(LOCTEXT("FSat", "Saturacion"), TEXT("S_Fondo_Saturacion"), 0.f, 2.f, 0.01f),
+					Deslizador(LOCTEXT("FZoom", "Zoom del lavado (min. 1,78)"), TEXT("S_Fondo_Zoom"), 1.f, 4.f, 0.02f),
+					Deslizador(LOCTEXT("FRep", "Repeticiones del envolvente"), TEXT("S_Fondo_Repeticiones"), 1.f, 8.f, 0.5f),
+					Deslizador(LOCTEXT("FGiro", "Girar el fondo (grados)"), TEXT("S_Fondo_Giro"), -180.f, 180.f, 1.f) }),
+				false)
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 2)
+		[
 			Sub(LOCTEXT("SubAnim", "Movimiento del montaje"),
 				Bloque({
 					Deslizador(LOCTEXT("PGiroTodas", "Girar todo el montaje (grados)"), TEXT("S_GiroTodas"), -180.f, 180.f, 1.f),
@@ -809,15 +828,33 @@ TSharedRef<SWidget> FDomeMenu::SeccionSalaYLuces()
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0, 2)
 		[
-			Fila(LOCTEXT("Calidad", "Calidad"),
+			Fila(LOCTEXT("Calidad", "Calidad de render"),
 				Combo(&OpcionesCalidad,
-					[Yo]() { return Yo->CalidadActual; },
-					[Yo](int32 I)
+					[Deb]()
 					{
-						Yo->CalidadActual = I;
-						ADomeMediaController::AplicarPreset(I == 1 ? TEXT("Render") : TEXT("VR"));
+						if (!Deb.IsValid()) { return 0; }
+						const FString& P = Deb->PerfilActual;
+						return P == TEXT("vr") ? 1 : P == TEXT("monitor") ? 2 : P == TEXT("proyector") ? 3 : P == TEXT("ligero") ? 4 : 0;
+					},
+					[Deb](int32 I)
+					{
+						static const TCHAR* Ids[] = { TEXT("auto"), TEXT("vr"), TEXT("monitor"), TEXT("proyector"), TEXT("ligero") };
+						if (Deb.IsValid()) { Deb->AplicarPerfil(Ids[FMath::Clamp(I, 0, 4)]); }
 					}))
 		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 0)
+		[
+			SNew(STextBlock).AutoWrapText(true).Font(Letra(10)).ColorAndOpacity(FLinearColor(0.7f, 0.7f, 0.7f))
+			.Text_Lambda([Deb]() { return Deb.IsValid() ? FText::FromString(Deb->DescribirPerfil()) : FText::GetEmpty(); })
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 2)
+		[
+			Fila(LOCTEXT("Paredes", "Paredes de la sala"),
+				Combo(&OpcionesParedes,
+					[Deb]() { return Deb.IsValid() ? FMath::RoundToInt(Deb->GetParam(TEXT("Paredes"))) : 0; },
+					[Deb](int32 I) { if (Deb.IsValid()) { Deb->SetParam(TEXT("Paredes"), static_cast<float>(I)); } }))
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 2)[ Deslizador(LOCTEXT("RugPiso", "Rugosidad del piso (mas = menos reflejo)"), TEXT("RugosidadPiso"), 0.2f, 6.f, 0.05f) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0, 2)
 		[
 			Fila(LOCTEXT("Sala", "Sala"),

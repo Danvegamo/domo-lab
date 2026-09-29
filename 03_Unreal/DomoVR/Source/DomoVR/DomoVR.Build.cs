@@ -24,7 +24,7 @@ public class DomoVR : ModuleRules
 
 		// DomeMenu: menu en pantalla en Slate (desplegables, deslizadores, botones)
 		// y dialogo de Windows para abrir videos (comdlg32).
-		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore", "ApplicationCore", "UMG", "RenderCore", "Sockets", "Networking" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore", "ApplicationCore", "UMG", "RenderCore", "Sockets", "Networking", "RHI", "HeadMountedDisplay" });
 		if (Target.Platform == UnrealTargetPlatform.Win64)
 		{
 			PublicSystemLibraries.Add("comdlg32.lib");
