@@ -254,13 +254,14 @@ come the domemaster for the projector and the equirectangular for the virtual ro
 
 </details>
 
-## The abyss: Unreal as the source
+## The abyss: Unreal as the source (experimental)
+
+> **Experimental.** This is a proof of concept, not a stable part of the simulator. The seabed is simple (procedural meshes, no caustics), the scene is meant to leave through the dome rather than be edited in Unreal, and it is still being developed separately. Use it only to try the Unreal → NDI → TouchDesigner path.
 
 The reverse direction: instead of receiving video, Unreal **generates the dome** and sends it over **NDI**. A real-time scene
 (a deep seabed with particles and glow, creatures that cross today's Colombia with the Cretaceous sea of Villa de Leyva, and
 plastic waste they talk to) is rendered as a domemaster by a camera that travels through the space. Measured: 2048 × 2048 at a
-steady 30 fps over NDI on the RTX 3090, in the editor and in the packaged player. Receiving it inside TouchDesigner is still
-to do.
+steady 30 fps over NDI on the RTX 3090, in the editor and in the packaged player. TouchDesigner receives it with the `IN_UE` module (off by default).
 
 <div align="center">
 

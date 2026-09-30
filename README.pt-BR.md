@@ -255,12 +255,14 @@ o domemaster para o projetor e o equirretangular para a sala virtual.
 
 </details>
 
-## O abismo: o Unreal como fonte
+## O abismo: o Unreal como fonte (experimental)
+
+> **Experimental.** É uma prova de conceito, não uma parte estável do simulador. O fundo marinho é simples (malhas procedurais, sem cáusticas), a cena foi pensada para sair pelo domo e não para ser editada no Unreal, e segue em desenvolvimento à parte. Use só para testar o caminho Unreal → NDI → TouchDesigner.
 
 O sentido inverso: em vez de receber vídeo, o Unreal **gera o domo** e o envia por **NDI**. Uma cena em tempo real (fundo
 marinho com partículas e brilho, criaturas que cruzam a Colômbia de hoje com o mar do Cretáceo de Villa de Leyva, e lixo
 plástico com o qual dialogam) é renderizada como domemaster por uma câmera que percorre o espaço. Medido: 2048 × 2048 a 30 fps
-estáveis por NDI na RTX 3090, no editor e no executável empacotado. Falta recebê-lo dentro do TouchDesigner.
+estáveis por NDI na RTX 3090, no editor e no executável empacotado. O TouchDesigner o recebe com o módulo `IN_UE` (desligado por padrão).
 
 <div align="center">
 

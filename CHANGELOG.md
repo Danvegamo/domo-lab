@@ -4,6 +4,12 @@ Bitácora de cambios de domo-lab, de lo más reciente a lo más antiguo. Cada en
 dice qué cambió y por qué; el detalle técnico y las mediciones están en
 [04_Docs](04_Docs/). El estado futuro está en la [hoja de ruta](README.md#hoja-de-ruta).
 
+## 29 de septiembre de 2026 · El abismo pasa a experimental
+
+- **El abismo queda marcado como experimental** en los tres README. Es una prueba de concepto: el fondo marino es simple y la escena está pensada para salir por el domo, no para editarse en Unreal.
+- El desarrollo siguiente continúa en un repositorio privado; este repositorio público queda con esta versión.
+- `layout_domo.json` cubre ahora 762 nodos, incluido el Select `domemaster_ue` que cablea `IN_UE` a `salida_domo`.
+
 ## 29 de septiembre de 2026 · Spout In arreglado, regeneración probada y `IN_UE`
 
 - **`spout_in` de VIDEO_DOME vuelve, sin errores.** La causa era que el Spout In TOP no tiene par de activación y, con el
